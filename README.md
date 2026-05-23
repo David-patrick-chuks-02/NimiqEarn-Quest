@@ -1,3 +1,5 @@
+![NimiqEarn Quest Banner](assets/banner.png)
+
 # NimiqEarn Quest
 
 A product concept repository for **NimiqEarn Quest**.
