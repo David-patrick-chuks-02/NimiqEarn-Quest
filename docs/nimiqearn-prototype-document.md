@@ -1,6 +1,22 @@
-# NimiqEarn Quest Prototype Document
+# NimiqEarn Quest Product Concept
 
-## 1. Project Overview
+## Executive Summary
+
+NimiqEarn Quest is a Telegram-native task and bounty marketplace where users complete quests and receive rewards in NIM. The concept is designed for mobile-first participation, low-friction onboarding, fast payouts, and repeatable community engagement.
+
+The product sits at the intersection of:
+
+- microtask marketplaces
+- community incentive systems
+- Telegram-native user flows
+- Nimiq-powered digital payments
+- AI-assisted verification and moderation
+
+Its core product promise is simple:
+
+**discover tasks, submit proof, get verified, receive NIM**
+
+## 1. Product Overview
 
 ### Product Name
 
@@ -10,515 +26,568 @@ NimiqEarn Quest
 
 AI-powered Telegram task and bounty marketplace powered by NIM payouts.
 
+### Product Positioning
+
+NimiqEarn Quest is intended to serve as a lightweight earning and participation layer for communities, startups, ecosystem teams, and mobile-first users. Instead of forcing users through a traditional web platform with multiple complex steps, the product uses Telegram as the primary interface and NIM as the reward rail.
+
 ### Core Idea
 
-NimiqEarn Quest is designed as a mobile-first earning and engagement layer for the Nimiq ecosystem. It allows task creators to publish bounties and microtasks inside Telegram, while workers complete those tasks and receive instant NIM rewards through a simplified wallet onboarding and payout flow.
-
-The product is intended to make NIM useful in a daily, practical way. Instead of only being held or traded, NIM becomes the payment rail for small jobs, community rewards, product testing incentives, referral campaigns, and contribution-based payouts.
+Task creators publish quests. Workers complete those quests. The system verifies proof, approves valid submissions, and processes payouts in NIM. Over time, reputation and moderation systems help improve trust, reduce abuse, and surface higher-quality work.
 
 ## 2. Problem Statement
 
-Two clear problems exist:
+Two clear product problems exist.
 
-### Problem A: Access to Simple Online Earnings
+### Problem A: Simple Online Earnings Are Still Friction-Heavy
 
-Many users, especially in mobile-first and emerging markets, want access to flexible earning opportunities but face several barriers:
+Many users want access to flexible online work, but common platforms have several weaknesses:
 
-- traditional freelance platforms are too heavy and desktop-oriented
-- onboarding often requires formal banking or lengthy verification
-- payout delays reduce trust
-- many opportunities are not designed for low-friction mobile participation
+- they are too complex for mobile-first users
+- they often assume desktop usage
+- onboarding may depend on formal banking or lengthy verification
+- payout speed is often poor
+- they are not optimized for small community-driven tasks
 
-### Problem B: Web3 Projects Need Lightweight Growth Infrastructure
+### Problem B: Communities Need Better Incentive Infrastructure
 
-Startups, DAOs, communities, and ecosystem builders need ways to:
+Web3 projects, DAOs, startups, and digital communities need lightweight systems to:
 
 - distribute micro-bounties
-- reward user engagement
-- recruit contributors
-- test products quickly
-- run low-cost growth campaigns
-- incentivize community actions without manual operations
+- reward community participation
+- onboard and activate users
+- collect product feedback
+- run social or referral campaigns
+- pay contributors without manual coordination overhead
 
-Most available tooling is fragmented, expensive, or not optimized for Telegram-native communities.
+Many available tools solve only part of this flow. NimiqEarn Quest combines the flow into one product.
 
 ## 3. Proposed Solution
 
-NimiqEarn Quest combines a Telegram bot, task marketplace logic, Nimiq-based payouts, and AI-assisted verification into one simple system.
+NimiqEarn Quest combines:
 
-The platform will allow:
+- Telegram bot infrastructure
+- task marketplace logic
+- wallet and payout routing
+- AI-assisted verification
+- reputation and anti-abuse systems
 
-- workers to discover and complete tasks inside Telegram
-- task creators to post paid opportunities and fund rewards in NIM
-- the system to verify, score, and process submissions
-- payouts to be sent quickly after approval
+The result is a simple operating loop:
 
-The goal is to create a lightweight earn-and-reward economy around Nimiq.
+1. Creator posts a quest.
+2. Worker discovers and completes it.
+3. Worker submits proof.
+4. The system reviews the submission.
+5. Valid submissions are paid in NIM.
 
 ## 4. Product Vision
 
-The long-term vision is to make Telegram a practical work and participation channel for Nimiq-powered communities.
+The long-term vision is to make Telegram a practical participation and earning channel for Nimiq-powered communities.
 
 In that model:
 
-- every community action can become a measurable task
-- every accepted contribution can become an instant NIM payout
-- every new user can be onboarded into Nimiq through earning rather than speculation
-
-NimiqEarn Quest is not just a bounty board. It is intended to become a repeatable engagement engine for ecosystem growth.
-
-## 5. Target Users
-
-### Workers
-
-Primary worker personas include:
-
-- students looking for small online income opportunities
-- freelancers completing quick digital tasks
-- creators participating in campaign-based work
-- developers joining bounty programs
-- community members earning through engagement or support actions
-
-### Task Creators
-
-Primary task creator personas include:
-
-- Web3 startups
-- DAOs
-- ecosystem teams
-- creators and marketers
-- product teams running user research or testing campaigns
-- community managers who need verifiable participation incentives
-
-## 6. Primary Use Cases
-
-NimiqEarn Quest is designed around practical task types such as:
-
-- joining and engaging in community campaigns
-- social amplification tasks
-- product testing and feedback
-- bug report bounties
-- content creation requests
-- developer micro-bounties
-- onboarding and referral campaigns
-- survey and feedback tasks
-
-Example:
-
-A Nimiq ecosystem project could post a task asking users to test a new wallet flow, submit a screenshot and short feedback, and receive NIM after verification.
-
-## 7. Product Experience
-
-### Worker Experience
-
-The worker journey is designed to be simple:
-
-1. User opens the Telegram bot.
-2. User starts onboarding and creates or connects a Nimiq payout profile.
-3. User browses available quests.
-4. User opens task details and sees reward, deadline, instructions, and proof requirements.
-5. User submits proof through the bot.
-6. The system reviews the submission through AI checks and platform rules.
-7. Approved users receive NIM rewards.
-8. The worker gains reputation and can unlock higher-quality tasks over time.
-
-### Creator Experience
-
-The creator journey is designed for campaign efficiency:
-
-1. Creator registers through a creator onboarding flow.
-2. Creator funds a task budget.
-3. Creator submits task details, reward amount, proof rules, and acceptance criteria.
-4. The system publishes the task.
-5. Workers participate and submit proof.
-6. The system assists with verification and moderation.
-7. Approved participants are paid in NIM.
-8. Creator receives task performance analytics.
-
-## 8. Core MVP Features
-
-The MVP is intentionally focused. It aims to prove demand, validate payout flow reliability, and demonstrate real NIM usage.
-
-### A. Telegram Bot Interface
-
-The bot is the main user entry point and supports:
-
-- user registration
-- task browsing
-- task application and participation
-- proof submission
-- notifications
-- wallet and payout status checks
-
-### B. Wallet Onboarding
-
-The onboarding flow introduces users to Nimiq in a simple way. Depending on implementation maturity, this may support:
-
-- linking an existing Nimiq wallet address
-- guided new wallet onboarding
-- storing payout preferences securely
-
-The MVP priority is reliable reward routing, not a fully custom wallet product.
-
-### C. Task Marketplace
-
-Workers can:
-
-- view active tasks
-- filter by category, reward, and complexity
-- see deadlines and proof instructions
-
-Creators can:
-
-- publish tasks
-- define reward budgets
-- set participant caps
-- define proof requirements
-
-### D. Submission System
-
-Users can submit:
-
-- text responses
-- links
-- screenshots
-- usernames
-- wallet-linked proof references
-
-The submission pipeline is designed to support both automated review and manual fallback.
-
-### E. NIM Payout Engine
-
-The payout system handles:
-
-- reward calculation
-- approval-based disbursement
-- payout logging
-- creator budget deductions
-
-### F. AI-Assisted Verification
-
-The AI layer helps reduce admin work by:
-
-- checking whether proof matches task requirements
-- detecting repetitive spam submissions
-- flagging suspicious task behavior
-- assisting with moderation decisions
-
-The AI layer supports review, but high-risk decisions can still require manual approval in the MVP.
-
-### G. Reputation and Trust Layer
-
-To improve task quality over time, the product includes:
-
-- worker reputation scores
-- completion rate tracking
-- creator reliability signals
-- spam and abuse flags
-
-## 9. Prototype User Flows
-
-### Flow 1: New Worker
-
-1. `/start`
-2. Welcome screen introduces earning with NIM
-3. User selects `Start Earning`
-4. Bot asks for wallet setup or wallet connection
-5. User receives a short onboarding guide
-6. Bot shows available quests
-7. User selects a quest and submits proof
-8. Status changes from `submitted` to `under review`
-9. User receives `approved` and payout notification
-
-### Flow 2: Returning Worker
-
-1. User opens bot
-2. Bot shows summary:
-   pending submissions, completed quests, total earned, reputation score
-3. User selects a new task
-4. User submits proof
-5. User tracks reward status
-
-### Flow 3: Task Creator
-
-1. Creator enters creator dashboard flow
-2. Creator provides task title, category, instructions, reward, cap, and deadline
-3. Creator deposits or commits task budget
-4. Task is published
-5. Creator monitors submissions
-6. Approved users are paid
-7. Creator reviews campaign analytics
-
-## 10. Proposed Bot Commands and Menus
-
-Illustrative bot commands for the MVP:
-
-- `/start` - begin onboarding
-- `/quests` - list available tasks
-- `/wallet` - manage payout wallet
-- `/earnings` - view reward history
-- `/reputation` - view trust score
-- `/submit` - continue a pending submission
-- `/creator` - open creator tools
-- `/help` - support and FAQs
-
-Example menu sections:
-
-- Start Earning
-- Browse Quests
-- My Tasks
-- My Earnings
-- My Wallet
-- Invite Friends
-- Creator Dashboard
-
-## 11. Dashboard and Admin Surfaces
-
-Although Telegram is the main user interface, a lightweight web dashboard may be used for internal operations or creator tooling.
-
-Potential MVP dashboard capabilities:
-
-- creator task creation form
-- task budget controls
-- submission review queue
-- payout status log
-- analytics overview
-- flagged content moderation panel
-
-This dashboard does not need to be feature-heavy in the MVP. It only needs to reduce operator friction and support campaign management.
-
-## 12. System Architecture
-
-At a high level, the prototype can be structured into five layers:
-
-### 1. Telegram Interaction Layer
-
-- Telegram bot webhook or polling service
-- command handlers
-- message routing
-
-### 2. Application Logic Layer
-
-- onboarding logic
-- quest lifecycle management
-- submission workflow
-- reputation engine
-- creator campaign logic
-
-### 3. Verification Layer
-
-- AI-assisted proof analysis
-- spam detection
-- duplicate submission checks
-- moderation rule engine
-
-### 4. Payment Layer
-
-- Nimiq wallet integration
-- payout queue
-- transaction logging
-- budget accounting
-
-### 5. Data Layer
-
-- users
-- wallets
-- quests
-- submissions
-- payouts
-- creator accounts
-- moderation events
-
-## 13. Suggested Data Model
-
-The MVP can be implemented with a simple but scalable schema.
-
-### User
-
-- user_id
-- telegram_id
-- username
-- role
-- reputation_score
-- joined_at
-
-### WalletProfile
-
-- wallet_id
-- user_id
-- nimiq_address
-- status
-- created_at
-
-### Quest
-
-- quest_id
-- creator_id
-- title
-- description
-- category
-- reward_amount
-- reward_currency
-- slots
-- deadline
-- status
-- verification_type
-
-### Submission
-
-- submission_id
-- quest_id
-- user_id
-- proof_payload
-- status
-- ai_score
-- moderator_notes
-- submitted_at
-
-### Payout
-
-- payout_id
-- submission_id
-- recipient_wallet
-- amount
-- transaction_hash
-- payout_status
-- paid_at
-
-## 14. Verification Approach
-
-Verification quality is central to the credibility of the platform.
-
-The MVP verification strategy should combine:
-
-- rule-based checks for required fields
-- AI classification for text or screenshot relevance
-- duplicate detection
-- suspicious pattern scoring
-- manual review fallback for uncertain cases
-
-Examples:
-
-- for screenshot tasks, AI can confirm that a required visual element exists
-- for text feedback tasks, AI can flag low-effort or repeated responses
-- for social tasks, the system can require links or usernames for auditability
-
-## 15. Anti-Fraud and Trust Controls
-
-Because rewards are involved, abuse prevention is necessary from day one.
-
-MVP controls may include:
-
-- rate limits on submissions
-- duplicate account detection signals
-- minimum account age or activity rules
-- creator review tools
-- flagged-user queues
-- capped rewards for new users
-- escalating trust levels based on completion history
-
-## 16. Payout Logic
-
-The payout pipeline should be straightforward and auditable:
-
-1. Task is funded or allocated a budget.
-2. User submits proof.
-3. Submission is reviewed.
-4. Approved submission enters payout queue.
-5. Payout is executed in NIM.
-6. Transaction is logged and surfaced to the user.
-
-This process should emphasize:
-
-- transparency
-- traceability
-- quick turnaround
-- low operational overhead
-
-## 17. Product Value
-
-NimiqEarn Quest is valuable because it creates a practical reward loop instead of a passive marketplace experience.
-
-Expected product value areas:
-
-- wallet onboarding growth
-- higher NIM utility
-- more visible real-world reward use cases
-- community campaign infrastructure for ecosystem teams
-- lower barrier to Web3 participation through Telegram
-
-## 18. Design Principles
-
-The prototype is guided by a few product principles:
-
-- mobile-first interaction
-- low-friction onboarding
-- fast and understandable reward flow
-- simple task creation for communities
-- transparent verification and payout status
-- trust-building through moderation and reputation
-
-## 19. MVP Prototype Scope
-
-The initial prototype scope includes:
-
-- live Telegram bot
-- functional quest marketplace
-- wallet onboarding flow
-- NIM payout mechanism
-- AI-assisted verification module
-- reputation and anti-spam controls
-- lightweight creator or admin management surface
-
-## 20. Risks and Mitigation
-
-### Risk: Spam submissions
-
-Mitigation:
-
-- AI-assisted filtering
-- rate limits
-- reputation gating
-
-### Risk: Low-quality tasks from creators
-
-Mitigation:
-
-- creator review flow
-- structured task templates
-- moderation tools
-
-### Risk: Payout disputes
-
-Mitigation:
-
-- transparent approval rules
-- payout logs
-- review notes and auditability
-
-### Risk: User onboarding friction
-
-Mitigation:
-
-- simplified Telegram-first onboarding
-- guided wallet instructions
-- low-step task participation flow
-
-## 21. Future Expansion
-
-After MVP validation, future releases could support:
+- every campaign can become a structured quest
+- every accepted contribution can become a measurable payout event
+- every new participant can encounter Nimiq through utility rather than speculation
+
+NimiqEarn Quest is not meant to be just a bounty board. It is intended to become an engagement engine with clear workflows and payout trust.
+
+## 5. Product Principles
+
+The concept is guided by these principles:
+
+| Principle | Meaning in Product Terms |
+| --- | --- |
+| Mobile-first | Core actions should work comfortably inside Telegram on a phone |
+| Low-friction | Onboarding, task discovery, and proof submission should require minimal steps |
+| Fast rewards | Users should understand exactly how and when rewards are processed |
+| Transparent trust | Verification status, payout state, and moderation outcomes should be visible |
+| Creator simplicity | Task setup should be clear enough for non-technical operators |
+| Abuse resistance | Reputation, limits, and verification should make reward farming harder |
+
+## 6. Target Users
+
+### Worker Personas
+
+| Persona | Needs | Example Use |
+| --- | --- | --- |
+| Student | simple mobile-first tasks | completes feedback or campaign quests |
+| Freelancer | quick side income | joins paid microtasks between larger jobs |
+| Creator | campaign participation rewards | submits content or promotion proof |
+| Developer | bounty opportunities | completes bug, integration, or testing quests |
+| Community member | incentive-based participation | engages in challenges, referrals, or support tasks |
+
+### Creator Personas
+
+| Persona | Needs | Example Use |
+| --- | --- | --- |
+| Startup | user acquisition and testing | launches onboarding and feedback quests |
+| DAO | contribution incentives | pays members for community actions |
+| Ecosystem team | activation campaigns | rewards wallet use, testing, or education tasks |
+| Marketing team | measurable engagement | runs social and referral quests |
+| Product team | structured feedback | pays users for beta testing and reports |
+
+## 7. Primary Use Cases
+
+NimiqEarn Quest is suited to the following quest categories:
+
+| Category | Description | Proof Type |
+| --- | --- | --- |
+| Product testing | test a feature and submit feedback | text, screenshot, link |
+| Social campaign | complete an awareness task | URL, username, screenshot |
+| Community engagement | join or participate in a community action | username, screenshot |
+| Referral quest | invite or onboard new users | referral reference, completion event |
+| Bug bounty | report issues or edge cases | text, screenshot, reproduction steps |
+| Content quest | create a post, graphic, or short video | link, file, text |
+| Survey quest | answer structured feedback questions | form response, text |
+| Research quest | gather targeted data or audit actions | link, screenshot, notes |
+
+## 8. Value Flow
+
+```mermaid
+flowchart LR
+    A[Task Creator] --> B[Publish Quest]
+    B --> C[Telegram Bot]
+    C --> D[Worker Discovers Quest]
+    D --> E[Worker Submits Proof]
+    E --> F[Verification Layer]
+    F --> G[Approval Decision]
+    G --> H[NIM Payout Engine]
+    H --> I[Worker Receives Reward]
+    G --> J[Reputation Update]
+    I --> J
+```
+
+## 9. User Experience
+
+### Worker Journey
+
+1. User opens the bot.
+2. User starts onboarding.
+3. User creates or links a payout wallet.
+4. User browses quests.
+5. User selects a quest and reads instructions.
+6. User submits proof.
+7. User tracks review status.
+8. Approved submission triggers NIM payout.
+9. User reputation updates based on task outcome.
+
+### Creator Journey
+
+1. Creator opens creator flow.
+2. Creator creates a quest with instructions, rewards, and proof rules.
+3. Creator allocates a payout budget.
+4. Quest becomes visible to eligible workers.
+5. Workers submit responses.
+6. Review and moderation occur.
+7. Approved users are paid.
+8. Creator monitors performance and completion trends.
+
+## 10. Prototype User Flows
+
+### New Worker Flow
+
+```mermaid
+flowchart TD
+    A[/start/] --> B[Welcome Screen]
+    B --> C[Start Earning]
+    C --> D[Connect or Create Wallet]
+    D --> E[View Quest Feed]
+    E --> F[Open Quest Details]
+    F --> G[Submit Proof]
+    G --> H[Under Review]
+    H --> I[Approved]
+    I --> J[Receive NIM]
+```
+
+### Worker Status Journey
+
+| Stage | User Sees | System Action |
+| --- | --- | --- |
+| Joined | welcome message and onboarding options | create user profile |
+| Wallet ready | payout-ready state | link payout destination |
+| Browsing | quest list and filters | fetch active eligible quests |
+| Submitted | pending review state | store proof and run checks |
+| Approved | reward confirmation | create payout record |
+| Paid | transaction confirmation | log payout completion |
+
+### Creator Quest Flow
+
+```mermaid
+flowchart TD
+    A[Creator Starts Quest Setup] --> B[Enter Title and Category]
+    B --> C[Set Reward and Slots]
+    C --> D[Define Proof Rules]
+    D --> E[Fund or Allocate Budget]
+    E --> F[Publish Quest]
+    F --> G[Receive Submissions]
+    G --> H[Review Dashboard]
+    H --> I[Approve or Reject]
+    I --> J[Approved Users Paid]
+```
+
+## 11. Bot Structure
+
+### Proposed Commands
+
+| Command | Purpose |
+| --- | --- |
+| `/start` | start onboarding |
+| `/quests` | browse available quests |
+| `/wallet` | manage payout wallet |
+| `/earnings` | view reward history |
+| `/reputation` | check trust score |
+| `/submit` | continue a pending submission |
+| `/creator` | open creator tools |
+| `/help` | open support guidance |
+
+### Primary Navigation
+
+| Menu Area | Function |
+| --- | --- |
+| Start Earning | onboarding and first actions |
+| Browse Quests | quest discovery |
+| My Tasks | submissions and progress |
+| My Earnings | reward history |
+| My Wallet | payout settings |
+| Invite Friends | referral-oriented growth |
+| Creator Dashboard | task creation and review |
+
+## 12. Screen Blueprint
+
+### Worker Home Screen
+
+| Section | Purpose |
+| --- | --- |
+| available quests | show current opportunities |
+| earnings summary | reinforce reward utility |
+| pending reviews | reduce uncertainty |
+| reputation badge | communicate trust level |
+| shortcuts | speed up repeat actions |
+
+### Quest Detail Screen
+
+| Field | Purpose |
+| --- | --- |
+| quest title | quick context |
+| reward amount | motivation and clarity |
+| difficulty tag | expectation setting |
+| deadline | urgency |
+| proof requirements | submission clarity |
+| acceptance criteria | trust and fairness |
+
+### Creator Dashboard
+
+| Section | Purpose |
+| --- | --- |
+| active quests | current campaigns |
+| budget status | spend visibility |
+| pending submissions | review queue |
+| approvals and rejections | quality tracking |
+| payout log | operational transparency |
+
+## 13. Core MVP Features
+
+| Feature Area | MVP Capability | Why It Matters |
+| --- | --- | --- |
+| Telegram bot | user onboarding, commands, messages | native mobile-first access |
+| Wallet onboarding | connect or define payout wallet | reward delivery |
+| Quest marketplace | list, filter, view, join quests | core discovery experience |
+| Submission pipeline | proof capture and status tracking | operational reliability |
+| Verification engine | AI checks plus rules | scalable moderation support |
+| Payout engine | approve and pay in NIM | utility and trust |
+| Reputation system | worker and creator trust signals | abuse reduction |
+| Admin tools | moderation and review surface | operator control |
+
+## 14. Feature Prioritization
+
+| Priority | Feature | Notes |
+| --- | --- | --- |
+| P0 | bot onboarding | first usable product surface |
+| P0 | quest browsing | required for participation |
+| P0 | proof submission | core action |
+| P0 | payout processing | core value promise |
+| P1 | AI moderation | improves operational scale |
+| P1 | reputation scoring | improves trust quality |
+| P1 | creator dashboard | improves campaign management |
+| P2 | advanced analytics | useful after initial usage |
+| P2 | referrals automation | growth expansion |
+| P2 | multilingual support | broader market access |
+
+### Prototype Focus Chart
+
+```mermaid
+pie title Prototype Focus Distribution
+    "Core task flow" : 35
+    "Payout and wallet flow" : 25
+    "Verification and trust" : 20
+    "Creator operations" : 12
+    "Analytics and extras" : 8
+```
+
+## 15. Example Quest Templates
+
+| Quest Type | Sample Prompt | Reward Style | Typical Proof |
+| --- | --- | --- | --- |
+| onboarding quest | create a wallet and complete first action | fixed reward | screenshot, wallet event |
+| product feedback | test a feature and share notes | fixed reward | text, screenshot |
+| social growth quest | publish or share campaign content | fixed reward per accepted action | link, username |
+| bug bounty | identify a reproducible issue | variable reward by severity | text, screenshots, steps |
+| referral quest | invite qualified new users | performance-based reward | referral event, completion record |
+
+## 16. System Architecture
+
+### Architecture Overview
+
+```mermaid
+flowchart LR
+    A[Telegram User] --> B[Telegram Bot Layer]
+    C[Task Creator] --> D[Creator/Admin Surface]
+    B --> E[Application Logic]
+    D --> E
+    E --> F[Quest Service]
+    E --> G[Submission Service]
+    E --> H[Reputation Service]
+    G --> I[Verification Layer]
+    E --> J[Payout Engine]
+    J --> K[Nimiq Integration]
+    E --> L[(Database)]
+    I --> L
+    J --> L
+```
+
+### Layer Breakdown
+
+| Layer | Responsibility |
+| --- | --- |
+| Telegram interaction layer | command handling, message routing, session state |
+| application layer | user logic, quest logic, approvals, creator operations |
+| verification layer | AI checks, duplicate detection, moderation support |
+| payment layer | payout queuing, transaction logging, reward accounting |
+| data layer | persistent records for users, quests, submissions, payouts |
+
+## 17. Data Model
+
+### Suggested Entities
+
+| Entity | Key Fields | Purpose |
+| --- | --- | --- |
+| User | `user_id`, `telegram_id`, `role`, `reputation_score` | worker or creator identity |
+| WalletProfile | `wallet_id`, `user_id`, `nimiq_address`, `status` | payout routing |
+| Quest | `quest_id`, `creator_id`, `reward_amount`, `status`, `deadline` | task definition |
+| Submission | `submission_id`, `quest_id`, `user_id`, `status`, `ai_score` | proof record |
+| Payout | `payout_id`, `submission_id`, `amount`, `tx_hash`, `payout_status` | reward transfer |
+| ModerationEvent | `event_id`, `submission_id`, `flag_type`, `resolution` | trust and review history |
+
+### Conceptual Entity Relationships
+
+```mermaid
+erDiagram
+    USER ||--o{ WALLET_PROFILE : owns
+    USER ||--o{ SUBMISSION : creates
+    USER ||--o{ QUEST : publishes
+    QUEST ||--o{ SUBMISSION : receives
+    SUBMISSION ||--o| PAYOUT : results_in
+    SUBMISSION ||--o{ MODERATION_EVENT : generates
+```
+
+## 18. Quest Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Published
+    Published --> InProgress
+    InProgress --> UnderReview
+    UnderReview --> Approved
+    UnderReview --> Rejected
+    Approved --> Paid
+    Rejected --> Closed
+    Paid --> Closed
+```
+
+### Lifecycle Table
+
+| Status | Meaning |
+| --- | --- |
+| Draft | creator is still configuring the quest |
+| Published | visible to workers |
+| In Progress | at least one worker is participating |
+| Under Review | proof has been submitted |
+| Approved | submission accepted |
+| Rejected | submission failed checks or criteria |
+| Paid | payout completed |
+| Closed | quest finished or archived |
+
+## 19. Verification Approach
+
+Verification quality is central to platform trust. The proposed approach blends automation and human override.
+
+### Verification Matrix
+
+| Quest Type | Primary Proof | Automated Checks | Manual Fallback |
+| --- | --- | --- | --- |
+| screenshot quest | image proof | image classification, duplicate detection | moderator check |
+| feedback quest | text response | length, uniqueness, semantic relevance | creator review |
+| social quest | URL or username | link pattern checks, duplication | manual audit |
+| bug report | structured text and screenshot | template validation, similarity checks | technical review |
+| referral quest | referral linkage | event confirmation, duplicate rules | support review |
+
+### Review Strategy
+
+- required fields are checked first
+- proof payloads are scored for completeness and relevance
+- repeat or suspicious patterns are flagged
+- uncertain cases are routed for manual review
+
+## 20. Anti-Fraud and Trust Controls
+
+Because the product includes rewards, abuse resistance is essential from the first version.
+
+| Control | Purpose |
+| --- | --- |
+| rate limits | reduce spam submission bursts |
+| duplicate detection | reduce copied or recycled proof |
+| reputation gating | limit high-value tasks to trusted users |
+| creator review tools | improve campaign quality |
+| flagged user queues | surface risky accounts |
+| reward caps for new users | reduce farming incentives |
+| proof templates | improve submission quality and consistency |
+
+### Trust Signal Model
+
+```mermaid
+flowchart TD
+    A[Submission Event] --> B[Rule Checks]
+    B --> C[AI Quality Score]
+    C --> D[Moderator Review if Needed]
+    D --> E[Outcome]
+    E --> F[Reputation Update]
+    F --> G[Eligibility for Future Quests]
+```
+
+## 21. Payout Logic
+
+The payout pipeline should be simple, visible, and auditable.
+
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant B as Bot
+    participant V as Verification
+    participant P as Payout Engine
+    participant N as Nimiq
+
+    W->>B: Submit proof
+    B->>V: Store and evaluate submission
+    V-->>B: Approved
+    B->>P: Create payout request
+    P->>N: Send NIM
+    N-->>P: Transaction hash
+    P-->>B: Payout completed
+    B-->>W: Reward confirmation
+```
+
+### Payout Status Model
+
+| Status | Meaning |
+| --- | --- |
+| queued | approved and waiting for processing |
+| processing | payout request is being executed |
+| paid | transaction completed successfully |
+| failed | payout execution failed and needs retry or review |
+
+## 22. Non-Functional Expectations
+
+Even as a prototype, the product should aim for a few core quality standards.
+
+| Area | Expectation |
+| --- | --- |
+| reliability | submissions and payouts should not be silently lost |
+| clarity | users should always know their current task and payout state |
+| auditability | review actions and payout events should be traceable |
+| moderation safety | suspicious activity should be easy to flag and review |
+| extensibility | quest types and proof rules should be adaptable over time |
+
+## 23. Product Value
+
+NimiqEarn Quest creates a practical reward loop rather than a passive listing experience.
+
+### Product Value Areas
+
+| Value Area | Explanation |
+| --- | --- |
+| wallet utility | gives users a reason to receive and use NIM |
+| recurring engagement | quests can create repeat participation loops |
+| creator efficiency | communities can run structured reward campaigns |
+| mobile accessibility | Telegram lowers interaction friction |
+| measurable actions | each quest creates trackable contribution events |
+
+### Conceptual Adoption Flywheel
+
+```mermaid
+flowchart LR
+    A[More Quests] --> B[More Worker Activity]
+    B --> C[More Reward Payouts]
+    C --> D[Higher Retention]
+    D --> E[More Creator Confidence]
+    E --> A
+```
+
+## 24. Prototype Scope
+
+The first credible prototype should include:
+
+| Included in Prototype | Description |
+| --- | --- |
+| Telegram bot | command-driven quest interaction |
+| worker onboarding | profile and wallet setup |
+| creator quest setup | basic task publishing flow |
+| quest feed | list and detail views |
+| proof submission | text, link, and screenshot support |
+| approval flow | review and outcome statuses |
+| payout flow | NIM transfer handling |
+| moderation support | trust and anti-abuse checks |
+
+## 25. Example Operational Metrics
+
+These are product-facing metrics the system should be able to track once implemented.
+
+| Metric | Why It Matters |
+| --- | --- |
+| quests published | supply-side activity |
+| quests completed | user execution health |
+| approval rate | quality of submissions |
+| payout completion time | trust and operations quality |
+| repeat worker participation | retention signal |
+| repeat creator usage | campaign satisfaction |
+| flagged submissions | abuse monitoring |
+| total NIM paid | reward utility volume |
+
+## 26. Risks and Mitigation
+
+| Risk | Why It Matters | Mitigation |
+| --- | --- | --- |
+| spam submissions | can destroy creator trust | AI filtering, rate limits, reputation gating |
+| low-quality quests | can reduce worker retention | templates, creator controls, moderation |
+| payout disputes | can reduce trust in rewards | audit logs, status visibility, review notes |
+| onboarding drop-off | can reduce conversion | Telegram-first design, fewer steps, guided wallet setup |
+| task fraud rings | can drain reward budgets | duplicate detection, reward caps, review queues |
+
+## 27. Future Expansion
+
+After concept validation, future versions could extend into:
 
 - richer creator analytics
-- tiered worker reputation levels
-- API access for ecosystem partners
-- campaign templates
-- multilingual onboarding
-- more advanced anti-fraud systems
 - referral campaign automation
-- mini-app or web dashboard expansion
+- multilingual onboarding
+- advanced fraud scoring
+- campaign templates by task type
+- partner API access
+- mini-app interface expansion
+- more advanced reputation tiers
 
-## 22. Conclusion
+## 28. Conclusion
 
-NimiqEarn Quest is a practical prototype for turning Telegram into a Nimiq-powered earning environment. Its strength is not only in concept, but in how directly it maps to measurable ecosystem outcomes: wallet creation, transaction volume, repeated NIM usage, and real participation incentives.
+NimiqEarn Quest is a focused product concept for turning Telegram into a Nimiq-powered task and reward environment. Its strength is the simplicity of the loop: creators launch quests, users complete them, proof is verified, and rewards are paid in NIM.
 
-As a product idea, it is focused around a clear user flow: discover tasks, complete tasks, verify proof, and receive rewards in a simple Telegram-native experience.
+That makes the concept both easy to understand and operationally meaningful. It offers a clear path toward wallet utility, repeat engagement, and measurable community incentive flows in a format that feels accessible to mainstream mobile users.

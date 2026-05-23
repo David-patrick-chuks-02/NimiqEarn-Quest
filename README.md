@@ -4,32 +4,25 @@ A product concept repository for **NimiqEarn Quest**.
 
 ## Overview
 
-NimiqEarn Quest is a Telegram-native microtask and bounty marketplace where users complete quests and receive NIM rewards. The product is designed to make Nimiq useful in everyday digital work, community engagement, product testing, and lightweight bounty campaigns.
-
-## Repository Purpose
-
-This repository is a lightweight concept and flow reference. It is intended to help readers quickly understand:
-
-- what NimiqEarn Quest is
-- who it is for
-- how the prototype works
-- what features are included in the MVP
-- how the system is expected to work
+NimiqEarn Quest is a Telegram-native task and bounty marketplace where users complete quests and receive NIM rewards. The concept is designed around mobile-first access, fast payouts, simple participation, and structured creator campaigns.
 
 ## Main Document
 
-The primary concept and prototype flow document is available here:
+The primary concept and product-flow document is here:
 
 - [docs/nimiqearn-prototype-document.md](docs/nimiqearn-prototype-document.md)
 
-## What the Prototype Covers
+## What This Repository Contains
 
-The document includes:
+- product overview and problem framing
+- worker and creator personas
+- user journey flows
+- bot command structure
+- screen blueprints
+- feature prioritization tables
+- architecture, data model, and lifecycle diagrams
+- verification, payout, and anti-fraud design
 
-- project vision and problem statement
-- worker and creator user flows
-- MVP feature set
-- bot commands and platform interactions
-- architecture and data model suggestions
-- verification and payout logic
-- trust, moderation, and anti-fraud design
+## Notes
+
+This repository is intentionally focused on the product idea, system behavior, and user flow. It is not meant to duplicate a forum proposal post.
