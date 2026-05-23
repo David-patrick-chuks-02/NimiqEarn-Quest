@@ -1,6 +1,6 @@
 # NimiqEarn Quest
 
-Supporting repository for the Nimiq ecosystem proposal for **NimiqEarn Quest**.
+A product concept repository for **NimiqEarn Quest**.
 
 ## Overview
 
@@ -8,17 +8,17 @@ NimiqEarn Quest is a Telegram-native microtask and bounty marketplace where user
 
 ## Repository Purpose
 
-This repository acts as a proposal support hub and prototype reference. It is intended to help reviewers quickly understand:
+This repository is a lightweight concept and flow reference. It is intended to help readers quickly understand:
 
 - what NimiqEarn Quest is
 - who it is for
 - how the prototype works
 - what features are included in the MVP
-- how the system could drive Nimiq adoption and transaction activity
+- how the system is expected to work
 
 ## Main Document
 
-The primary prototype and supporting specification is available here:
+The primary concept and prototype flow document is available here:
 
 - [docs/nimiqearn-prototype-document.md](docs/nimiqearn-prototype-document.md)
 
@@ -33,10 +33,3 @@ The document includes:
 - architecture and data model suggestions
 - verification and payout logic
 - trust, moderation, and anti-fraud design
-- ecosystem impact and success metrics
-- budget, timeline, and delivery scope
-
-## Founder
-
-David Patrick Chuks  
-GitHub: <https://github.com/davidpatrickchuks>

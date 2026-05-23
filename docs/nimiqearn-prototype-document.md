@@ -435,11 +435,11 @@ This process should emphasize:
 - quick turnaround
 - low operational overhead
 
-## 17. Ecosystem Impact
+## 17. Product Value
 
-NimiqEarn Quest is useful to the ecosystem because it creates repeated transactional activity rather than one-time symbolic integration.
+NimiqEarn Quest is valuable because it creates a practical reward loop instead of a passive marketplace experience.
 
-Expected impact areas:
+Expected product value areas:
 
 - wallet onboarding growth
 - higher NIM utility
@@ -447,89 +447,20 @@ Expected impact areas:
 - community campaign infrastructure for ecosystem teams
 - lower barrier to Web3 participation through Telegram
 
-## 18. MVP Success Metrics
+## 18. Design Principles
 
-The MVP should be evaluated using measurable outcomes.
+The prototype is guided by a few product principles:
 
-Key metrics:
+- mobile-first interaction
+- low-friction onboarding
+- fast and understandable reward flow
+- simple task creation for communities
+- transparent verification and payout status
+- trust-building through moderation and reputation
 
-- number of onboarded wallets
-- number of active workers
-- number of active creators
-- number of published quests
-- completion rate
-- approval rate
-- total NIM paid out
-- number of NIM transactions generated
-- repeat participation rate
-- average payout completion time
+## 19. MVP Prototype Scope
 
-Initial target range:
-
-- 2,000 to 5,000 wallets onboarded
-- 500 or more completed tasks
-- 50 or more active task creators
-- 20,000 or more NIM-linked reward transactions
-
-## 19. Build Timeline
-
-The current MVP schedule is six weeks.
-
-### Week 1
-
-- architecture definition
-- Telegram bot foundation
-- database structure
-
-### Week 2
-
-- onboarding flow
-- wallet setup and payout profile support
-- basic user state management
-
-### Week 3
-
-- task listing
-- task creation flow
-- submission handling
-
-### Week 4
-
-- payout engine
-- approval and review flow
-- transaction logging
-
-### Week 5
-
-- AI verification assistance
-- moderation controls
-- reputation system
-
-### Week 6
-
-- testing
-- performance fixes
-- public beta preparation
-
-## 20. Budget Context
-
-Current proposed MVP budget: **$4,500**
-
-| Category | Amount |
-| --- | ---: |
-| Telegram Bot Development | $1,500 |
-| Nimiq Wallet and Payment Integration | $800 |
-| AI Verification System | $900 |
-| Backend and Infrastructure | $500 |
-| UI and Dashboard | $400 |
-| Testing, Security and Optimization | $300 |
-| Community Launch and Growth | $100 |
-
-This budget is structured around building a credible MVP that proves utility, transaction flow, and user demand before expanding into a broader product stack.
-
-## 21. Deliverables
-
-Expected MVP deliverables:
+The initial prototype scope includes:
 
 - live Telegram bot
 - functional quest marketplace
@@ -538,9 +469,8 @@ Expected MVP deliverables:
 - AI-assisted verification module
 - reputation and anti-spam controls
 - lightweight creator or admin management surface
-- beta launch with measurable usage data
 
-## 22. Risks and Mitigation
+## 20. Risks and Mitigation
 
 ### Risk: Spam submissions
 
@@ -574,7 +504,7 @@ Mitigation:
 - guided wallet instructions
 - low-step task participation flow
 
-## 23. Future Expansion
+## 21. Future Expansion
 
 After MVP validation, future releases could support:
 
@@ -587,22 +517,8 @@ After MVP validation, future releases could support:
 - referral campaign automation
 - mini-app or web dashboard expansion
 
-## 24. Founder and Execution Readiness
-
-The project is being led by David Patrick Chuks, a full stack and blockchain developer with experience in:
-
-- AI agents
-- Telegram automation systems
-- Web3 applications
-- product prototyping and shipping
-- hackathon and builder ecosystem participation
-
-GitHub profile:
-
-<https://github.com/davidpatrickchuks>
-
-## 25. Conclusion
+## 22. Conclusion
 
 NimiqEarn Quest is a practical prototype for turning Telegram into a Nimiq-powered earning environment. Its strength is not only in concept, but in how directly it maps to measurable ecosystem outcomes: wallet creation, transaction volume, repeated NIM usage, and real participation incentives.
 
-As a prototype, it is focused, buildable within six weeks, and well suited to MVP validation inside the Nimiq ecosystem.
+As a product idea, it is focused around a clear user flow: discover tasks, complete tasks, verify proof, and receive rewards in a simple Telegram-native experience.
