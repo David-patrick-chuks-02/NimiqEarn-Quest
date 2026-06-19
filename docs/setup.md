@@ -67,7 +67,9 @@ packages/
 ## Useful commands
 
 ```bash
-pnpm check          # typecheck + build (CI parity)
+pnpm check          # typecheck + test + build (CI parity)
+pnpm test           # Run Vitest once
+pnpm test:watch     # Vitest watch mode
 pnpm typecheck      # Typecheck all packages
 pnpm build          # Build all packages
 pnpm dev            # API + web (watch mode)

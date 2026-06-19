@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "description": "Telegram-native task and bounty marketplace for the Nimiq ecosystem",
   "scripts": {
-    "check": "pnpm typecheck && pnpm build",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "pnpm build:packages && pnpm run --parallel dev:api dev:web",
     "dev:all": "pnpm build:packages && pnpm run --parallel dev:api dev:web dev:bot",
     "build:packages": "pnpm --filter @nimiqearn/shared --filter @nimiqearn/nimiq --filter @nimiqearn/database build",
@@ -23,5 +25,8 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
 }

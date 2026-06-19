@@ -1,33 +1,5 @@
 import "dotenv/config";
-import cors from "@fastify/cors";
-import Fastify from "fastify";
-import { loadEnv } from "./config.js";
-import prismaPlugin from "./plugins/prisma.js";
-import { healthRoutes } from "./routes/health.js";
-import { statsRoutes } from "./routes/stats.js";
-
-async function buildServer() {
-  const env = loadEnv();
-
-  const app = Fastify({
-    logger: {
-      level: env.LOG_LEVEL,
-    },
-  });
-
-  await app.register(cors, { origin: true });
-  await app.register(prismaPlugin);
-  await app.register(healthRoutes);
-  await app.register(statsRoutes);
-
-  app.get("/", async () => ({
-    name: "NimiqEarn Quest API",
-    version: "0.1.0",
-    milestone: 1,
-  }));
-
-  return { app, env };
-}
+import { buildServer } from "./app.js";
 
 async function start() {
   const { app, env } = await buildServer();
@@ -42,5 +14,3 @@ async function start() {
 }
 
 start();
-
-export { buildServer };
