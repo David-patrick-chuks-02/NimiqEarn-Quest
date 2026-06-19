@@ -1,8 +1,6 @@
-import type { Context, NextFunction, SessionFlavor } from "grammy";
+import type { NextFunction } from "grammy";
+import type { BotContext } from "../context.js";
 import type { Logger } from "../logger.js";
-import type { SessionData } from "../types.js";
-
-type BotContext = Context & SessionFlavor<SessionData>;
 
 export function loggingMiddleware(logger: Logger) {
   return async (ctx: BotContext, next: NextFunction) => {

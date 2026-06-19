@@ -1,20 +1,14 @@
-import type { Bot, CommandContext, Context, SessionFlavor } from "grammy";
-import { APP_NAME } from "@nimiqearn/shared";
+import type { Bot } from "grammy";
+import type { ApiClient } from "../api/client.js";
+import type { BotContext } from "../context.js";
 import { helpCommand } from "./help.js";
-import type { SessionData } from "../types.js";
-
-type BotContext = Context & SessionFlavor<SessionData>;
+import { createStartCommand } from "./start.js";
 
 const KNOWN_COMMANDS = new Set(["start", "help"]);
 
-export function registerCommands(bot: Bot<BotContext>) {
+export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
   bot.command("help", helpCommand);
-
-  bot.command("start", async (ctx: CommandContext<BotContext>) => {
-    await ctx.reply(
-      `Welcome to ${APP_NAME}!\n\nOnboarding lands in the next update. Use /help for available commands.`,
-    );
-  });
+  bot.command("start", createStartCommand(api));
 
   bot.on("message:text").filter((ctx) => {
     const text = ctx.message.text;

@@ -1,15 +1,19 @@
-import { Bot, session, type Context, type SessionFlavor } from "grammy";
+import { Bot, session } from "grammy";
+import { conversations, createConversation } from "@grammyjs/conversations";
+import { createApiClient } from "./api/client.js";
 import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
+import type { BotContext } from "./context.js";
+import { createOnboardingConversation } from "./conversations/onboarding.js";
 import type { Logger } from "./logger.js";
+import { registerMainMenuHandlers } from "./menus/main.js";
 import { loggingMiddleware } from "./middleware/logging.js";
 import { createRedisSessionStorage } from "./session.js";
 import type { SessionData } from "./types.js";
 
-type BotContext = Context & SessionFlavor<SessionData>;
-
 export function createBot(env: BotEnv, logger: Logger) {
   const bot = new Bot<BotContext>(env.BOT_TOKEN);
+  const api = createApiClient(env.API_URL);
   const { redis, storage } = createRedisSessionStorage(env, logger);
 
   bot.use(loggingMiddleware(logger));
@@ -19,8 +23,11 @@ export function createBot(env: BotEnv, logger: Logger) {
       storage,
     }),
   );
+  bot.use(conversations());
+  bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
 
-  registerCommands(bot);
+  registerCommands(bot, api);
+  registerMainMenuHandlers(bot);
 
   bot.catch((error) => {
     logger.error({ err: error.error ?? error }, "bot error");

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/storage-redis": "^2.5.1",
     "@nimiqearn/shared": "workspace:*",
     "dotenv": "^16.5.0",

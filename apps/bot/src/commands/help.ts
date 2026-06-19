@@ -1,10 +1,7 @@
-import type { CommandContext, Context, SessionFlavor } from "grammy";
 import { APP_NAME } from "@nimiqearn/shared";
-import type { SessionData } from "../types.js";
+import type { BotContext } from "../context.js";
 
-type BotContext = Context & SessionFlavor<SessionData>;
-
-export async function helpCommand(ctx: CommandContext<BotContext>) {
+export async function helpCommand(ctx: BotContext) {
   await ctx.reply(
     [
       `*${APP_NAME} — Help*`,
