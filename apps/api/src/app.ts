@@ -4,6 +4,7 @@ import { loadEnv } from "./config.js";
 import prismaPlugin from "./plugins/prisma.js";
 import { healthRoutes } from "./routes/health.js";
 import { statsRoutes } from "./routes/stats.js";
+import { userRoutes } from "./routes/users.js";
 
 export async function buildServer() {
   const env = loadEnv();
@@ -18,6 +19,7 @@ export async function buildServer() {
   await app.register(prismaPlugin);
   await app.register(healthRoutes);
   await app.register(statsRoutes);
+  await app.register(userRoutes);
 
   app.get("/", async () => ({
     name: "NimiqEarn Quest API",
