@@ -44,11 +44,43 @@ pnpm dev
 4. Create Storage buckets: `proof-uploads` (private), `quest-assets`, `web-assets`.
 5. Run `pnpm db:push` against the Supabase database.
 
-## Bot (Day 3+)
+## Bot testing (Day 3–4)
+
+### 1. Create a Telegram bot
+
+1. Open [@BotFather](https://t.me/BotFather) in Telegram.
+2. Run `/newbot` and copy the token into `.env` as `BOT_TOKEN`.
+3. Ensure `REDIS_URL` and `API_URL=http://localhost:3001` are set.
+
+### 2. Start the full stack
 
 ```bash
-# Add BOT_TOKEN to .env from @BotFather
-pnpm dev:bot
+pnpm docker:up          # Postgres + Redis
+pnpm db:push            # if schema not applied yet
+pnpm dev:all            # API + web + bot
+```
+
+### 3. Manual QA checklist
+
+| Step | Expected result |
+| --- | --- |
+| Send `/help` | Help text with responsible earning notice |
+| Send `/unknown` | Friendly unknown-command message |
+| Send `/start` (new user) | Welcome → terms button → profile saved |
+| Send `/start` again | Welcome back + main menu buttons |
+| Tap **My Wallet** | “Coming in Week 2” message |
+| Tap **Help** | Same as `/help` |
+
+### 4. Verify profile in database
+
+```bash
+curl http://localhost:3001/api/users/YOUR_TELEGRAM_ID
+```
+
+Or inspect the `users` table after onboarding.
+
+```bash
+pnpm dev:bot    # bot only (API must still be running for onboarding)
 ```
 
 ## Project structure
