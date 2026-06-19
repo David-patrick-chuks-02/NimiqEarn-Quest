@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  WORKER
+  CREATOR
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum WalletStatus {
+  PENDING
+  VERIFIED
+  INVALID
+}
+
+enum QuestCategory {
+  PRODUCT_TESTING
+  SOCIAL_CAMPAIGN
+  COMMUNITY_ENGAGEMENT
+  REFERRAL
+  CONTENT
+  FEEDBACK
+  BUG_BOUNTY
+  OTHER
+}
+
+enum QuestProofType {
+  TEXT
+  LINK
+  SCREENSHOT
+  TRANSACTION_HASH
+  REFERRAL_EVENT
+}
+
+enum QuestStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+model User {
+  id               String     @id @default(uuid()) @db.Uuid
+  telegramId       String     @unique @map("telegram_id")
+  telegramUsername String?    @map("telegram_username")
+  displayName      String?    @map("display_name")
+  role             UserRole   @default(WORKER)
+  status           UserStatus @default(PENDING)
+  reputationScore  Int        @default(0) @map("reputation_score")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  walletProfile WalletProfile?
+  walletAudits  WalletAddressAudit[]
+  quests        Quest[]
+
+  @@map("users")
+}
+
+model WalletProfile {
+  id           String       @id @default(uuid()) @db.Uuid
+  userId       String       @unique @map("user_id") @db.Uuid
+  nimiqAddress String       @map("nimiq_address")
+  status       WalletStatus @default(PENDING)
+  linkedAt     DateTime     @default(now()) @map("linked_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_profiles")
+}
+
+model WalletAddressAudit {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  oldAddress  String?  @map("old_address")
+  newAddress  String   @map("new_address")
+  changedAt   DateTime @default(now()) @map("changed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("wallet_address_audits")
+}
+
+model Quest {
+  id                 String         @id @default(uuid()) @db.Uuid
+  creatorId          String         @map("creator_id") @db.Uuid
+  title              String         @db.VarChar(100)
+  category           QuestCategory
+  description        String         @db.Text
+  rewardAmount       Decimal        @map("reward_amount") @db.Decimal(18, 8)
+  totalSlots         Int            @map("total_slots")
+  filledSlots        Int            @default(0) @map("filled_slots")
+  deadline           DateTime
+  proofType          QuestProofType @map("proof_type")
+  proofInstructions  String         @map("proof_instructions") @db.Text
+  status             QuestStatus    @default(DRAFT)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  publishedAt        DateTime?      @map("published_at")
+
+  creator User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("quests")
+}

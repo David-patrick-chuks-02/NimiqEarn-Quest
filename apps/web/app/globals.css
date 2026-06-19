@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root {
+  --nimiq-blue: #0ca6fe;
+  --nimiq-dark: #0f172a;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--nimiq-dark);
+  background: #f8fafc;
+}

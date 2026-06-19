@@ -1,0 +1,27 @@
+{
+  "name": "nimiqearn-quest",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Telegram-native task and bounty marketplace for the Nimiq ecosystem",
+  "scripts": {
+    "check": "pnpm typecheck && pnpm build",
+    "dev": "pnpm build:packages && pnpm run --parallel dev:api dev:web",
+    "dev:all": "pnpm build:packages && pnpm run --parallel dev:api dev:web dev:bot",
+    "build:packages": "pnpm --filter @nimiqearn/shared --filter @nimiqearn/nimiq build",
+    "dev:api": "pnpm --filter @nimiqearn/api dev",
+    "dev:bot": "pnpm --filter @nimiqearn/bot dev",
+    "dev:web": "pnpm --filter @nimiqearn/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @nimiqearn/database generate",
+    "db:push": "pnpm --filter @nimiqearn/database push",
+    "db:migrate": "pnpm --filter @nimiqearn/database migrate",
+    "db:seed": "pnpm --filter @nimiqearn/database seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
