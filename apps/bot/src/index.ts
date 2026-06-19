@@ -1,27 +1,28 @@
 import "dotenv/config";
-import { Bot } from "grammy";
 import { APP_NAME } from "@nimiqearn/shared";
+import { createBot } from "./bot.js";
+import { loadBotEnv } from "./config.js";
+import { createLogger } from "./logger.js";
 
-const token = process.env.BOT_TOKEN;
+async function main() {
+  let env;
+  try {
+    env = loadBotEnv();
+  } catch {
+    console.warn(
+      `[${APP_NAME}] Bot config invalid or missing — set BOT_TOKEN and REDIS_URL in .env (Day 3+).`,
+    );
+    process.exit(0);
+  }
 
-if (!token) {
-  console.warn(
-    `[${APP_NAME}] BOT_TOKEN not set — bot scaffold only. Add BOT_TOKEN to .env (Day 3+).`,
-  );
-  process.exit(0);
+  const logger = createLogger(env);
+  const { bot } = createBot(env, logger);
+
+  logger.info(`[${APP_NAME}] Starting bot (polling)...`);
+  await bot.start();
 }
 
-const bot = new Bot(token);
-
-bot.command("start", async (ctx) => {
-  await ctx.reply(
-    `Welcome to ${APP_NAME}!\n\nBot foundation lands on Day 3–4. Full onboarding coming soon.`,
-  );
+main().catch((error) => {
+  console.error("Failed to start bot:", error);
+  process.exit(1);
 });
-
-bot.catch((error) => {
-  console.error("Bot error:", error);
-});
-
-console.log(`[${APP_NAME}] Starting bot (polling)...`);
-bot.start();
