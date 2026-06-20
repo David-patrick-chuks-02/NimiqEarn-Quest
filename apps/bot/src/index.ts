@@ -1,8 +1,9 @@
-import "dotenv/config";
+import "./env.js";
 import { APP_NAME } from "@nimiqearn/shared";
 import { createBot } from "./bot.js";
-import { loadBotEnv } from "./config.js";
+import { isWebhookMode, loadBotEnv } from "./config.js";
 import { createLogger } from "./logger.js";
+import { startWebhookServer } from "./webhook.js";
 
 async function main() {
   let env;
@@ -17,6 +18,12 @@ async function main() {
 
   const logger = createLogger(env);
   const { bot } = createBot(env, logger);
+
+  if (isWebhookMode(env)) {
+    const { publicUrl } = await startWebhookServer(bot, env, logger);
+    logger.info(`[${APP_NAME}] Bot running in webhook mode → ${publicUrl}`);
+    return;
+  }
 
   logger.info(`[${APP_NAME}] Starting bot (polling)...`);
   await bot.start();

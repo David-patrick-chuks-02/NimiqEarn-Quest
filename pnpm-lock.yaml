@@ -154,6 +154,9 @@ importers:
 
   packages/shared:
     dependencies:
+      dotenv:
+        specifier: ^16.5.0
+        version: 16.6.1
       zod:
         specifier: ^3.25.36
         version: 3.25.76

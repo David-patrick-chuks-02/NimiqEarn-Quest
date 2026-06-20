@@ -48,4 +48,6 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type LinkWalletInput = z.infer<typeof linkWalletSchema>;
 export type CreateQuestInput = z.infer<typeof createQuestSchema>;
 
+export { loadRootEnv } from "./load-env.js";
+
 export const APP_NAME = "NimiqEarn Quest";

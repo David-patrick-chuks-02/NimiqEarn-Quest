@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./env.js";
 import { buildServer } from "./app.js";
 
 async function start() {

@@ -1,0 +1,46 @@
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { webhookCallback } from "grammy";
+import type { WebhookBotEnv } from "./config.js";
+import type { BotContext } from "./context.js";
+import type { Bot } from "grammy";
+import type { Logger } from "./logger.js";
+
+const WEBHOOK_PATH = "/webhook";
+
+export async function startWebhookServer(bot: Bot<BotContext>, env: WebhookBotEnv, logger: Logger) {
+  const publicUrl = `${env.WEBHOOK_URL.replace(/\/$/, "")}${WEBHOOK_PATH}`;
+
+  const handler = webhookCallback(bot, "http", {
+    secretToken: env.WEBHOOK_SECRET,
+  });
+
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", mode: "webhook" }));
+      return;
+    }
+
+    if (req.method === "POST" && req.url === WEBHOOK_PATH) {
+      return handler(req, res);
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  await bot.api.setWebhook(publicUrl, {
+    secret_token: env.WEBHOOK_SECRET,
+  });
+
+  await new Promise<void>((resolve) => {
+    server.listen(env.BOT_WEBHOOK_PORT, "0.0.0.0", () => resolve());
+  });
+
+  logger.info(
+    { publicUrl, port: env.BOT_WEBHOOK_PORT },
+    "Webhook server listening — point ngrok at this port",
+  );
+
+  return { server, publicUrl };
+}
