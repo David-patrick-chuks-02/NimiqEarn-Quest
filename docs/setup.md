@@ -115,12 +115,15 @@ pnpm dev:all            # API + web + bot
 
 | Step | Expected result |
 | --- | --- |
-| Send `/help` | Help text with responsible earning notice |
-| Send `/unknown` | Friendly unknown-command message |
-| Send `/start` (new user) | Welcome → terms button → profile saved |
-| Send `/start` again | Welcome back + main menu buttons |
-| Tap **My Wallet** | “Coming in Week 2” message |
-| Tap **Help** | Same as `/help` |
+| Send `/help` | Commands list, menu guide, responsible earning notice |
+| Send `/menu` | Main menu (registered users) or prompt to `/start` |
+| Send `/unknown` | Friendly unknown-command message with `/menu` hint |
+| Send random text | Prompt to use `/menu` or `/help` |
+| Send `/start` (new user) | Welcome → terms button → profile saved → menu |
+| Send `/start` again | Welcome back + main menu |
+| Tap **Start Earning** | Worker status (profile, wallet, quests) |
+| Tap **My Wallet** | Wallet coming-soon message + menu |
+| Tap **Help** | Help text + menu shortcut |
 
 ### 5. Verify profile in database
 

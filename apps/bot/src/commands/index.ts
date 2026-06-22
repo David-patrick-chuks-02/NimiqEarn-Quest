@@ -1,13 +1,16 @@
 import type { Bot } from "grammy";
 import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
+import { messages } from "../copy/messages.js";
 import { helpCommand } from "./help.js";
+import { createMenuCommand } from "./menu.js";
 import { createStartCommand } from "./start.js";
 
-const KNOWN_COMMANDS = new Set(["start", "help"]);
+const KNOWN_COMMANDS = new Set(["start", "help", "menu"]);
 
 export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
   bot.command("help", helpCommand);
+  bot.command("menu", createMenuCommand(api));
   bot.command("start", createStartCommand(api));
 
   bot.on("message:text").filter((ctx) => {
@@ -19,5 +22,5 @@ export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
 }
 
 async function unknownCommandHandler(ctx: BotContext) {
-  await ctx.reply("I don't recognize that command. Try /help to see what's available.");
+  await ctx.reply(messages.unknownCommand);
 }

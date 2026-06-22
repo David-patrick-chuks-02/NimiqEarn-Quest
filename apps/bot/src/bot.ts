@@ -6,8 +6,10 @@ import { registerCommands } from "./commands/index.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
 import type { Logger } from "./logger.js";
-import { registerMainMenuHandlers } from "./menus/main.js";
+import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
+import { registerMainMenuHandlers } from "./menus/main.js";
+import { messages } from "./copy/messages.js";
 import { createRedisSessionStorage } from "./session.js";
 import type { SessionData } from "./types.js";
 
@@ -27,10 +29,12 @@ export function createBot(env: BotEnv, logger: Logger) {
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
 
   registerCommands(bot, api);
-  registerMainMenuHandlers(bot);
+  registerMainMenuHandlers(bot, api);
+  bot.use(fallbackMiddleware(logger));
 
   bot.catch((error) => {
     logger.error({ err: error.error ?? error }, "bot error");
+    error.ctx?.reply(messages.errors.generic).catch(() => undefined);
   });
 
   const shutdown = async () => {
