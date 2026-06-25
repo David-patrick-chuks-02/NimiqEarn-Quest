@@ -12,6 +12,7 @@
   "dependencies": {
     "@fastify/cors": "^11.0.1",
     "@nimiqearn/database": "workspace:*",
+    "@nimiqearn/nimiq": "workspace:^",
     "@nimiqearn/shared": "workspace:*",
     "@supabase/supabase-js": "^2.49.8",
     "dotenv": "^16.5.0",

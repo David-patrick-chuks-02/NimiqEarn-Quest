@@ -122,7 +122,9 @@ pnpm dev:all            # API + web + bot
 | Send `/start` (new user) | Welcome → terms button → profile saved → menu |
 | Send `/start` again | Welcome back + main menu |
 | Tap **Start Earning** | Worker status (profile, wallet, quests) |
-| Tap **My Wallet** | Wallet coming-soon message + menu |
+| Send `/wallet` | Link or update Nimiq address |
+| Send `/wallet` | Link or update Nimiq address |
+| Tap **My Wallet** | Opens wallet linking flow |
 | Tap **Help** | Help text + menu shortcut |
 
 ### 5. Verify profile in database

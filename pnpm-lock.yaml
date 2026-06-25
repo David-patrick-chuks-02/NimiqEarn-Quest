@@ -20,6 +20,9 @@ importers:
       '@nimiqearn/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@nimiqearn/nimiq':
+        specifier: workspace:^
+        version: link:../../packages/nimiq
       '@nimiqearn/shared':
         specifier: workspace:*
         version: link:../../packages/shared

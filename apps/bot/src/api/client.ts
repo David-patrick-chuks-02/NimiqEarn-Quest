@@ -1,5 +1,12 @@
 import type { CreateUserInput } from "@nimiqearn/shared";
 
+export interface ApiWallet {
+  nimiqAddress: string;
+  status: string;
+  linkedAt: string;
+  updatedAt: string;
+}
+
 export interface ApiUser {
   id: string;
   telegramId: string;
@@ -10,6 +17,7 @@ export interface ApiUser {
   reputationScore: number;
   createdAt: string;
   updatedAt: string;
+  wallet: ApiWallet | null;
 }
 
 export function createApiClient(baseUrl: string) {
@@ -44,6 +52,27 @@ export function createApiClient(baseUrl: string) {
 
       const data = (await response.json()) as { user: ApiUser };
       return data.user;
+    },
+
+    async linkWallet(telegramId: string, nimiqAddress: string): Promise<ApiWallet> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nimiqAddress }),
+        },
+      );
+
+      const data = (await response.json()) as { wallet?: ApiWallet; error?: string; code?: string };
+
+      if (!response.ok) {
+        const error = new Error(data.error ?? `Failed to link wallet (${response.status})`);
+        (error as Error & { code?: string }).code = data.code;
+        throw error;
+      }
+
+      return data.wallet!;
     },
   };
 }

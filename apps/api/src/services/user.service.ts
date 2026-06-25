@@ -1,5 +1,6 @@
-import type { PrismaClient, User } from "@nimiqearn/database";
+import type { PrismaClient, User, WalletProfile } from "@nimiqearn/database";
 import type { CreateUserInput } from "@nimiqearn/shared";
+import { toWalletResponse } from "./wallet.service.js";
 
 export function createUserService(db: PrismaClient) {
   return {
@@ -19,15 +20,18 @@ export function createUserService(db: PrismaClient) {
       });
     },
 
-    findByTelegramId(telegramId: string): Promise<User | null> {
-      return db.user.findUnique({ where: { telegramId } });
+    findByTelegramId(telegramId: string) {
+      return db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfile: true },
+      });
     },
   };
 }
 
 export type UserService = ReturnType<typeof createUserService>;
 
-export function toUserResponse(user: User) {
+export function toUserResponse(user: User & { walletProfile?: WalletProfile | null }) {
   return {
     id: user.id,
     telegramId: user.telegramId,
@@ -38,5 +42,6 @@ export function toUserResponse(user: User) {
     reputationScore: user.reputationScore,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
+    wallet: user.walletProfile ? toWalletResponse(user.walletProfile) : null,
   };
 }

@@ -17,11 +17,12 @@ export const messages = {
       "*Commands*",
       "/start — Create your profile or open the main menu",
       "/menu — Open the main menu",
+      "/wallet — Link or update your Nimiq payout address",
       "/help — Show this message",
       "",
       "*Main menu*",
       "• *Start Earning* — Your worker status and what's next",
-      "• *My Wallet* — Link your Nimiq address (coming soon)",
+      "• *My Wallet* — Link or update your Nimiq address",
       "• *Help* — Command list and earning guidelines",
       "",
       "*Responsible earning*",
@@ -38,13 +39,21 @@ export const messages = {
   unknownText:
     "I didn't understand that message. Use /menu for navigation or /help for commands.",
 
-  walletComingSoon: [
-    "*My Wallet*",
-    "",
-    "Wallet linking is coming in the next update.",
-    "",
-    "You'll connect a Nimiq address here to receive quest rewards. For now, make sure your worker profile is set up with /start.",
-  ].join("\n"),
+  wallet: {
+    notRegistered: "You need a worker profile first. Send /start to get started.",
+    promptLink:
+      "Send your *Nimiq address* (NQ...) to receive quest rewards.\n\nPaste the full address in your next message.",
+    promptUpdate:
+      "Send a *new Nimiq address* if you want to update your linked wallet.",
+    current: (address: string) => `*Linked wallet*\n\`${address}\``,
+    linked: (address: string) =>
+      `Wallet linked successfully.\n\n\`${address}\`\n\nYou'll receive NIM rewards at this address when quests go live.`,
+    invalidAddress: "That doesn't look like a valid Nimiq address. Please send an NQ address and try /wallet again.",
+    addressInUse: "This address is already linked to another account. Use a different Nimiq address.",
+    linkFailed: "Could not save your wallet right now. Please try /wallet again shortly.",
+    timeout: "Wallet linking timed out. Send /wallet when you're ready to try again.",
+    alreadyInProgress: "You're already in a wallet flow. Finish that step or wait a moment and try /wallet again.",
+  },
 
   onboarding: {
     welcome: (name: string) =>
@@ -59,7 +68,7 @@ export const messages = {
         `You're all set, *${displayName}*!`,
         "",
         "Your worker profile is saved.",
-        "Wallet linking arrives in the next update — you'll need a Nimiq address to receive rewards.",
+        "Use /wallet to link your Nimiq address for rewards.",
         "",
         "Open the menu below to explore.",
       ].join("\n"),

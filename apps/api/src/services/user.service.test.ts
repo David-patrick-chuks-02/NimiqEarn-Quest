@@ -45,7 +45,10 @@ describe("createUserService", () => {
 
     const user = await service.findByTelegramId("999");
 
-    expect(findUnique).toHaveBeenCalledWith({ where: { telegramId: "999" } });
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { telegramId: "999" },
+      include: { walletProfile: true },
+    });
     expect(user).toEqual({ telegramId: "999" });
   });
 });

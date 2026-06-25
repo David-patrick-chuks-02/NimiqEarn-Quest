@@ -3,6 +3,7 @@ import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { helpCommand } from "../commands/help.js";
+import { hasActiveConversation } from "../utils/conversation.js";
 import { formatWorkerStatus } from "./worker-status.js";
 
 export const MAIN_MENU_CALLBACKS = {
@@ -55,10 +56,13 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery(MAIN_MENU_CALLBACKS.wallet, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.reply(messages.walletComingSoon, {
-      parse_mode: "Markdown",
-      reply_markup: mainMenuKeyboard(),
-    });
+
+    if (hasActiveConversation(ctx)) {
+      await ctx.reply(messages.wallet.alreadyInProgress);
+      return;
+    }
+
+    await ctx.conversation.enter("wallet");
   });
 
   bot.callbackQuery(MAIN_MENU_CALLBACKS.help, async (ctx) => {
