@@ -1,4 +1,6 @@
 import type { CreateUserInput } from "@nimiqearn/shared";
+import type { CreatorDashboard } from "./types.js";
+import { parseApiError } from "./types.js";
 
 export interface ApiWallet {
   nimiqAddress: string;
@@ -73,6 +75,39 @@ export function createApiClient(baseUrl: string) {
       }
 
       return data.wallet!;
+    },
+
+    async registerCreator(telegramId: string): Promise<ApiUser> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/register`,
+        { method: "POST" },
+      );
+
+      const data = (await response.json()) as { user?: ApiUser; error?: string; code?: string };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to register creator (${response.status})`);
+      }
+
+      return data.user!;
+    },
+
+    async getCreatorDashboard(telegramId: string): Promise<CreatorDashboard> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/dashboard`,
+      );
+
+      const data = (await response.json()) as {
+        dashboard?: CreatorDashboard;
+        error?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to load creator dashboard (${response.status})`);
+      }
+
+      return data.dashboard!;
     },
   };
 }

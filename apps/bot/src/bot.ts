@@ -9,6 +9,7 @@ import { createWalletConversation } from "./conversations/wallet.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
+import { registerCreatorHandlers } from "./menus/creator.js";
 import { registerMainMenuHandlers } from "./menus/main.js";
 import { messages } from "./copy/messages.js";
 import { createRedisSessionStorage } from "./session.js";
@@ -32,6 +33,7 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
+  registerCreatorHandlers(bot, api);
   bot.use(fallbackMiddleware(logger));
 
   bot.catch((error) => {

@@ -18,6 +18,7 @@ export const messages = {
       "/start — Create your profile or open the main menu",
       "/menu — Open the main menu",
       "/wallet — Link or update your Nimiq payout address",
+      "/creator — Open creator tools or register as a creator",
       "/help — Show this message",
       "",
       "*Main menu*",
@@ -78,5 +79,23 @@ export const messages = {
   menu: {
     greeting: (name: string) => `Welcome back, *${name}*! Choose an option below.`,
     notRegistered: "You don't have a profile yet. Send /start to get started.",
+  },
+
+  creator: {
+    notRegistered: "Create a worker profile first with /start, then you can register as a creator.",
+    invite: [
+      "*Become a quest creator*",
+      "",
+      "Creators publish paid tasks and bounties for the Nimiq community.",
+      "",
+      "You'll be able to set rewards, proof rules, and review submissions.",
+      "",
+      "Tap *Become a Creator* below to upgrade your account.",
+    ].join("\n"),
+    welcome: "You're now registered as a creator. Use the dashboard below to manage quests.",
+    suspended: "Your account is suspended and cannot register as a creator.",
+    registerFailed: "Could not register you as a creator right now. Please try /creator again shortly.",
+    createQuestSoon: "Quest creation is coming in the next update. Your creator dashboard is ready.",
+    myQuestsSoon: "Quest listing is coming in the next update. Draft and published quests will appear here.",
   },
 };

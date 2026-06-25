@@ -123,7 +123,8 @@ pnpm dev:all            # API + web + bot
 | Send `/start` again | Welcome back + main menu |
 | Tap **Start Earning** | Worker status (profile, wallet, quests) |
 | Send `/wallet` | Link or update Nimiq address |
-| Send `/wallet` | Link or update Nimiq address |
+| Send `/creator` | Register as creator or open creator dashboard |
+| Tap **Become a Creator** | Worker upgrades to creator role |
 | Tap **My Wallet** | Opens wallet linking flow |
 | Tap **Help** | Help text + menu shortcut |
 
