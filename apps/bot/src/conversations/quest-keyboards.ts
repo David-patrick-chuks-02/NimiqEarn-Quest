@@ -5,6 +5,7 @@ export const QUEST_CATEGORY_CALLBACK_PREFIX = "quest:cat:";
 export const QUEST_PROOF_CALLBACK_PREFIX = "quest:proof:";
 export const QUEST_CONFIRM_SAVE = "quest:confirm:save";
 export const QUEST_CONFIRM_CANCEL = "quest:confirm:cancel";
+export const QUEST_PUBLISH_CALLBACK_PREFIX = "quest:publish:";
 
 const CATEGORIES: CreateQuestInput["category"][] = [
   "PRODUCT_TESTING",

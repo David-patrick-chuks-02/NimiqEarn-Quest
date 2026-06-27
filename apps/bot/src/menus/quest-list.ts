@@ -1,5 +1,12 @@
 import type { ApiQuest } from "../api/types.js";
-import { CATEGORY_LABELS, PROOF_TYPE_LABELS } from "../conversations/quest-keyboards.js";
+import { InlineKeyboard } from "grammy";
+import {
+  CATEGORY_LABELS,
+  PROOF_TYPE_LABELS,
+  QUEST_PUBLISH_CALLBACK_PREFIX,
+} from "../conversations/quest-keyboards.js";
+
+const CREATOR_MY_QUESTS_CALLBACK = "creator:my-quests";
 
 export function formatCreatorQuestList(quests: ApiQuest[]): string {
   if (quests.length === 0) {
@@ -36,7 +43,29 @@ export function formatCreatorQuestList(quests: ApiQuest[]): string {
     lines.push(`_Showing 10 of ${quests.length} quests._`);
   }
 
+  const draftCount = quests.filter((quest) => quest.status === "DRAFT").length;
+  if (draftCount > 0) {
+    lines.push("", "Tap *Publish* below to make a draft live for workers (Milestone 2).");
+  }
+
   return lines.join("\n");
+}
+
+export function creatorQuestListKeyboard(quests: ApiQuest[]) {
+  const keyboard = new InlineKeyboard();
+  const drafts = quests.filter((quest) => quest.status === "DRAFT").slice(0, 5);
+
+  for (const quest of drafts) {
+    const label =
+      quest.title.length > 22 ? `${quest.title.slice(0, 19)}…` : quest.title;
+    keyboard.text(`Publish: ${label}`, `${QUEST_PUBLISH_CALLBACK_PREFIX}${quest.id}`).row();
+  }
+
+  if (drafts.length > 0 || quests.length > 0) {
+    keyboard.text("Refresh list", CREATOR_MY_QUESTS_CALLBACK).row();
+  }
+
+  return keyboard;
 }
 
 function formatQuestStatus(status: string) {

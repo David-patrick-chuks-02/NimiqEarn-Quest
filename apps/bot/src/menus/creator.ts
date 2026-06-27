@@ -5,7 +5,8 @@ import { messages } from "../copy/messages.js";
 import { mainMenuKeyboard } from "./main.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
-import { formatCreatorQuestList } from "./quest-list.js";
+import { creatorQuestListKeyboard, formatCreatorQuestList } from "./quest-list.js";
+import { QUEST_PUBLISH_CALLBACK_PREFIX } from "../conversations/quest-keyboards.js";
 
 export const CREATOR_CALLBACKS = {
   register: "creator:register",
@@ -24,6 +25,21 @@ export function creatorHubKeyboard() {
 
 export function creatorRegisterKeyboard() {
   return new InlineKeyboard().text("Become a Creator", CREATOR_CALLBACKS.register);
+}
+
+async function sendCreatorQuestList(ctx: BotContext, api: ApiClient) {
+  const from = ctx.from;
+  if (!from) return;
+
+  const quests = await api.listCreatorQuests(String(from.id));
+  const keyboard = creatorQuestListKeyboard(quests);
+  keyboard.row().text("Back to dashboard", "creator:back-dashboard");
+  keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
+
+  await ctx.reply(formatCreatorQuestList(quests), {
+    parse_mode: "Markdown",
+    reply_markup: keyboard,
+  });
 }
 
 export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
@@ -83,14 +99,51 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
     }
 
     try {
-      const quests = await api.listCreatorQuests(String(from.id));
-      await ctx.reply(formatCreatorQuestList(quests), {
-        parse_mode: "Markdown",
-        reply_markup: creatorHubKeyboard(),
-      });
+      await sendCreatorQuestList(ctx, api);
     } catch (error) {
       console.error("Creator quest list failed:", error);
       await ctx.reply(messages.quest.listFailed, { reply_markup: creatorHubKeyboard() });
+    }
+  });
+
+  bot.callbackQuery("creator:back-dashboard", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await sendCreatorHub(ctx, api);
+  });
+
+  bot.callbackQuery(new RegExp(`^${QUEST_PUBLISH_CALLBACK_PREFIX}`), async (ctx) => {
+    await ctx.answerCallbackQuery();
+
+    const from = ctx.from;
+    if (!from) {
+      await ctx.reply(messages.errors.noTelegramProfile);
+      return;
+    }
+
+    const data = ctx.callbackQuery.data;
+    const questId = data?.slice(QUEST_PUBLISH_CALLBACK_PREFIX.length);
+    if (!questId) return;
+
+    try {
+      const quest = await api.publishQuest(String(from.id), questId);
+      await ctx.reply(messages.quest.published(quest.title), { parse_mode: "Markdown" });
+      await sendCreatorQuestList(ctx, api);
+    } catch (error) {
+      const code = (error as Error & { code?: string }).code;
+      if (code === "INVALID_STATUS") {
+        await ctx.reply(messages.quest.publishNotDraft);
+        return;
+      }
+      if (code === "QUEST_NOT_FOUND") {
+        await ctx.reply(messages.quest.publishNotFound);
+        return;
+      }
+      if (code === "INVALID_QUEST") {
+        await ctx.reply(messages.quest.publishDeadlinePassed);
+        return;
+      }
+      console.error("Quest publish failed:", error);
+      await ctx.reply(messages.quest.publishFailed);
     }
   });
 

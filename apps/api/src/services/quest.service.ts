@@ -5,7 +5,13 @@ import { createQuestSchema } from "@nimiqearn/shared";
 export class QuestServiceError extends Error {
   constructor(
     message: string,
-    readonly code: "USER_NOT_FOUND" | "NOT_CREATOR" | "SUSPENDED" | "INVALID_QUEST",
+    readonly code:
+      | "USER_NOT_FOUND"
+      | "NOT_CREATOR"
+      | "SUSPENDED"
+      | "INVALID_QUEST"
+      | "QUEST_NOT_FOUND"
+      | "INVALID_STATUS",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -70,6 +76,40 @@ export function createQuestService(db: PrismaClient) {
           ...(status ? { status: status as Quest["status"] } : {}),
         },
         orderBy: { createdAt: "desc" },
+      });
+    },
+
+    async publishQuest(telegramId: string, questId: string): Promise<Quest> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      if (user.status === "SUSPENDED") {
+        throw new QuestServiceError("Account is suspended.", "SUSPENDED");
+      }
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const quest = await db.quest.findFirst({
+        where: { id: questId, creatorId: user.id },
+      });
+      if (!quest) {
+        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      }
+      if (quest.status !== "DRAFT") {
+        throw new QuestServiceError("Only draft quests can be published.", "INVALID_STATUS");
+      }
+      if (quest.deadline <= new Date()) {
+        throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
+      }
+
+      return db.quest.update({
+        where: { id: quest.id },
+        data: {
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+        },
       });
     },
   };

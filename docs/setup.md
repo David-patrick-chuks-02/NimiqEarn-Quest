@@ -127,6 +127,7 @@ pnpm dev:all            # API + web + bot
 | Tap **Become a Creator** | Worker upgrades to creator role |
 | Tap **Create Quest** | Multi-step wizard saves a DRAFT quest |
 | Tap **My Quests** | Lists creator drafts and published quests |
+| Tap **Publish** on a draft | Draft becomes PUBLISHED and appears in the list |
 | Tap **My Wallet** | Opens wallet linking flow |
 | Tap **Help** | Help text + menu shortcut |
 

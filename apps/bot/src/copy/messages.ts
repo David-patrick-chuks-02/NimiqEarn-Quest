@@ -125,7 +125,13 @@ export const messages = {
     pickConfirmButton: "Tap *Save Draft* or *Cancel* to continue.",
     cancelled: "Quest draft cancelled. Nothing was saved.",
     saved: (title: string) =>
-      `*Draft saved*\n\n"${title}" is stored as a draft. Publish it from your creator dashboard when you're ready.`,
+      `*Draft saved*\n\n"${title}" is stored as a draft. Open *My Quests* to publish it when you're ready.`,
+    published: (title: string) =>
+      `*Quest published*\n\n"${title}" is now live. Workers will be able to discover it in Milestone 2.`,
+    publishFailed: "Could not publish that quest right now. Please try again from *My Quests*.",
+    publishNotDraft: "That quest is no longer a draft and cannot be published again.",
+    publishNotFound: "Quest not found. Refresh *My Quests* and try again.",
+    publishDeadlinePassed: "This quest's deadline has passed. Create a new draft with a future date.",
     saveFailed: "Could not save your quest right now. Please try again from /creator.",
     invalidQuest: "Some quest details were invalid. Please start over with /creator → *Create Quest*.",
     timeout: "Quest creation timed out. Send /creator and tap *Create Quest* when you're ready.",

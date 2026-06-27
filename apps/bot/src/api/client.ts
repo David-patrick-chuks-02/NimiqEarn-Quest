@@ -146,6 +146,21 @@ export function createApiClient(baseUrl: string) {
 
       return data.quests ?? [];
     },
+
+    async publishQuest(telegramId: string, questId: string): Promise<ApiQuest> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}/publish`,
+        { method: "POST" },
+      );
+
+      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to publish quest (${response.status})`);
+      }
+
+      return data.quest!;
+    },
   };
 }
 

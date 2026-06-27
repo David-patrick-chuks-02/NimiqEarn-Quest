@@ -61,4 +61,61 @@ describe("createQuestService", () => {
       }),
     ).rejects.toMatchObject({ code: "NOT_CREATOR" });
   });
+
+  it("publishes a draft quest owned by the creator", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      status: "ACTIVE",
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "DRAFT",
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const update = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      status: "PUBLISHED",
+      publishedAt: new Date(),
+    });
+
+    const service = createQuestService({
+      user: { findUnique },
+      quest: { create: vi.fn(), findMany: vi.fn(), findFirst, update },
+    } as never);
+
+    const quest = await service.publishQuest("123", "quest-1");
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "quest-1" },
+      data: expect.objectContaining({ status: "PUBLISHED" }),
+    });
+    expect(quest.status).toBe("PUBLISHED");
+  });
+
+  it("rejects publishing a quest that is not a draft", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      status: "ACTIVE",
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "PUBLISHED",
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const service = createQuestService({
+      user: { findUnique },
+      quest: { create: vi.fn(), findMany: vi.fn(), findFirst, update: vi.fn() },
+    } as never);
+
+    await expect(service.publishQuest("123", "quest-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+  });
 });

@@ -6,6 +6,19 @@ import {
   toQuestResponse,
 } from "../services/quest.service.js";
 
+function questErrorStatus(code: QuestServiceError["code"]) {
+  switch (code) {
+    case "USER_NOT_FOUND":
+    case "QUEST_NOT_FOUND":
+      return 404;
+    case "NOT_CREATOR":
+    case "SUSPENDED":
+      return 403;
+    default:
+      return 400;
+  }
+}
+
 export const questRoutes: FastifyPluginAsync = async (app) => {
   const quests = createQuestService(app.db);
 
@@ -25,13 +38,26 @@ export const questRoutes: FastifyPluginAsync = async (app) => {
         return { quest: toQuestResponse(quest) };
       } catch (error) {
         if (error instanceof QuestServiceError) {
-          const status =
-            error.code === "USER_NOT_FOUND"
-              ? 404
-              : error.code === "NOT_CREATOR" || error.code === "SUSPENDED"
-                ? 403
-                : 400;
-          return reply.code(status).send({ error: error.message, code: error.code });
+          return reply
+            .code(questErrorStatus(error.code))
+            .send({ error: error.message, code: error.code });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { telegramId: string; questId: string } }>(
+    "/api/users/:telegramId/quests/:questId/publish",
+    async (request, reply) => {
+      try {
+        const quest = await quests.publishQuest(request.params.telegramId, request.params.questId);
+        return { quest: toQuestResponse(quest) };
+      } catch (error) {
+        if (error instanceof QuestServiceError) {
+          return reply
+            .code(questErrorStatus(error.code))
+            .send({ error: error.message, code: error.code });
         }
         throw error;
       }
@@ -49,8 +75,9 @@ export const questRoutes: FastifyPluginAsync = async (app) => {
         return { quests: list.map(toQuestResponse) };
       } catch (error) {
         if (error instanceof QuestServiceError) {
-          const status = error.code === "USER_NOT_FOUND" ? 404 : 403;
-          return reply.code(status).send({ error: error.message, code: error.code });
+          return reply
+            .code(questErrorStatus(error.code))
+            .send({ error: error.message, code: error.code });
         }
         throw error;
       }

@@ -13,7 +13,7 @@ export function formatCreatorDashboard(dashboard: CreatorDashboard): string {
     `Published quests: ${dashboard.quests.PUBLISHED}`,
     `Closed quests: ${dashboard.quests.CLOSED}`,
     "",
-    "Tap *Create Quest* to draft a bounty, or *My Quests* to review drafts.",
+    "Tap *Create Quest* to draft a bounty, or *My Quests* to review and publish drafts.",
   ].join("\n");
 }
 
