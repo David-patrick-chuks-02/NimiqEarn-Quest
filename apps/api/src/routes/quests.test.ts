@@ -43,6 +43,7 @@ describe("quest routes", () => {
       telegramId: "123456",
       role: "CREATOR",
       status: "ACTIVE",
+      walletProfile: { status: "VERIFIED" },
     });
     create.mockResolvedValue({
       id: "quest-1",
@@ -88,6 +89,7 @@ describe("quest routes", () => {
       telegramId: "123456",
       role: "CREATOR",
       status: "ACTIVE",
+      walletProfile: { status: "VERIFIED" },
     });
     findFirst.mockResolvedValue({
       id: "quest-1",

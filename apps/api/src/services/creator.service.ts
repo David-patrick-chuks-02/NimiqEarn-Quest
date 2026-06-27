@@ -1,4 +1,5 @@
 import type { PrismaClient, QuestStatus, User } from "@nimiqearn/database";
+import { createProfileService, ProfileServiceError } from "./profile.service.js";
 
 export class CreatorServiceError extends Error {
   constructor(
@@ -7,7 +8,8 @@ export class CreatorServiceError extends Error {
       | "USER_NOT_FOUND"
       | "SUSPENDED"
       | "ALREADY_CREATOR"
-      | "NOT_CREATOR",
+      | "NOT_CREATOR"
+      | "NOT_VERIFIED",
   ) {
     super(message);
     this.name = "CreatorServiceError";
@@ -19,9 +21,14 @@ function isCreatorRole(role: string) {
 }
 
 export function createCreatorService(db: PrismaClient) {
+  const profiles = createProfileService(db);
+
   return {
     async registerCreator(telegramId: string): Promise<User> {
-      const user = await db.user.findUnique({ where: { telegramId } });
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfile: true },
+      });
 
       if (!user) {
         throw new CreatorServiceError("User not found.", "USER_NOT_FOUND");
@@ -38,12 +45,18 @@ export function createCreatorService(db: PrismaClient) {
         return user;
       }
 
+      try {
+        profiles.assertVerifiedProfile(user);
+      } catch (error) {
+        if (error instanceof ProfileServiceError) {
+          throw new CreatorServiceError(error.message, error.code);
+        }
+        throw error;
+      }
+
       return db.user.update({
         where: { telegramId },
-        data: {
-          role: "CREATOR",
-          status: "ACTIVE",
-        },
+        data: { role: "CREATOR" },
       });
     },
 

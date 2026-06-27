@@ -5,19 +5,23 @@ import {
   PROOF_TYPE_LABELS,
   QUEST_PUBLISH_CALLBACK_PREFIX,
 } from "../conversations/quest-keyboards.js";
+import { escapeMarkdown } from "../utils/markdown.js";
 
 const CREATOR_MY_QUESTS_CALLBACK = "creator:my-quests";
 
 export function formatCreatorQuestList(quests: ApiQuest[]): string {
   if (quests.length === 0) {
     return [
-      "*Your quests*",
+      "*My Quests*",
       "",
-      "No quests yet. Tap *Create Quest* to draft your first bounty.",
+      "You have no quests yet.",
+      "",
+      "Select *Create Quest* from the Creator Hub to draft your first bounty.",
     ].join("\n");
   }
 
-  const lines = ["*Your quests*", ""];
+  const lines = ["*My Quests*", ""];
+  const drafts = quests.filter((quest) => quest.status === "DRAFT");
 
   for (const quest of quests.slice(0, 10)) {
     const category = CATEGORY_LABELS[quest.category as keyof typeof CATEGORY_LABELS] ?? quest.category;
@@ -28,13 +32,18 @@ export function formatCreatorQuestList(quests: ApiQuest[]): string {
       day: "numeric",
       year: "numeric",
     });
+    const draftNumber =
+      quest.status === "DRAFT" ? drafts.findIndex((draft) => draft.id === quest.id) + 1 : 0;
+    const prefix = draftNumber > 0 ? `Draft #${draftNumber} · ` : "";
 
     lines.push(
-      `*${quest.title}* — ${formatQuestStatus(quest.status)}`,
-      `Category: ${category}`,
-      `Reward: ${quest.rewardAmount} NIM · Slots: ${quest.filledSlots}/${quest.totalSlots}`,
-      `Deadline: ${deadline}`,
-      `Proof: ${proof}`,
+      `${prefix}*${escapeMarkdown(quest.title)}*`,
+      `Status · ${formatQuestStatus(quest.status)}`,
+      `Category · ${category}`,
+      `Reward · ${quest.rewardAmount} NIM per slot`,
+      `Slots · ${quest.filledSlots}/${quest.totalSlots}`,
+      `Deadline · ${deadline}`,
+      `Proof · ${proof}`,
       "",
     );
   }
@@ -43,9 +52,11 @@ export function formatCreatorQuestList(quests: ApiQuest[]): string {
     lines.push(`_Showing 10 of ${quests.length} quests._`);
   }
 
-  const draftCount = quests.filter((quest) => quest.status === "DRAFT").length;
-  if (draftCount > 0) {
-    lines.push("", "Tap *Publish* below to make a draft live for workers (Milestone 2).");
+  if (drafts.length > 0) {
+    lines.push(
+      "*Publish a draft*",
+      "Select *Publish draft #* below when you are ready to make a quest live.",
+    );
   }
 
   return lines.join("\n");
@@ -55,11 +66,11 @@ export function creatorQuestListKeyboard(quests: ApiQuest[]) {
   const keyboard = new InlineKeyboard();
   const drafts = quests.filter((quest) => quest.status === "DRAFT").slice(0, 5);
 
-  for (const quest of drafts) {
-    const label =
-      quest.title.length > 22 ? `${quest.title.slice(0, 19)}…` : quest.title;
-    keyboard.text(`Publish: ${label}`, `${QUEST_PUBLISH_CALLBACK_PREFIX}${quest.id}`).row();
-  }
+  drafts.forEach((_quest, index) => {
+    keyboard
+      .text(`Publish draft #${index + 1}`, `${QUEST_PUBLISH_CALLBACK_PREFIX}${drafts[index]!.id}`)
+      .row();
+  });
 
   if (drafts.length > 0 || quests.length > 0) {
     keyboard.text("Refresh list", CREATOR_MY_QUESTS_CALLBACK).row();

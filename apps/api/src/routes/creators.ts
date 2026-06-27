@@ -19,7 +19,7 @@ export const creatorRoutes: FastifyPluginAsync = async (app) => {
           const status =
             error.code === "USER_NOT_FOUND"
               ? 404
-              : error.code === "SUSPENDED"
+              : error.code === "SUSPENDED" || error.code === "NOT_VERIFIED"
                 ? 403
                 : 400;
           return reply.code(status).send({ error: error.message, code: error.code });

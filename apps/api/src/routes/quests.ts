@@ -13,6 +13,7 @@ function questErrorStatus(code: QuestServiceError["code"]) {
       return 404;
     case "NOT_CREATOR":
     case "SUSPENDED":
+    case "NOT_VERIFIED":
       return 403;
     default:
       return 400;

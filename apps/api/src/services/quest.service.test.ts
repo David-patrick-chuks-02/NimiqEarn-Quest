@@ -8,6 +8,7 @@ describe("createQuestService", () => {
       telegramId: "123",
       role: "CREATOR",
       status: "ACTIVE",
+      walletProfile: { status: "VERIFIED" },
     });
     const create = vi.fn().mockResolvedValue({
       id: "quest-1",
@@ -68,6 +69,7 @@ describe("createQuestService", () => {
       telegramId: "123",
       role: "CREATOR",
       status: "ACTIVE",
+      walletProfile: { status: "VERIFIED" },
     });
     const findFirst = vi.fn().mockResolvedValue({
       id: "quest-1",
@@ -101,6 +103,7 @@ describe("createQuestService", () => {
       telegramId: "123",
       role: "CREATOR",
       status: "ACTIVE",
+      walletProfile: { status: "VERIFIED" },
     });
     const findFirst = vi.fn().mockResolvedValue({
       id: "quest-1",

@@ -4,6 +4,10 @@ import type { ApiClient } from "../api/client.js";
 import { messages } from "../copy/messages.js";
 import type { BotContext } from "../context.js";
 import { creatorHubKeyboard } from "../menus/creator.js";
+import { afterQuestSavedKeyboard, cancelStepKeyboard, NAV_CANCEL } from "../menus/nav.js";
+import { escapeMarkdown } from "../utils/markdown.js";
+import { StepChat } from "../utils/chat-cleanup.js";
+import { waitForTextOrCancel } from "../utils/conversation-input.js";
 import {
   CATEGORY_LABELS,
   PROOF_TYPE_LABELS,
@@ -57,41 +61,36 @@ function formatDeadline(date: Date) {
 
 function formatQuestSummary(draft: CreateQuestInput) {
   return [
-    "*Review your quest draft*",
+    "*Review quest draft*",
     "",
-    `*Title:* ${draft.title}`,
-    `*Category:* ${CATEGORY_LABELS[draft.category]}`,
-    `*Description:* ${draft.description}`,
-    `*Reward:* ${draft.rewardAmount} NIM`,
-    `*Slots:* ${draft.totalSlots}`,
-    `*Deadline:* ${formatDeadline(draft.deadline)}`,
-    `*Proof:* ${PROOF_TYPE_LABELS[draft.proofType]}`,
-    `*Instructions:* ${draft.proofInstructions}`,
+    "Please confirm the details below before saving.",
     "",
-    "Tap *Save Draft* to store this quest, or *Cancel* to discard it.",
+    `*Title*\n${escapeMarkdown(draft.title)}`,
+    "",
+    `*Category*\n${CATEGORY_LABELS[draft.category]}`,
+    "",
+    `*Description*\n${escapeMarkdown(draft.description)}`,
+    "",
+    `*Reward*\n${draft.rewardAmount} NIM per slot`,
+    "",
+    `*Slots*\n${draft.totalSlots}`,
+    "",
+    `*Deadline*\n${formatDeadline(draft.deadline)}`,
+    "",
+    `*Proof type*\n${PROOF_TYPE_LABELS[draft.proofType]}`,
+    "",
+    `*Proof instructions*\n${escapeMarkdown(draft.proofInstructions)}`,
+    "",
+    "Select *Save Draft* to store this quest, or *Cancel* to discard it.",
   ].join("\n");
-}
-
-async function waitForText(
-  conversation: Conversation<BotContext, BotContext>,
-  ctx: BotContext,
-  timeoutMessage: string,
-) {
-  const update = await conversation.waitFor("message:text", {
-    maxMilliseconds: STEP_TIMEOUT_MS,
-    otherwise: async () => {
-      await ctx.reply(timeoutMessage);
-    },
-  });
-
-  return update.message?.text?.trim() ?? null;
 }
 
 async function waitForCategory(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
+  stepChat: StepChat,
 ) {
-  await ctx.reply(messages.quest.promptCategory, {
+  await stepChat.prompt(messages.quest.promptCategory, {
     parse_mode: "Markdown",
     reply_markup: categoryKeyboard(),
   });
@@ -100,19 +99,28 @@ async function waitForCategory(
     const update = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: STEP_TIMEOUT_MS,
       otherwise: async () => {
+        await stepChat.clearPrompts();
         await ctx.reply(messages.quest.timeout);
       },
     });
 
     const data = update.callbackQuery?.data;
+    if (data === NAV_CANCEL) {
+      await update.answerCallbackQuery();
+      await stepChat.consumeCallback(update.callbackQuery.message?.message_id);
+      return null;
+    }
+
     if (!data?.startsWith(QUEST_CATEGORY_CALLBACK_PREFIX)) {
       await update.answerCallbackQuery();
-      await update.reply(messages.quest.pickCategoryButton);
+      const hint = await update.reply(messages.quest.pickCategoryButton);
+      stepChat.track(hint.message_id);
       continue;
     }
 
     const category = data.slice(QUEST_CATEGORY_CALLBACK_PREFIX.length) as CreateQuestInput["category"];
     await update.answerCallbackQuery();
+    await stepChat.consumeCallback(update.callbackQuery.message?.message_id);
     return category;
   }
 }
@@ -120,8 +128,9 @@ async function waitForCategory(
 async function waitForProofType(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
+  stepChat: StepChat,
 ) {
-  await ctx.reply(messages.quest.promptProofType, {
+  await stepChat.prompt(messages.quest.promptProofType, {
     parse_mode: "Markdown",
     reply_markup: proofTypeKeyboard(),
   });
@@ -130,19 +139,28 @@ async function waitForProofType(
     const update = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: STEP_TIMEOUT_MS,
       otherwise: async () => {
+        await stepChat.clearPrompts();
         await ctx.reply(messages.quest.timeout);
       },
     });
 
     const data = update.callbackQuery?.data;
+    if (data === NAV_CANCEL) {
+      await update.answerCallbackQuery();
+      await stepChat.consumeCallback(update.callbackQuery.message?.message_id);
+      return null;
+    }
+
     if (!data?.startsWith(QUEST_PROOF_CALLBACK_PREFIX)) {
       await update.answerCallbackQuery();
-      await update.reply(messages.quest.pickProofButton);
+      const hint = await update.reply(messages.quest.pickProofButton);
+      stepChat.track(hint.message_id);
       continue;
     }
 
     const proofType = data.slice(QUEST_PROOF_CALLBACK_PREFIX.length) as CreateQuestInput["proofType"];
     await update.answerCallbackQuery();
+    await stepChat.consumeCallback(update.callbackQuery.message?.message_id);
     return proofType;
   }
 }
@@ -151,8 +169,9 @@ async function waitForConfirmation(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
   draft: CreateQuestInput,
+  stepChat: StepChat,
 ) {
-  await ctx.reply(formatQuestSummary(draft), {
+  await stepChat.prompt(formatQuestSummary(draft), {
     parse_mode: "Markdown",
     reply_markup: confirmQuestKeyboard(),
   });
@@ -161,6 +180,7 @@ async function waitForConfirmation(
     const update = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: STEP_TIMEOUT_MS,
       otherwise: async () => {
+        await stepChat.clearPrompts();
         await ctx.reply(messages.quest.timeout);
       },
     });
@@ -169,14 +189,35 @@ async function waitForConfirmation(
     await update.answerCallbackQuery();
 
     if (data === QUEST_CONFIRM_SAVE) {
+      await stepChat.consumeCallback(update.callbackQuery?.message?.message_id);
       return true;
     }
     if (data === QUEST_CONFIRM_CANCEL) {
+      await stepChat.consumeCallback(update.callbackQuery?.message?.message_id);
       return false;
     }
 
-    await update.reply(messages.quest.pickConfirmButton);
+    const hint = await update.reply(messages.quest.pickConfirmButton);
+    stepChat.track(hint.message_id);
   }
+}
+
+async function askTextStep(
+  conversation: Conversation<BotContext, BotContext>,
+  ctx: BotContext,
+  stepChat: StepChat,
+  prompt: string,
+) {
+  await stepChat.prompt(prompt, {
+    parse_mode: "Markdown",
+    reply_markup: cancelStepKeyboard(),
+  });
+
+  return waitForTextOrCancel(conversation, ctx, {
+    timeoutMs: STEP_TIMEOUT_MS,
+    timeoutMessage: messages.quest.timeout,
+    stepChat,
+  });
 }
 
 export function createQuestConversation(api: ApiClient) {
@@ -211,63 +252,128 @@ export function createQuestConversation(api: ApiClient) {
       return;
     }
 
-    await ctx.reply(messages.quest.intro, { parse_mode: "Markdown" });
+    const stepChat = new StepChat(ctx);
 
-    await ctx.reply(messages.quest.promptTitle, { parse_mode: "Markdown" });
-    const title = await waitForText(conversation, ctx, messages.quest.timeout);
-    if (!title || title.length < 3) {
-      await ctx.reply(messages.quest.invalidTitle);
+    await stepChat.prompt(messages.quest.intro, { parse_mode: "Markdown" });
+
+    const title = await askTextStep(conversation, ctx, stepChat, messages.quest.promptTitle);
+    if (!title) {
+      await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+      return;
+    }
+    if (title.length < 3) {
+      await ctx.reply(messages.quest.invalidTitle, { reply_markup: creatorHubKeyboard() });
       return;
     }
 
-    const category = await waitForCategory(conversation, ctx);
-
-    await ctx.reply(messages.quest.promptDescription, { parse_mode: "Markdown" });
-    const description = await waitForText(conversation, ctx, messages.quest.timeout);
-    if (!description || description.length < 10) {
-      await ctx.reply(messages.quest.invalidDescription);
+    const category = await waitForCategory(conversation, ctx, stepChat);
+    if (!category) {
+      await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
       return;
     }
 
-    await ctx.reply(messages.quest.promptReward, { parse_mode: "Markdown" });
+    const description = await askTextStep(
+      conversation,
+      ctx,
+      stepChat,
+      messages.quest.promptDescription,
+    );
+    if (!description) {
+      await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+      return;
+    }
+    if (description.length < 10) {
+      await ctx.reply(messages.quest.invalidDescription, { reply_markup: creatorHubKeyboard() });
+      return;
+    }
+
+    await stepChat.prompt(messages.quest.promptReward, {
+      parse_mode: "Markdown",
+      reply_markup: cancelStepKeyboard(),
+    });
     let rewardAmount: number | null = null;
     while (rewardAmount === null) {
-      const rewardText = await waitForText(conversation, ctx, messages.quest.timeout);
-      if (!rewardText) return;
+      const rewardText = await waitForTextOrCancel(conversation, ctx, {
+        timeoutMs: STEP_TIMEOUT_MS,
+        timeoutMessage: messages.quest.timeout,
+        stepChat,
+      });
+      if (!rewardText) {
+        await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+        return;
+      }
       rewardAmount = parsePositiveNumber(rewardText);
       if (rewardAmount === null) {
-        await ctx.reply(messages.quest.invalidReward);
+        await stepChat.prompt(messages.quest.invalidReward, {
+          reply_markup: cancelStepKeyboard(),
+        });
       }
     }
 
-    await ctx.reply(messages.quest.promptSlots, { parse_mode: "Markdown" });
+    await stepChat.prompt(messages.quest.promptSlots, {
+      parse_mode: "Markdown",
+      reply_markup: cancelStepKeyboard(),
+    });
     let totalSlots: number | null = null;
     while (totalSlots === null) {
-      const slotsText = await waitForText(conversation, ctx, messages.quest.timeout);
-      if (!slotsText) return;
+      const slotsText = await waitForTextOrCancel(conversation, ctx, {
+        timeoutMs: STEP_TIMEOUT_MS,
+        timeoutMessage: messages.quest.timeout,
+        stepChat,
+      });
+      if (!slotsText) {
+        await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+        return;
+      }
       totalSlots = parsePositiveInt(slotsText);
       if (totalSlots === null) {
-        await ctx.reply(messages.quest.invalidSlots);
+        await stepChat.prompt(messages.quest.invalidSlots, {
+          reply_markup: cancelStepKeyboard(),
+        });
       }
     }
 
-    await ctx.reply(messages.quest.promptDeadline, { parse_mode: "Markdown" });
+    await stepChat.prompt(messages.quest.promptDeadline, {
+      parse_mode: "Markdown",
+      reply_markup: cancelStepKeyboard(),
+    });
     let deadline: Date | null = null;
     while (deadline === null) {
-      const deadlineText = await waitForText(conversation, ctx, messages.quest.timeout);
-      if (!deadlineText) return;
+      const deadlineText = await waitForTextOrCancel(conversation, ctx, {
+        timeoutMs: STEP_TIMEOUT_MS,
+        timeoutMessage: messages.quest.timeout,
+        stepChat,
+      });
+      if (!deadlineText) {
+        await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+        return;
+      }
       deadline = parseDeadline(deadlineText);
       if (deadline === null) {
-        await ctx.reply(messages.quest.invalidDeadline);
+        await stepChat.prompt(messages.quest.invalidDeadline, {
+          reply_markup: cancelStepKeyboard(),
+        });
       }
     }
 
-    const proofType = await waitForProofType(conversation, ctx);
+    const proofType = await waitForProofType(conversation, ctx, stepChat);
+    if (!proofType) {
+      await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+      return;
+    }
 
-    await ctx.reply(messages.quest.promptProofInstructions, { parse_mode: "Markdown" });
-    const proofInstructions = await waitForText(conversation, ctx, messages.quest.timeout);
-    if (!proofInstructions || proofInstructions.length < 5) {
-      await ctx.reply(messages.quest.invalidProofInstructions);
+    const proofInstructions = await askTextStep(
+      conversation,
+      ctx,
+      stepChat,
+      messages.quest.promptProofInstructions,
+    );
+    if (!proofInstructions) {
+      await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
+      return;
+    }
+    if (proofInstructions.length < 5) {
+      await ctx.reply(messages.quest.invalidProofInstructions, { reply_markup: creatorHubKeyboard() });
       return;
     }
 
@@ -282,7 +388,7 @@ export function createQuestConversation(api: ApiClient) {
       proofInstructions,
     };
 
-    const confirmed = await waitForConfirmation(conversation, ctx, draft);
+    const confirmed = await waitForConfirmation(conversation, ctx, draft, stepChat);
     if (!confirmed) {
       await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
       return;
@@ -292,12 +398,12 @@ export function createQuestConversation(api: ApiClient) {
       const quest = await conversation.external(() => api.createQuest(telegramId, draft));
       await ctx.reply(messages.quest.saved(quest.title), {
         parse_mode: "Markdown",
-        reply_markup: creatorHubKeyboard(),
+        reply_markup: afterQuestSavedKeyboard(),
       });
     } catch (error) {
       const code = (error as Error & { code?: string }).code;
       if (code === "INVALID_QUEST") {
-        await ctx.reply(messages.quest.invalidQuest);
+        await ctx.reply(messages.quest.invalidQuest, { reply_markup: creatorHubKeyboard() });
         return;
       }
       console.error("Quest creation failed:", error);

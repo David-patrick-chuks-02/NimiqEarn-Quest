@@ -44,7 +44,9 @@ export const walletRoutes: FastifyPluginAsync = async (app) => {
               ? 404
               : error.code === "ADDRESS_IN_USE"
                 ? 409
-                : 400;
+                : error.code === "SUSPENDED"
+                  ? 403
+                  : 400;
           return reply.code(status).send({ error: error.message, code: error.code });
         }
         throw error;

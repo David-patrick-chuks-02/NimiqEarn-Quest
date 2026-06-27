@@ -1,47 +1,61 @@
 import type { ApiUser } from "../api/client.js";
+import { escapeMarkdown } from "../utils/markdown.js";
+
+function stepIcon(done: boolean) {
+  return done ? "✓" : "○";
+}
 
 export function formatWorkerStatus(user: ApiUser): string {
-  const name = user.displayName ?? "Worker";
-  const statusLabel = formatUserStatus(user.status);
+  const name = escapeMarkdown(user.displayName ?? "Worker");
   const reputation = user.reputationScore;
+  const walletLinked = Boolean(user.wallet);
+  const profileVerified = user.status === "ACTIVE";
+
   const walletLine = user.wallet
-    ? `Wallet: linked (${formatWalletStatus(user.wallet.status)})`
-    : "Wallet: not linked — use /wallet";
+    ? `Wallet · Linked (${formatWalletStatus(user.wallet.status)})`
+    : "Wallet · Not linked";
 
-  return [
-    `*${name}'s worker status*`,
+  const lines = [
+    `*Worker profile*`,
+    `_${name}_`,
     "",
-    `Profile: ${statusLabel}`,
-    `Reputation: ${reputation} pts`,
+    "*Verification status*",
+    `${stepIcon(true)} Profile created`,
+    `${stepIcon(walletLinked)} Nimiq wallet linked`,
+    `${stepIcon(profileVerified)} Account verified`,
+    "",
+    "*Overview*",
+    `Account status · ${profileVerified ? "Verified" : "Verification required"}`,
+    `Reputation · ${reputation} pts`,
     walletLine,
-    "Available quests: none yet",
+    `Available quests · Coming soon`,
     "",
-    user.wallet
-      ? "Quest browsing opens in the next update."
-      : "Link your Nimiq wallet with /wallet to receive rewards when quests go live.",
-  ].join("\n");
-}
+  ];
 
-function formatUserStatus(status: string): string {
-  switch (status) {
-    case "ACTIVE":
-      return "Active";
-    case "SUSPENDED":
-      return "Suspended";
-    case "PENDING":
-    default:
-      return "Pending verification";
+  if (!profileVerified) {
+    lines.push(
+      "*Next step*",
+      "Link your Nimiq wallet with /wallet to verify your account.",
+      "",
+      "_One wallet per account. Duplicate addresses are not permitted._",
+    );
+  } else {
+    lines.push(
+      "Your profile is verified. Published quests will appear here as creators release new opportunities.",
+    );
   }
+
+  return lines.join("\n");
 }
 
-function formatWalletStatus(status: string): string {
+function formatWalletStatus(status: string) {
   switch (status) {
     case "VERIFIED":
-      return "verified";
+      return "Verified";
     case "INVALID":
-      return "invalid";
+      return "Invalid";
     case "PENDING":
     default:
-      return "pending";
+      return "Pending";
   }
 }

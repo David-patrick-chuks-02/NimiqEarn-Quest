@@ -4,7 +4,7 @@ import { validateNimiqAddress } from "@nimiqearn/nimiq";
 export class WalletServiceError extends Error {
   constructor(
     message: string,
-    readonly code: "USER_NOT_FOUND" | "INVALID_ADDRESS" | "ADDRESS_IN_USE",
+    readonly code: "USER_NOT_FOUND" | "INVALID_ADDRESS" | "ADDRESS_IN_USE" | "SUSPENDED",
   ) {
     super(message);
     this.name = "WalletServiceError";
@@ -34,6 +34,10 @@ export function createWalletService(db: PrismaClient) {
 
       if (!user) {
         throw new WalletServiceError("User not found.", "USER_NOT_FOUND");
+      }
+
+      if (user.status === "SUSPENDED") {
+        throw new WalletServiceError("Account is suspended.", "SUSPENDED");
       }
 
       const normalized = validation.normalized;
@@ -67,22 +71,38 @@ export function createWalletService(db: PrismaClient) {
             },
           });
 
-          return tx.walletProfile.update({
+          const wallet = await tx.walletProfile.update({
             where: { userId: user.id },
             data: {
               nimiqAddress: normalized,
               status: "VERIFIED",
             },
           });
+
+          await tx.user.updateMany({
+            where: { id: user.id, status: "PENDING" },
+            data: { status: "ACTIVE" },
+          });
+
+          return wallet;
         });
       }
 
-      return db.walletProfile.create({
-        data: {
-          userId: user.id,
-          nimiqAddress: normalized,
-          status: "VERIFIED",
-        },
+      return db.$transaction(async (tx) => {
+        const wallet = await tx.walletProfile.create({
+          data: {
+            userId: user.id,
+            nimiqAddress: normalized,
+            status: "VERIFIED",
+          },
+        });
+
+        await tx.user.updateMany({
+          where: { id: user.id, status: "PENDING" },
+          data: { status: "ACTIVE" },
+        });
+
+        return wallet;
       });
     },
   };

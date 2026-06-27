@@ -39,10 +39,11 @@ describe("creator routes", () => {
       telegramUsername: "worker",
       displayName: "Worker",
       role: "WORKER",
-      status: "PENDING",
+      status: "ACTIVE",
       reputationScore: 0,
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      walletProfile: { status: "VERIFIED" },
     });
     update.mockResolvedValue({
       id: "user-1",

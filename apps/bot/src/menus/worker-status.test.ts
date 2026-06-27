@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatWorkerStatus } from "./worker-status.js";
 
 describe("formatWorkerStatus", () => {
-  it("formats a pending worker profile without wallet", () => {
+  it("formats an unverified worker profile without wallet", () => {
     const text = formatWorkerStatus({
       id: "uuid-1",
       telegramId: "123",
@@ -16,19 +16,19 @@ describe("formatWorkerStatus", () => {
       wallet: null,
     });
 
-    expect(text).toContain("Test Worker's worker status");
-    expect(text).toContain("Wallet: not linked");
+    expect(text).toContain("Worker profile");
+    expect(text).toContain("Verification required");
     expect(text).toContain("/wallet");
   });
 
-  it("formats a worker with a linked wallet", () => {
+  it("formats a verified worker with a linked wallet", () => {
     const text = formatWorkerStatus({
       id: "uuid-1",
       telegramId: "123",
       telegramUsername: "worker",
       displayName: "Test Worker",
       role: "WORKER",
-      status: "PENDING",
+      status: "ACTIVE",
       reputationScore: 0,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -40,6 +40,7 @@ describe("formatWorkerStatus", () => {
       },
     });
 
-    expect(text).toContain("Wallet: linked (verified)");
+    expect(text).toContain("Verified");
+    expect(text).toContain("Wallet · Linked (Verified)");
   });
 });

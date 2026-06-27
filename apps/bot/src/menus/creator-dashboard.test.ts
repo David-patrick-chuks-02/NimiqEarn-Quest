@@ -20,8 +20,9 @@ describe("formatCreatorDashboard", () => {
       },
     });
 
-    expect(text).toContain("Quest Boss's creator dashboard");
-    expect(text).toContain("Draft quests: 1");
-    expect(text).toContain("Published quests: 1");
+    expect(text).toContain("Creator Hub");
+    expect(text).toContain("Quest Boss");
+    expect(text).toContain("Draft · 1");
+    expect(text).toContain("Published · 1");
   });
 });

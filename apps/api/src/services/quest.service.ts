@@ -1,6 +1,7 @@
 import type { PrismaClient, Quest } from "@nimiqearn/database";
 import type { CreateQuestInput } from "@nimiqearn/shared";
 import { createQuestSchema } from "@nimiqearn/shared";
+import { createProfileService, ProfileServiceError } from "./profile.service.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -11,7 +12,8 @@ export class QuestServiceError extends Error {
       | "SUSPENDED"
       | "INVALID_QUEST"
       | "QUEST_NOT_FOUND"
-      | "INVALID_STATUS",
+      | "INVALID_STATUS"
+      | "NOT_VERIFIED",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -23,6 +25,8 @@ function isCreatorRole(role: string) {
 }
 
 export function createQuestService(db: PrismaClient) {
+  const profiles = createProfileService(db);
+
   return {
     async createDraftQuest(telegramId: string, input: CreateQuestInput): Promise<Quest> {
       const parsed = createQuestSchema.safeParse(input);
@@ -34,15 +38,24 @@ export function createQuestService(db: PrismaClient) {
         throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
       }
 
-      const user = await db.user.findUnique({ where: { telegramId } });
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfile: true },
+      });
       if (!user) {
         throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
       }
-      if (user.status === "SUSPENDED") {
-        throw new QuestServiceError("Account is suspended.", "SUSPENDED");
-      }
       if (!isCreatorRole(user.role)) {
         throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      try {
+        profiles.assertVerifiedProfile(user);
+      } catch (error) {
+        if (error instanceof ProfileServiceError) {
+          throw new QuestServiceError(error.message, error.code);
+        }
+        throw error;
       }
 
       return db.quest.create({
@@ -80,15 +93,24 @@ export function createQuestService(db: PrismaClient) {
     },
 
     async publishQuest(telegramId: string, questId: string): Promise<Quest> {
-      const user = await db.user.findUnique({ where: { telegramId } });
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfile: true },
+      });
       if (!user) {
         throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
       }
-      if (user.status === "SUSPENDED") {
-        throw new QuestServiceError("Account is suspended.", "SUSPENDED");
-      }
       if (!isCreatorRole(user.role)) {
         throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      try {
+        profiles.assertVerifiedProfile(user);
+      } catch (error) {
+        if (error instanceof ProfileServiceError) {
+          throw new QuestServiceError(error.message, error.code);
+        }
+        throw error;
       }
 
       const quest = await db.quest.findFirst({

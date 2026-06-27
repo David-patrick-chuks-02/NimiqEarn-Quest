@@ -20,11 +20,43 @@ export function creatorHubKeyboard() {
     .text("Create Quest", CREATOR_CALLBACKS.createQuest)
     .row()
     .text("My Quests", CREATOR_CALLBACKS.myQuests)
+    .row()
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
 export function creatorRegisterKeyboard() {
-  return new InlineKeyboard().text("Become a Creator", CREATOR_CALLBACKS.register);
+  return new InlineKeyboard()
+    .text("Become a Creator", CREATOR_CALLBACKS.register)
+    .row()
+    .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
+}
+
+function isCreatorRole(role: string) {
+  return role === "CREATOR" || role === "ADMIN";
+}
+
+export async function openCreatorEntry(ctx: BotContext, api: ApiClient) {
+  const from = ctx.from;
+  if (!from) {
+    await ctx.reply(messages.errors.noTelegramProfile);
+    return;
+  }
+
+  const user = await api.getUserByTelegramId(String(from.id));
+  if (!user) {
+    await ctx.reply(messages.creator.notRegistered, { parse_mode: "Markdown" });
+    return;
+  }
+
+  if (isCreatorRole(user.role)) {
+    await sendCreatorHub(ctx, api);
+    return;
+  }
+
+  await ctx.reply(messages.creator.invite, {
+    parse_mode: "Markdown",
+    reply_markup: creatorRegisterKeyboard(),
+  });
 }
 
 async function sendCreatorQuestList(ctx: BotContext, api: ApiClient) {
@@ -32,14 +64,23 @@ async function sendCreatorQuestList(ctx: BotContext, api: ApiClient) {
   if (!from) return;
 
   const quests = await api.listCreatorQuests(String(from.id));
+  const text = formatCreatorQuestList(quests);
   const keyboard = creatorQuestListKeyboard(quests);
-  keyboard.row().text("Back to dashboard", "creator:back-dashboard");
+  keyboard.row().text("Creator Hub", "creator:back-dashboard");
   keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 
-  await ctx.reply(formatCreatorQuestList(quests), {
-    parse_mode: "Markdown",
-    reply_markup: keyboard,
-  });
+  const options = { parse_mode: "Markdown" as const, reply_markup: keyboard };
+
+  if (ctx.callbackQuery?.message) {
+    try {
+      await ctx.editMessageText(text, options);
+      return;
+    } catch {
+      // Message unchanged or too old — send a fresh one below.
+    }
+  }
+
+  await ctx.reply(text, options);
 }
 
 export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
@@ -71,6 +112,10 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
       const code = (error as Error & { code?: string }).code;
       if (code === "SUSPENDED") {
         await ctx.reply(messages.creator.suspended);
+        return;
+      }
+      if (code === "NOT_VERIFIED") {
+        await ctx.reply(messages.creator.notVerified, { parse_mode: "Markdown" });
         return;
       }
       console.error("Creator registration failed:", error);
@@ -108,27 +153,35 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery("creator:back-dashboard", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await sendCreatorHub(ctx, api);
+    try {
+      await openCreatorEntry(ctx, api);
+    } catch (error) {
+      console.error("Creator hub navigation failed:", error);
+      await ctx.reply(messages.errors.apiUnavailable);
+    }
   });
 
   bot.callbackQuery(new RegExp(`^${QUEST_PUBLISH_CALLBACK_PREFIX}`), async (ctx) => {
-    await ctx.answerCallbackQuery();
-
     const from = ctx.from;
     if (!from) {
+      await ctx.answerCallbackQuery();
       await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
 
     const data = ctx.callbackQuery.data;
     const questId = data?.slice(QUEST_PUBLISH_CALLBACK_PREFIX.length);
-    if (!questId) return;
+    if (!questId) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
 
     try {
-      const quest = await api.publishQuest(String(from.id), questId);
-      await ctx.reply(messages.quest.published(quest.title), { parse_mode: "Markdown" });
+      await api.publishQuest(String(from.id), questId);
+      await ctx.answerCallbackQuery({ text: messages.quest.publishedToast });
       await sendCreatorQuestList(ctx, api);
     } catch (error) {
+      await ctx.answerCallbackQuery();
       const code = (error as Error & { code?: string }).code;
       if (code === "INVALID_STATUS") {
         await ctx.reply(messages.quest.publishNotDraft);
