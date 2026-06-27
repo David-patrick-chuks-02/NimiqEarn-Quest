@@ -1,3 +1,19 @@
+export interface ApiQuest {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  rewardAmount: string;
+  totalSlots: number;
+  filledSlots: number;
+  deadline: string;
+  proofType: string;
+  proofInstructions: string;
+  status: string;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
 export interface CreatorDashboard {
   user: {
     id: string;

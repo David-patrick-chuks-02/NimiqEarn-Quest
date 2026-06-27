@@ -3,7 +3,9 @@ import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { mainMenuKeyboard } from "./main.js";
+import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
+import { formatCreatorQuestList } from "./quest-list.js";
 
 export const CREATOR_CALLBACKS = {
   register: "creator:register",
@@ -62,18 +64,34 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery(CREATOR_CALLBACKS.createQuest, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.reply(messages.creator.createQuestSoon, {
-      parse_mode: "Markdown",
-      reply_markup: creatorHubKeyboard(),
-    });
+
+    if (hasActiveConversation(ctx)) {
+      await ctx.reply(messages.quest.alreadyInProgress);
+      return;
+    }
+
+    await ctx.conversation.enter("createQuest");
   });
 
   bot.callbackQuery(CREATOR_CALLBACKS.myQuests, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.reply(messages.creator.myQuestsSoon, {
-      parse_mode: "Markdown",
-      reply_markup: creatorHubKeyboard(),
-    });
+
+    const from = ctx.from;
+    if (!from) {
+      await ctx.reply(messages.errors.noTelegramProfile);
+      return;
+    }
+
+    try {
+      const quests = await api.listCreatorQuests(String(from.id));
+      await ctx.reply(formatCreatorQuestList(quests), {
+        parse_mode: "Markdown",
+        reply_markup: creatorHubKeyboard(),
+      });
+    } catch (error) {
+      console.error("Creator quest list failed:", error);
+      await ctx.reply(messages.quest.listFailed, { reply_markup: creatorHubKeyboard() });
+    }
   });
 
   bot.callbackQuery(CREATOR_CALLBACKS.backToMenu, async (ctx) => {

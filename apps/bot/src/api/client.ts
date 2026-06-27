@@ -1,5 +1,5 @@
-import type { CreateUserInput } from "@nimiqearn/shared";
-import type { CreatorDashboard } from "./types.js";
+import type { CreateQuestInput, CreateUserInput } from "@nimiqearn/shared";
+import type { ApiQuest, CreatorDashboard } from "./types.js";
 import { parseApiError } from "./types.js";
 
 export interface ApiWallet {
@@ -108,6 +108,43 @@ export function createApiClient(baseUrl: string) {
       }
 
       return data.dashboard!;
+    },
+
+    async createQuest(telegramId: string, input: CreateQuestInput): Promise<ApiQuest> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...input,
+            deadline: input.deadline.toISOString(),
+          }),
+        },
+      );
+
+      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to create quest (${response.status})`);
+      }
+
+      return data.quest!;
+    },
+
+    async listCreatorQuests(telegramId: string, status?: string): Promise<ApiQuest[]> {
+      const query = status ? `?status=${encodeURIComponent(status)}` : "";
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests${query}`,
+      );
+
+      const data = (await response.json()) as { quests?: ApiQuest[]; error?: string; code?: string };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to list quests (${response.status})`);
+      }
+
+      return data.quests ?? [];
     },
   };
 }

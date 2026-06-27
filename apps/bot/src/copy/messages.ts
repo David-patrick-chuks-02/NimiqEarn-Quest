@@ -95,7 +95,40 @@ export const messages = {
     welcome: "You're now registered as a creator. Use the dashboard below to manage quests.",
     suspended: "Your account is suspended and cannot register as a creator.",
     registerFailed: "Could not register you as a creator right now. Please try /creator again shortly.",
-    createQuestSoon: "Quest creation is coming in the next update. Your creator dashboard is ready.",
-    myQuestsSoon: "Quest listing is coming in the next update. Draft and published quests will appear here.",
+  },
+
+  quest: {
+    intro: "Let's draft a new quest. You can publish it later from your creator dashboard.",
+    notCreator: "Creator access is required. Send /creator to register first.",
+    alreadyInProgress:
+      "You're already creating a quest. Finish that flow or wait a moment and try again.",
+    promptTitle: "Step 1/7 — Send a *quest title* (3–100 characters).",
+    promptCategory: "Step 2/7 — Pick a *category*.",
+    promptDescription: "Step 3/7 — Send a *description* (at least 10 characters).",
+    promptReward: "Step 4/7 — Send the *reward per slot* in NIM (e.g. `10`).",
+    promptSlots: "Step 5/7 — How many *slots* are available? Send a whole number (e.g. `5`).",
+    promptDeadline:
+      "Step 6/7 — Send a *deadline* as `YYYY-MM-DD` (must be in the future).",
+    promptProofType: "Step 7/7 — What *proof type* should workers submit?",
+    promptProofInstructions:
+      "Almost done — send *proof instructions* (at least 5 characters).",
+    invalidTitle: "That title is too short. Send /creator and tap *Create Quest* to try again.",
+    invalidDescription:
+      "Description must be at least 10 characters. Start over with /creator → *Create Quest*.",
+    invalidReward: "Send a positive number for the reward (e.g. `10`).",
+    invalidSlots: "Send a positive whole number for slots (e.g. `5`).",
+    invalidDeadline: "Send a future date as `YYYY-MM-DD` (e.g. `2026-12-31`).",
+    invalidProofInstructions:
+      "Proof instructions must be at least 5 characters. Start over with /creator → *Create Quest*.",
+    pickCategoryButton: "Please tap one of the category buttons above.",
+    pickProofButton: "Please tap one of the proof type buttons above.",
+    pickConfirmButton: "Tap *Save Draft* or *Cancel* to continue.",
+    cancelled: "Quest draft cancelled. Nothing was saved.",
+    saved: (title: string) =>
+      `*Draft saved*\n\n"${title}" is stored as a draft. Publish it from your creator dashboard when you're ready.`,
+    saveFailed: "Could not save your quest right now. Please try again from /creator.",
+    invalidQuest: "Some quest details were invalid. Please start over with /creator → *Create Quest*.",
+    timeout: "Quest creation timed out. Send /creator and tap *Create Quest* when you're ready.",
+    listFailed: "Could not load your quests right now. Please try again shortly.",
   },
 };

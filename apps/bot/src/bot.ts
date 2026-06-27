@@ -5,6 +5,7 @@ import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
+import { createQuestConversation } from "./conversations/create-quest.js";
 import { createWalletConversation } from "./conversations/wallet.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
@@ -30,6 +31,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   bot.use(conversations());
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
   bot.use(createConversation(createWalletConversation(api), "wallet"));
+  bot.use(createConversation(createQuestConversation(api), "createQuest"));
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);

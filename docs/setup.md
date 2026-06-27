@@ -125,6 +125,8 @@ pnpm dev:all            # API + web + bot
 | Send `/wallet` | Link or update Nimiq address |
 | Send `/creator` | Register as creator or open creator dashboard |
 | Tap **Become a Creator** | Worker upgrades to creator role |
+| Tap **Create Quest** | Multi-step wizard saves a DRAFT quest |
+| Tap **My Quests** | Lists creator drafts and published quests |
 | Tap **My Wallet** | Opens wallet linking flow |
 | Tap **Help** | Help text + menu shortcut |
 
