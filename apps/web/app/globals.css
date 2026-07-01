@@ -1,12 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --nimiq-blue: #0ca6fe;
-  --nimiq-dark: #0f172a;
+  /* Brand palette derived from assets/banner.png */
+  --brand-navy-900: #050f22; /* deepest background */
+  --brand-navy-800: #0a1c3d; /* panels / sections */
+  --brand-navy-700: #0f2750; /* raised panels */
+  --brand-gold: #f6a91b; /* primary accent (logo + "Earn") */
+  --brand-gold-600: #e0971a; /* gold hover */
+  --brand-blue: #2e8bff; /* globe glow / secondary accent */
+  --brand-text: #eaf1fb; /* primary text */
+  --brand-muted: #9fb2cc; /* secondary text */
+  --brand-ink: #06101f; /* text on gold surfaces */
 }
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  color: var(--nimiq-dark);
-  background: #f8fafc;
+  color: var(--brand-text);
+  background-color: var(--brand-navy-900);
+  background-image:
+    radial-gradient(60% 50% at 85% 0%, rgba(46, 139, 255, 0.18), transparent 70%),
+    radial-gradient(45% 40% at 10% 5%, rgba(246, 169, 27, 0.08), transparent 70%),
+    linear-gradient(180deg, #0a1c3d 0%, #050f22 55%);
+  background-attachment: fixed;
 }
