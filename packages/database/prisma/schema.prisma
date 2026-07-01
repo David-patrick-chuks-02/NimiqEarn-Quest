@@ -64,15 +64,30 @@ model User {
 
   walletProfile WalletProfile?
   walletAudits  WalletAddressAudit[]
+  walletChallenge WalletVerificationChallenge?
   quests        Quest[]
 
   @@map("users")
 }
 
+model WalletVerificationChallenge {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  token        String   @unique
+  nimiqAddress String   @map("nimiq_address")
+  message      String   @db.Text
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_verification_challenges")
+}
+
 model WalletProfile {
   id           String       @id @default(uuid()) @db.Uuid
   userId       String       @unique @map("user_id") @db.Uuid
-  nimiqAddress String       @map("nimiq_address")
+  nimiqAddress String       @unique @map("nimiq_address")
   status       WalletStatus @default(PENDING)
   linkedAt     DateTime     @default(now()) @map("linked_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
