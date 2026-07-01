@@ -1,4 +1,5 @@
 import { APP_NAME } from "@nimiqearn/shared";
+import { escapeMarkdown } from "../utils/markdown.js";
 
 function section(title: string, body: string) {
   return [`*${title}*`, "", body].join("\n");
@@ -18,6 +19,8 @@ export const messages = {
       "Your profile could not be saved. Please send /start to try again.",
     generic:
       "Something went wrong. Please try again, or send /help for available commands.",
+    rateLimited:
+      "You're doing that a bit too fast. Please wait a moment and try again.",
   },
 
   help: (botUsername?: string) =>
@@ -30,6 +33,7 @@ export const messages = {
           "/start — Create your profile or open the main menu",
           "/menu — Open the main menu",
           "/wallet — Link or update your Nimiq payout address",
+          "/quests — Browse quests (worker discovery in Milestone 2)",
           "/creator — Open the Creator Hub",
           "/help — View this guide",
         ].join("\n"),
@@ -74,11 +78,32 @@ export const messages = {
       [
         "Send your Nimiq payout address (starts with `NQ`).",
         "",
-        "This step verifies your profile and helps prevent duplicate accounts.",
+        "You'll then prove you own it by signing a quick message — no transaction, no fees.",
         "",
         "Paste the full address in chat, or tap *Cancel* to return.",
       ].join("\n"),
     ),
+    verifyInstructions: (code: string) =>
+      [
+        section(
+          "Verify wallet ownership",
+          [
+            "To confirm this is your wallet, sign a short message — it moves no funds.",
+            "",
+            "1. Tap *Sign with Nimiq* below.",
+            "2. Approve the signature in your Nimiq wallet.",
+            "3. Come back and tap *I've signed*.",
+          ].join("\n"),
+        ),
+        "",
+        `Verification code: \`${code}\``,
+      ].join("\n"),
+    notVerifiedYet:
+      "We haven't received your signed proof yet. Finish signing, then tap I've signed again.",
+    verificationExpired:
+      "This verification link expired. Please send /wallet to start again.",
+    challengeFailed:
+      "We could not start wallet verification. Please send /wallet to try again.",
     promptUpdate: section(
       "Update wallet address",
       [
@@ -113,7 +138,7 @@ export const messages = {
   onboarding: {
     welcome: (name: string) =>
       [
-        section(`Welcome to ${APP_NAME}`, `Good to meet you, *${name}*.`),
+        section(`Welcome to ${APP_NAME}`, `Good to meet you, *${escapeMarkdown(name)}*.`),
         "",
         "NimiqEarn Quest connects workers and creators inside Telegram. Complete quests, submit proof, and earn NIM rewards.",
         "",
@@ -139,7 +164,7 @@ export const messages = {
       "Setup timed out. Send /start when you are ready to continue.",
     complete: (displayName: string) =>
       [
-        section("Profile created", `Welcome aboard, *${displayName}*.`),
+        section("Profile created", `Welcome aboard, *${escapeMarkdown(displayName)}*.`),
         "",
         "Your worker profile has been saved.",
         "",
@@ -151,9 +176,30 @@ export const messages = {
       "Profile setup is already in progress. Please complete the steps above, or wait a moment and send /start again.",
   },
 
+  quests: {
+    comingSoon: section(
+      "Quests",
+      [
+        "Quest discovery for workers is coming in Milestone 2.",
+        "",
+        "Soon you'll browse open quests, join them, and submit proof to earn NIM.",
+        "",
+        "For now, link your wallet with /wallet so you're ready when quests go live.",
+      ].join("\n"),
+    ),
+    creatorHint: section(
+      "Quests",
+      [
+        "Worker quest discovery launches in Milestone 2.",
+        "",
+        "As a creator, open *My Quests* from the Creator Hub to manage your own drafts and published quests.",
+      ].join("\n"),
+    ),
+  },
+
   menu: {
     greeting: (name: string) =>
-      section("Main menu", `Welcome back, *${name}*. Select an option below.`),
+      section("Main menu", `Welcome back, *${escapeMarkdown(name)}*. Select an option below.`),
     notRegistered:
       "No worker profile was found. Please send /start to register.",
     returnPrompt: "Would you like to return to the main menu?",
@@ -238,7 +284,7 @@ export const messages = {
       "Explain exactly what workers should submit (minimum 5 characters).",
     ),
     invalidTitle:
-      "The title must be at least 3 characters. Please restart from *Creator Hub* → *Create Quest*.",
+      "The title must be between 3 and 100 characters. Please restart from *Creator Hub* → *Create Quest*.",
     invalidDescription:
       "The description must be at least 10 characters. Please restart from *Creator Hub* → *Create Quest*.",
     invalidReward: "Please send a positive number for the reward (example: `10`).",
@@ -253,12 +299,12 @@ export const messages = {
     cancelled: "Quest creation was cancelled. No changes were saved.",
     saved: (title: string) =>
       [
-        section("Draft saved", `*${title}* has been saved as a draft.`),
+        section("Draft saved", `*${escapeMarkdown(title)}* has been saved as a draft.`),
         "",
         "You may publish it now from *My Quests*, or return to the Creator Hub to create another quest.",
       ].join("\n"),
     published: (title: string) =>
-      section("Quest published", `*${title}* is now live and visible to workers.`),
+      section("Quest published", `*${escapeMarkdown(title)}* is now live and visible to workers.`),
     publishedToast: "Quest published",
     publishFailed:
       "This quest could not be published. Please try again from *My Quests*.",
@@ -278,5 +324,24 @@ export const messages = {
       "Your quests could not be loaded. Please try again shortly.",
     inputHint:
       "Please type your response in chat, or tap *Cancel* to exit this step.",
+    edit: {
+      intro: section(
+        "Edit draft",
+        "Select a field to update. Changes are saved as you go. Tap *Done* when you have finished.",
+      ),
+      pickField: "Select a field to edit using the buttons above, or tap *Done*.",
+      fieldUpdated: "Field updated.",
+      updateFailed:
+        "That value could not be saved. Please check it and try again.",
+      notFound:
+        "That draft could not be found. Please refresh *My Quests* and try again.",
+      notDraft:
+        "Only draft quests can be edited. This quest is no longer a draft.",
+      done: (title: string) =>
+        section("Draft updated", `*${escapeMarkdown(title)}* has been updated.`),
+      cancelled: "Editing cancelled. No further changes were saved.",
+      timeout:
+        "Editing timed out. Open *My Quests* and select *Edit* when ready.",
+    },
   },
 };

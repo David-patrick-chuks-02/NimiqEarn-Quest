@@ -33,20 +33,42 @@ export const linkWalletSchema = z.object({
   nimiqAddress: z.string().min(10).max(120),
 });
 
+// Proof returned by a Nimiq wallet after signing the verification challenge.
+const hexString = z.string().regex(/^[0-9a-fA-F]+$/, "Expected a hex string");
+export const verifyWalletSchema = z.object({
+  publicKey: hexString.min(64).max(64),
+  signature: hexString.min(128).max(128),
+});
+
+// reward_amount is stored as Decimal(18, 8): max 10 integer digits, 8 fractional.
+const MAX_REWARD_AMOUNT = 1_000_000_000; // 1e9, comfortably within the Decimal range
+const rewardAmountSchema = z
+  .number()
+  .positive()
+  .max(MAX_REWARD_AMOUNT)
+  .refine((value) => (value.toString().split(".")[1]?.length ?? 0) <= 8, {
+    message: "Reward supports at most 8 decimal places.",
+  });
+
 export const createQuestSchema = z.object({
   title: z.string().min(3).max(100),
   category: questCategorySchema,
-  description: z.string().min(10),
-  rewardAmount: z.number().positive(),
-  totalSlots: z.number().int().positive(),
+  description: z.string().min(10).max(2000),
+  rewardAmount: rewardAmountSchema,
+  totalSlots: z.number().int().positive().max(1_000_000),
   deadline: z.coerce.date(),
   proofType: questProofTypeSchema,
-  proofInstructions: z.string().min(5),
+  proofInstructions: z.string().min(5).max(1000),
 });
+
+// Editing a draft: every field is optional, but the same per-field rules apply.
+export const updateQuestSchema = createQuestSchema.partial();
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type LinkWalletInput = z.infer<typeof linkWalletSchema>;
+export type VerifyWalletInput = z.infer<typeof verifyWalletSchema>;
 export type CreateQuestInput = z.infer<typeof createQuestSchema>;
+export type UpdateQuestInput = z.infer<typeof updateQuestSchema>;
 
 export { loadRootEnv } from "./load-env.js";
 

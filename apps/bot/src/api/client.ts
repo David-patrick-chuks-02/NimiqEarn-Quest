@@ -1,4 +1,4 @@
-import type { CreateQuestInput, CreateUserInput } from "@nimiqearn/shared";
+import type { CreateQuestInput, CreateUserInput, UpdateQuestInput } from "@nimiqearn/shared";
 import type { ApiQuest, CreatorDashboard } from "./types.js";
 import { parseApiError } from "./types.js";
 
@@ -7,6 +7,14 @@ export interface ApiWallet {
   status: string;
   linkedAt: string;
   updatedAt: string;
+}
+
+export interface WalletChallenge {
+  token: string;
+  address: string;
+  code: string;
+  message: string;
+  expiresAt: string;
 }
 
 export interface ApiUser {
@@ -22,14 +30,18 @@ export interface ApiUser {
   wallet: ApiWallet | null;
 }
 
-export function createApiClient(baseUrl: string) {
+export function createApiClient(baseUrl: string, sharedSecret?: string) {
   const normalizedBase = baseUrl.replace(/\/$/, "");
+  const authHeaders: Record<string, string> = sharedSecret
+    ? { "x-internal-key": sharedSecret }
+    : {};
+  const jsonHeaders = { "Content-Type": "application/json", ...authHeaders };
 
   return {
     async upsertUser(input: CreateUserInput): Promise<ApiUser> {
       const response = await fetch(`${normalizedBase}/api/users/upsert`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: jsonHeaders,
         body: JSON.stringify(input),
       });
 
@@ -42,7 +54,10 @@ export function createApiClient(baseUrl: string) {
     },
 
     async getUserByTelegramId(telegramId: string): Promise<ApiUser | null> {
-      const response = await fetch(`${normalizedBase}/api/users/${encodeURIComponent(telegramId)}`);
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}`,
+        { headers: authHeaders },
+      );
 
       if (response.status === 404) {
         return null;
@@ -56,31 +71,36 @@ export function createApiClient(baseUrl: string) {
       return data.user;
     },
 
-    async linkWallet(telegramId: string, nimiqAddress: string): Promise<ApiWallet> {
+    async startWalletChallenge(
+      telegramId: string,
+      nimiqAddress: string,
+    ): Promise<WalletChallenge> {
       const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet`,
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/challenge`,
         {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          method: "POST",
+          headers: jsonHeaders,
           body: JSON.stringify({ nimiqAddress }),
         },
       );
 
-      const data = (await response.json()) as { wallet?: ApiWallet; error?: string; code?: string };
+      const data = (await response.json()) as {
+        challenge?: WalletChallenge;
+        error?: string;
+        code?: string;
+      };
 
       if (!response.ok) {
-        const error = new Error(data.error ?? `Failed to link wallet (${response.status})`);
-        (error as Error & { code?: string }).code = data.code;
-        throw error;
+        throw parseApiError(data, `Failed to start wallet verification (${response.status})`);
       }
 
-      return data.wallet!;
+      return data.challenge!;
     },
 
     async registerCreator(telegramId: string): Promise<ApiUser> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/register`,
-        { method: "POST" },
+        { method: "POST", headers: authHeaders },
       );
 
       const data = (await response.json()) as { user?: ApiUser; error?: string; code?: string };
@@ -95,6 +115,7 @@ export function createApiClient(baseUrl: string) {
     async getCreatorDashboard(telegramId: string): Promise<CreatorDashboard> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/dashboard`,
+        { headers: authHeaders },
       );
 
       const data = (await response.json()) as {
@@ -115,7 +136,7 @@ export function createApiClient(baseUrl: string) {
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonHeaders,
           body: JSON.stringify({
             ...input,
             deadline: input.deadline.toISOString(),
@@ -132,10 +153,39 @@ export function createApiClient(baseUrl: string) {
       return data.quest!;
     },
 
+    async updateQuest(
+      telegramId: string,
+      questId: string,
+      input: UpdateQuestInput,
+    ): Promise<ApiQuest> {
+      const body: Record<string, unknown> = { ...input };
+      if (input.deadline instanceof Date) {
+        body.deadline = input.deadline.toISOString();
+      }
+
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}`,
+        {
+          method: "PATCH",
+          headers: jsonHeaders,
+          body: JSON.stringify(body),
+        },
+      );
+
+      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to update quest (${response.status})`);
+      }
+
+      return data.quest!;
+    },
+
     async listCreatorQuests(telegramId: string, status?: string): Promise<ApiQuest[]> {
       const query = status ? `?status=${encodeURIComponent(status)}` : "";
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests${query}`,
+        { headers: authHeaders },
       );
 
       const data = (await response.json()) as { quests?: ApiQuest[]; error?: string; code?: string };
@@ -150,7 +200,7 @@ export function createApiClient(baseUrl: string) {
     async publishQuest(telegramId: string, questId: string): Promise<ApiQuest> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}/publish`,
-        { method: "POST" },
+        { method: "POST", headers: authHeaders },
       );
 
       const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };

@@ -10,6 +10,9 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   BOT_TOKEN: z.string().optional(),
+  ADMIN_API_KEY: z.string().optional(),
+  // Shared secret for bot → API calls. When set, all /api routes require it.
+  API_SHARED_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

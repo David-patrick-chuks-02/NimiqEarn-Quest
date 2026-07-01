@@ -6,10 +6,13 @@ import { registerCommands } from "./commands/index.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
 import { createQuestConversation } from "./conversations/create-quest.js";
+import { createEditQuestConversation } from "./conversations/edit-quest.js";
 import { createWalletConversation } from "./conversations/wallet.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
+import { rateLimitMiddleware } from "./middleware/rate-limit.js";
+import { createRateLimiter } from "./utils/rate-limit.js";
 import { registerCreatorHandlers } from "./menus/creator.js";
 import { registerMainMenuHandlers } from "./menus/main.js";
 import { messages } from "./copy/messages.js";
@@ -18,7 +21,7 @@ import type { SessionData } from "./types.js";
 
 export function createBot(env: BotEnv, logger: Logger) {
   const bot = new Bot<BotContext>(env.BOT_TOKEN);
-  const api = createApiClient(env.API_URL);
+  const api = createApiClient(env.API_URL, env.API_SHARED_SECRET);
   const { redis, storage } = createRedisSessionStorage(env, logger);
 
   bot.use(loggingMiddleware(logger));
@@ -30,8 +33,13 @@ export function createBot(env: BotEnv, logger: Logger) {
   );
   bot.use(conversations());
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
-  bot.use(createConversation(createWalletConversation(api), "wallet"));
+  bot.use(createConversation(createWalletConversation(api, env.WEB_PUBLIC_URL), "wallet"));
   bot.use(createConversation(createQuestConversation(api), "createQuest"));
+  bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
+
+  // Throttle sensitive flow entries (wallet linking, quest creation/editing).
+  // Placed after conversations() so in-flow steps are consumed before this runs.
+  bot.use(rateLimitMiddleware(createRateLimiter(redis), logger));
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);

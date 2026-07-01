@@ -7,6 +7,9 @@ const baseEnvSchema = z.object({
   BOT_TOKEN: z.string().min(1, "BOT_TOKEN is required"),
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
   API_URL: z.string().url().default("http://localhost:3001"),
+  API_SHARED_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
+  // Public URL of the web app, used to build the wallet signing link.
+  WEB_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   WEBHOOK_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
