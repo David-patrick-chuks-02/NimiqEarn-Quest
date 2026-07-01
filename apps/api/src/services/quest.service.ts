@@ -1,6 +1,6 @@
 import type { PrismaClient, Quest } from "@nimiqearn/database";
-import type { CreateQuestInput } from "@nimiqearn/shared";
-import { createQuestSchema } from "@nimiqearn/shared";
+import type { CreateQuestInput, UpdateQuestInput } from "@nimiqearn/shared";
+import { createQuestSchema, questStatusSchema, updateQuestSchema } from "@nimiqearn/shared";
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
 
 export class QuestServiceError extends Error {
@@ -74,6 +74,56 @@ export function createQuestService(db: PrismaClient) {
       });
     },
 
+    async updateDraftQuest(
+      telegramId: string,
+      questId: string,
+      input: UpdateQuestInput,
+    ): Promise<Quest> {
+      const parsed = updateQuestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new QuestServiceError("Invalid quest data.", "INVALID_QUEST");
+      }
+
+      if (parsed.data.deadline && parsed.data.deadline <= new Date()) {
+        throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
+      }
+
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfile: true },
+      });
+      if (!user) {
+        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      try {
+        profiles.assertVerifiedProfile(user);
+      } catch (error) {
+        if (error instanceof ProfileServiceError) {
+          throw new QuestServiceError(error.message, error.code);
+        }
+        throw error;
+      }
+
+      const quest = await db.quest.findFirst({
+        where: { id: questId, creatorId: user.id },
+      });
+      if (!quest) {
+        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      }
+      if (quest.status !== "DRAFT") {
+        throw new QuestServiceError("Only draft quests can be edited.", "INVALID_STATUS");
+      }
+
+      return db.quest.update({
+        where: { id: quest.id },
+        data: parsed.data,
+      });
+    },
+
     async listCreatorQuests(telegramId: string, status?: string) {
       const user = await db.user.findUnique({ where: { telegramId } });
       if (!user) {
@@ -83,10 +133,19 @@ export function createQuestService(db: PrismaClient) {
         throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
       }
 
+      let statusFilter: Quest["status"] | undefined;
+      if (status) {
+        const parsedStatus = questStatusSchema.safeParse(status);
+        if (!parsedStatus.success) {
+          throw new QuestServiceError("Invalid status filter.", "INVALID_STATUS");
+        }
+        statusFilter = parsedStatus.data;
+      }
+
       return db.quest.findMany({
         where: {
           creatorId: user.id,
-          ...(status ? { status: status as Quest["status"] } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
         },
         orderBy: { createdAt: "desc" },
       });

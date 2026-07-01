@@ -9,6 +9,12 @@ import { escapeMarkdown } from "../utils/markdown.js";
 import { StepChat } from "../utils/chat-cleanup.js";
 import { waitForTextOrCancel } from "../utils/conversation-input.js";
 import {
+  parseDeadline,
+  parsePositiveInt,
+  parsePositiveNumber,
+  formatDeadline,
+} from "../utils/quest-input.js";
+import {
   CATEGORY_LABELS,
   PROOF_TYPE_LABELS,
   QUEST_CATEGORY_CALLBACK_PREFIX,
@@ -20,43 +26,10 @@ import {
   proofTypeKeyboard,
 } from "./quest-keyboards.js";
 
-const STEP_TIMEOUT_MS = 5 * 60 * 1000;
+export const STEP_TIMEOUT_MS = 5 * 60 * 1000;
 
 function isCreatorRole(role: string) {
   return role === "CREATOR" || role === "ADMIN";
-}
-
-function parsePositiveNumber(text: string): number | null {
-  const value = Number(text.trim().replace(/,/g, ""));
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return value;
-}
-
-function parsePositiveInt(text: string): number | null {
-  const value = parsePositiveNumber(text);
-  if (value === null || !Number.isInteger(value)) return null;
-  return value;
-}
-
-function parseDeadline(text: string): Date | null {
-  const trimmed = text.trim();
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
-    ? new Date(`${trimmed}T23:59:59.000Z`)
-    : new Date(trimmed);
-
-  if (Number.isNaN(parsed.getTime()) || parsed <= new Date()) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function formatDeadline(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function formatQuestSummary(draft: CreateQuestInput) {
@@ -85,7 +58,7 @@ function formatQuestSummary(draft: CreateQuestInput) {
   ].join("\n");
 }
 
-async function waitForCategory(
+export async function waitForCategory(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
   stepChat: StepChat,
@@ -125,7 +98,7 @@ async function waitForCategory(
   }
 }
 
-async function waitForProofType(
+export async function waitForProofType(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
   stepChat: StepChat,
@@ -202,7 +175,7 @@ async function waitForConfirmation(
   }
 }
 
-async function askTextStep(
+export async function askTextStep(
   conversation: Conversation<BotContext, BotContext>,
   ctx: BotContext,
   stepChat: StepChat,
@@ -261,7 +234,7 @@ export function createQuestConversation(api: ApiClient) {
       await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
       return;
     }
-    if (title.length < 3) {
+    if (title.length < 3 || title.length > 100) {
       await ctx.reply(messages.quest.invalidTitle, { reply_markup: creatorHubKeyboard() });
       return;
     }

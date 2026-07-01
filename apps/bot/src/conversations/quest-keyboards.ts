@@ -7,6 +7,45 @@ export const QUEST_PROOF_CALLBACK_PREFIX = "quest:proof:";
 export const QUEST_CONFIRM_SAVE = "quest:confirm:save";
 export const QUEST_CONFIRM_CANCEL = "quest:confirm:cancel";
 export const QUEST_PUBLISH_CALLBACK_PREFIX = "quest:publish:";
+export const QUEST_EDIT_CALLBACK_PREFIX = "quest:edit:";
+export const QUEST_EDIT_FIELD_PREFIX = "quest:efield:";
+export const QUEST_EDIT_FINISH = "quest:efinish";
+
+export type EditableQuestField =
+  | "title"
+  | "category"
+  | "description"
+  | "reward"
+  | "slots"
+  | "deadline"
+  | "proofType"
+  | "proofInstructions";
+
+const EDIT_FIELD_BUTTONS: { field: EditableQuestField; label: string }[] = [
+  { field: "title", label: "Title" },
+  { field: "category", label: "Category" },
+  { field: "description", label: "Description" },
+  { field: "reward", label: "Reward" },
+  { field: "slots", label: "Slots" },
+  { field: "deadline", label: "Deadline" },
+  { field: "proofType", label: "Proof type" },
+  { field: "proofInstructions", label: "Proof instructions" },
+];
+
+export function editFieldsKeyboard() {
+  const keyboard = new InlineKeyboard();
+  for (let index = 0; index < EDIT_FIELD_BUTTONS.length; index += 2) {
+    const left = EDIT_FIELD_BUTTONS[index]!;
+    const right = EDIT_FIELD_BUTTONS[index + 1];
+    keyboard.text(left.label, `${QUEST_EDIT_FIELD_PREFIX}${left.field}`);
+    if (right) {
+      keyboard.text(right.label, `${QUEST_EDIT_FIELD_PREFIX}${right.field}`);
+    }
+    keyboard.row();
+  }
+  keyboard.text("Done", QUEST_EDIT_FINISH);
+  return keyboard;
+}
 
 const CATEGORIES: CreateQuestInput["category"][] = [
   "PRODUCT_TESTING",

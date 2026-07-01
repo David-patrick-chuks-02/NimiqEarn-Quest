@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { createQuestSchema } from "@nimiqearn/shared";
+import { createQuestSchema, updateQuestSchema } from "@nimiqearn/shared";
 import {
   createQuestService,
   QuestServiceError,
@@ -36,6 +36,35 @@ export const questRoutes: FastifyPluginAsync = async (app) => {
 
       try {
         const quest = await quests.createDraftQuest(request.params.telegramId, parsed.data);
+        return { quest: toQuestResponse(quest) };
+      } catch (error) {
+        if (error instanceof QuestServiceError) {
+          return reply
+            .code(questErrorStatus(error.code))
+            .send({ error: error.message, code: error.code });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.patch<{ Params: { telegramId: string; questId: string } }>(
+    "/api/users/:telegramId/quests/:questId",
+    async (request, reply) => {
+      const parsed = updateQuestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: "Invalid request",
+          details: parsed.error.flatten(),
+        });
+      }
+
+      try {
+        const quest = await quests.updateDraftQuest(
+          request.params.telegramId,
+          request.params.questId,
+          parsed.data,
+        );
         return { quest: toQuestResponse(quest) };
       } catch (error) {
         if (error instanceof QuestServiceError) {

@@ -6,7 +6,10 @@ import { mainMenuKeyboard } from "./main.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
 import { creatorQuestListKeyboard, formatCreatorQuestList } from "./quest-list.js";
-import { QUEST_PUBLISH_CALLBACK_PREFIX } from "../conversations/quest-keyboards.js";
+import {
+  QUEST_EDIT_CALLBACK_PREFIX,
+  QUEST_PUBLISH_CALLBACK_PREFIX,
+} from "../conversations/quest-keyboards.js";
 
 export const CREATOR_CALLBACKS = {
   register: "creator:register",
@@ -198,6 +201,31 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
       console.error("Quest publish failed:", error);
       await ctx.reply(messages.quest.publishFailed);
     }
+  });
+
+  bot.callbackQuery(new RegExp(`^${QUEST_EDIT_CALLBACK_PREFIX}`), async (ctx) => {
+    const from = ctx.from;
+    if (!from) {
+      await ctx.answerCallbackQuery();
+      await ctx.reply(messages.errors.noTelegramProfile);
+      return;
+    }
+
+    const questId = ctx.callbackQuery.data?.slice(QUEST_EDIT_CALLBACK_PREFIX.length);
+    if (!questId) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+
+    if (hasActiveConversation(ctx)) {
+      await ctx.answerCallbackQuery();
+      await ctx.reply(messages.quest.alreadyInProgress);
+      return;
+    }
+
+    await ctx.answerCallbackQuery();
+    ctx.session.editQuestId = questId;
+    await ctx.conversation.enter("editQuest");
   });
 
   bot.callbackQuery(CREATOR_CALLBACKS.backToMenu, async (ctx) => {

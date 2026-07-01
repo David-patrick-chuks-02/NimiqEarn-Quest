@@ -3,6 +3,7 @@ import { InlineKeyboard } from "grammy";
 import {
   CATEGORY_LABELS,
   PROOF_TYPE_LABELS,
+  QUEST_EDIT_CALLBACK_PREFIX,
   QUEST_PUBLISH_CALLBACK_PREFIX,
 } from "../conversations/quest-keyboards.js";
 import { escapeMarkdown } from "../utils/markdown.js";
@@ -66,9 +67,10 @@ export function creatorQuestListKeyboard(quests: ApiQuest[]) {
   const keyboard = new InlineKeyboard();
   const drafts = quests.filter((quest) => quest.status === "DRAFT").slice(0, 5);
 
-  drafts.forEach((_quest, index) => {
+  drafts.forEach((draft, index) => {
     keyboard
-      .text(`Publish draft #${index + 1}`, `${QUEST_PUBLISH_CALLBACK_PREFIX}${drafts[index]!.id}`)
+      .text(`Publish draft #${index + 1}`, `${QUEST_PUBLISH_CALLBACK_PREFIX}${draft.id}`)
+      .text(`Edit draft #${index + 1}`, `${QUEST_EDIT_CALLBACK_PREFIX}${draft.id}`)
       .row();
   });
 

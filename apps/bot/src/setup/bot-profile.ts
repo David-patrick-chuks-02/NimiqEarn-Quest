@@ -6,6 +6,7 @@ export const BOT_COMMANDS = [
   { command: "start", description: "Create your profile or open the main menu" },
   { command: "menu", description: "Open the main menu" },
   { command: "wallet", description: "Link or update your Nimiq payout address" },
+  { command: "quests", description: "Browse quests (worker discovery in Milestone 2)" },
   { command: "creator", description: "Open the Creator Hub" },
   { command: "help", description: "View commands and guidelines" },
 ] as const;
