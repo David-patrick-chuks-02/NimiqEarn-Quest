@@ -35,12 +35,11 @@ export function Button({
   icon?: boolean;
 }) {
   const base =
-    "group inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all duration-200";
+    "group inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors duration-200";
   const styles = {
-    primary:
-      "bg-[var(--brand-gold)] text-[var(--brand-ink)] shadow-lg shadow-[#f6a91b]/20 hover:bg-[var(--brand-gold-600)] hover:shadow-[#f6a91b]/30 hover:-translate-y-0.5",
-    ghost: "border border-white/15 text-white hover:border-white/30 hover:bg-white/5",
-    dark: "bg-[var(--brand-ink)] text-[var(--brand-gold)] hover:bg-[var(--brand-navy-700)] hover:-translate-y-0.5",
+    primary: "bg-[var(--brand-gold)] text-[var(--brand-ink)] hover:bg-[var(--brand-gold-600)]",
+    ghost: "border border-white/12 text-white hover:border-white/25 hover:bg-white/5",
+    dark: "bg-[var(--brand-ink)] text-[var(--brand-gold)] hover:bg-[var(--brand-navy-700)]",
   }[variant];
   return (
     <a href={href} className={`${base} ${styles}`}>
@@ -70,7 +69,7 @@ export function Logo({ size = 34 }: { size?: number }) {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[var(--brand-navy-900)]/50 backdrop-blur-2xl backdrop-saturate-150">
+    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[var(--brand-navy-900)]/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Logo />
         <nav className="hidden items-center gap-9 text-sm text-[var(--brand-muted)] md:flex">

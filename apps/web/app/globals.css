@@ -1,18 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  /* Brand palette derived from assets/banner.png */
-  --brand-navy-900: #050b18; /* deepest background */
-  --brand-navy-800: #0a1730; /* panels / sections */
-  --brand-navy-700: #0f2348; /* raised panels */
-  --brand-gold: #f6a91b; /* primary accent (logo + "Earn") */
-  --brand-gold-600: #e0971a; /* gold hover */
-  --brand-blue: #2e8bff; /* globe glow / secondary accent */
-  --brand-text: #eef3fb; /* primary text */
-  --brand-muted: #93a4bf; /* secondary text */
-  --brand-ink: #06101f; /* text on gold surfaces */
+  /* One accent (gold) on deep navy. Blue is reserved for the Telegram motif only. */
+  --brand-navy-900: #070c17; /* page background */
+  --brand-navy-800: #0c1322; /* raised sections */
+  --brand-navy-700: #121b2c; /* inputs / bubbles */
+  --brand-gold: #f6a91b;
+  --brand-gold-600: #e0971a;
+  --brand-blue: #2e8bff;
+  --brand-text: #e9eef7;
+  --brand-muted: #8a97ad;
+  --brand-ink: #050b16;
 
-  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: var(--font-sans), system-ui, -apple-system, sans-serif;
+  --font-head: var(--font-display), var(--font-sans), sans-serif;
 }
 
 html {
@@ -21,79 +22,63 @@ html {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   color: var(--brand-text);
   background-color: var(--brand-navy-900);
+  background-image:
+    radial-gradient(60% 42% at 50% -12%, rgba(246, 169, 27, 0.08), transparent 68%),
+    linear-gradient(180deg, #0a1120 0%, var(--brand-navy-900) 42%);
+  background-repeat: no-repeat;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Vibrant, softly drifting gradient orbs behind everything — this is what the
-   frosted-glass panels blur to create the glassmorphism effect. */
+/* Subtle single-color technical grid, faded out down the page (no drifting orbs). */
 body::before {
-  content: "";
-  position: fixed;
-  inset: -25%;
-  z-index: -2;
-  background-image:
-    radial-gradient(28% 30% at 14% 18%, rgba(246, 169, 27, 0.22), transparent 60%),
-    radial-gradient(32% 34% at 86% 12%, rgba(46, 139, 255, 0.26), transparent 62%),
-    radial-gradient(34% 36% at 78% 82%, rgba(129, 92, 246, 0.2), transparent 62%),
-    radial-gradient(30% 32% at 18% 88%, rgba(34, 211, 238, 0.16), transparent 62%);
-  animation: orb-drift 26s ease-in-out infinite alternate;
-}
-
-/* Faint dotted grain over the orbs — gives the glass something crisp to blur. */
-body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 24px 24px;
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000, transparent 85%);
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000, transparent 85%);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 58px 58px;
+  -webkit-mask-image: radial-gradient(ellipse 95% 55% at 50% -5%, #000 35%, transparent 78%);
+  mask-image: radial-gradient(ellipse 95% 55% at 50% -5%, #000 35%, transparent 78%);
 }
 
-@keyframes orb-drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(0, -4%, 0) scale(1.08);
-  }
+h1,
+h2,
+h3 {
+  font-family: var(--font-head);
+  letter-spacing: -0.02em;
 }
 
-/* Frosted-glass surface. */
+/* Flat, refined surface — no glow, no blur. */
 .glass {
-  background: rgba(255, 255, 255, 0.055);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 12px 40px -14px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
-
 .glass-hover {
   transition:
-    transform 0.25s ease,
-    background 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 .glass-hover:hover {
-  transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 26px 60px -18px rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.038);
 }
 
-/* Warm gold gradient text for headline accents. */
+.eyebrow {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand-muted);
+}
+
 .text-gradient-gold {
-  background: linear-gradient(180deg, #ffe3ac 0%, var(--brand-gold) 70%);
+  background: linear-gradient(180deg, #ffe3ac 0%, var(--brand-gold) 72%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -109,7 +94,6 @@ body::after {
   color: #fff;
   font-size: 1.2rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
   margin-top: 2.25rem;
   margin-bottom: 0.5rem;
 }
@@ -147,8 +131,5 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-  body::before {
-    animation: none;
   }
 }
