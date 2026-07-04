@@ -40,7 +40,7 @@ export function createQuestService(db: PrismaClient) {
 
       const user = await db.user.findUnique({
         where: { telegramId },
-        include: { walletProfile: true },
+        include: { walletProfiles: true },
       });
       if (!user) {
         throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
@@ -90,7 +90,7 @@ export function createQuestService(db: PrismaClient) {
 
       const user = await db.user.findUnique({
         where: { telegramId },
-        include: { walletProfile: true },
+        include: { walletProfiles: true },
       });
       if (!user) {
         throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
@@ -154,7 +154,7 @@ export function createQuestService(db: PrismaClient) {
     async publishQuest(telegramId: string, questId: string): Promise<Quest> {
       const user = await db.user.findUnique({
         where: { telegramId },
-        include: { walletProfile: true },
+        include: { walletProfiles: true },
       });
       if (!user) {
         throw new QuestServiceError("User not found.", "USER_NOT_FOUND");

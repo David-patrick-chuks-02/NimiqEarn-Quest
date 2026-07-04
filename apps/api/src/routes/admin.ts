@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { safeCompare } from "../security.js";
 import {
   clampLimit,
   clampOffset,
@@ -29,7 +30,7 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
         .code(503)
         .send({ error: "Admin API is not configured. Set ADMIN_API_KEY to enable it." });
     }
-    if (request.headers["x-admin-key"] !== adminApiKey) {
+    if (!safeCompare(request.headers["x-admin-key"], adminApiKey)) {
       return reply.code(401).send({ error: "Unauthorized" });
     }
   });

@@ -1,18 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../app.js";
 
-const VALID_ADDRESS = "NQ48 VAXG JD1K YSCM X6H6 DJSL AYN7 FTYF 0KAH";
-
-const { userFindUnique, walletFindFirst, challengeUpsert } = vi.hoisted(() => ({
+const { userFindUnique, challengeUpsert } = vi.hoisted(() => ({
   userFindUnique: vi.fn(),
-  walletFindFirst: vi.fn(),
   challengeUpsert: vi.fn(),
 }));
 
 vi.mock("@nimiqearn/database", () => ({
   prisma: {
     user: { findUnique: userFindUnique, upsert: vi.fn(), updateMany: vi.fn() },
-    walletProfile: { findFirst: walletFindFirst, findUnique: vi.fn() },
+    walletProfile: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     walletAddressAudit: { create: vi.fn() },
     walletVerificationChallenge: { upsert: challengeUpsert, findUnique: vi.fn() },
     $disconnect: vi.fn(),
@@ -29,7 +26,6 @@ describe("wallet routes", () => {
     process.env.PORT = "3099";
     process.env.LOG_LEVEL = "error";
     userFindUnique.mockReset();
-    walletFindFirst.mockReset();
     challengeUpsert.mockReset();
   });
 
@@ -37,34 +33,34 @@ describe("wallet routes", () => {
     vi.clearAllMocks();
   });
 
-  it("POST /wallet/challenge creates a signing challenge", async () => {
+  it("POST /wallet/challenge creates an address-less signing challenge", async () => {
     userFindUnique.mockResolvedValue({ id: "user-1", telegramId: "123456", status: "PENDING" });
-    walletFindFirst.mockResolvedValue(null);
     challengeUpsert.mockResolvedValue({});
 
     const { app } = await buildServer();
     const response = await app.inject({
       method: "POST",
       url: "/api/users/123456/wallet/challenge",
-      payload: { nimiqAddress: VALID_ADDRESS },
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.challenge.token).toBeTruthy();
     expect(body.challenge.message).toContain(body.challenge.code);
+    expect(body.challenge.address).toBeUndefined();
     await app.close();
   });
 
-  it("POST /wallet/challenge rejects an invalid address", async () => {
+  it("POST /wallet/challenge returns 404 for an unknown user", async () => {
+    userFindUnique.mockResolvedValue(null);
+
     const { app } = await buildServer();
     const response = await app.inject({
       method: "POST",
-      url: "/api/users/123456/wallet/challenge",
-      payload: { nimiqAddress: "not-valid" },
+      url: "/api/users/999/wallet/challenge",
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(404);
     await app.close();
   });
 });

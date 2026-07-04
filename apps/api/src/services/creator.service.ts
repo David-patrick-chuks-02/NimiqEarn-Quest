@@ -27,7 +27,7 @@ export function createCreatorService(db: PrismaClient) {
     async registerCreator(telegramId: string): Promise<User> {
       const user = await db.user.findUnique({
         where: { telegramId },
-        include: { walletProfile: true },
+        include: { walletProfiles: true },
       });
 
       if (!user) {

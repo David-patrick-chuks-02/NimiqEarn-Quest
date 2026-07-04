@@ -20,7 +20,6 @@ describe("createUserService", () => {
       telegramId: "123456",
       telegramUsername: "testuser",
       displayName: "Test User",
-      role: "WORKER",
     });
 
     expect(upsert).toHaveBeenCalledWith({
@@ -29,7 +28,6 @@ describe("createUserService", () => {
         telegramId: "123456",
         telegramUsername: "testuser",
         displayName: "Test User",
-        role: "WORKER",
       },
       update: {
         telegramUsername: "testuser",
@@ -47,7 +45,7 @@ describe("createUserService", () => {
 
     expect(findUnique).toHaveBeenCalledWith({
       where: { telegramId: "999" },
-      include: { walletProfile: true },
+      include: { walletProfiles: { orderBy: [{ isPrimary: "desc" }, { linkedAt: "desc" }] } },
     });
     expect(user).toEqual({ telegramId: "999" });
   });

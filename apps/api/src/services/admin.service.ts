@@ -22,7 +22,7 @@ export function createAdminService(db: PrismaClient) {
           orderBy: { createdAt: "desc" },
           skip: offset,
           take: limit,
-          include: { walletProfile: true },
+          include: { walletProfiles: { orderBy: { isPrimary: "desc" } } },
         }),
       ]);
 
@@ -38,7 +38,8 @@ export function createAdminService(db: PrismaClient) {
           role: user.role,
           status: user.status,
           reputationScore: user.reputationScore,
-          walletStatus: user.walletProfile?.status ?? null,
+          walletCount: user.walletProfiles.length,
+          primaryWalletStatus: user.walletProfiles[0]?.status ?? null,
           createdAt: user.createdAt.toISOString(),
         })),
       };

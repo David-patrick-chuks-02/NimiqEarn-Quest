@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { loadEnv } from "./config.js";
+import { safeCompare } from "./security.js";
 import prismaPlugin from "./plugins/prisma.js";
 import { healthRoutes } from "./routes/health.js";
 import { statsRoutes } from "./routes/stats.js";
@@ -19,16 +20,36 @@ export async function buildServer() {
     },
   });
 
+  // Fail closed: the shared secret is REQUIRED in production/staging so the API
+  // can never boot fully open. Local dev and tests may run without it.
+  const isProduction = env.NODE_ENV === "production" || env.APP_ENV !== "development";
+  if (isProduction && !env.API_SHARED_SECRET) {
+    throw new Error(
+      "API_SHARED_SECRET is required in production/staging (set it on both the API and the bot).",
+    );
+  }
+
+  // Don't leak internal error details to clients; log them and return a generic message.
+  app.setErrorHandler((error: unknown, request, reply) => {
+    const raw = (error as { statusCode?: number }).statusCode;
+    const statusCode = typeof raw === "number" && raw >= 400 && raw < 600 ? raw : 500;
+    if (statusCode >= 500) {
+      request.log.error({ err: error }, "unhandled request error");
+      return reply.code(500).send({ error: "Internal Server Error" });
+    }
+    return reply.code(statusCode).send({ error: (error as Error).message });
+  });
+
   await app.register(cors, { origin: true });
 
-  // Optional shared-secret gate for bot → API traffic. Enforced only when configured,
-  // so local dev and tests (which don't set it) are unaffected. Health/root stay public.
+  // Shared-secret gate for bot → API traffic (sent as x-internal-key). Health/root stay
+  // public; the wallet signing page uses an unguessable per-request token instead.
   if (env.API_SHARED_SECRET) {
+    const secret = env.API_SHARED_SECRET;
     app.addHook("onRequest", async (request, reply) => {
       if (!request.url.startsWith("/api/")) return;
-      // The wallet signing page is a public browser flow, guarded by an unguessable token.
       if (request.url.startsWith("/api/wallet/verify/")) return;
-      if (request.headers["x-internal-key"] !== env.API_SHARED_SECRET) {
+      if (!safeCompare(request.headers["x-internal-key"], secret)) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
     });
@@ -38,7 +59,7 @@ export async function buildServer() {
   await app.register(healthRoutes);
   await app.register(statsRoutes);
   await app.register(userRoutes);
-  await app.register(walletRoutes);
+  await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL });
   await app.register(creatorRoutes);
   await app.register(questRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });

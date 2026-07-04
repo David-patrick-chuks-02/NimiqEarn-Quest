@@ -8,7 +8,7 @@ describe("createCreatorService", () => {
       telegramId: "123",
       role: "WORKER",
       status: "ACTIVE",
-      walletProfile: { status: "VERIFIED" },
+      walletProfiles: [{ status: "VERIFIED" }],
     });
     const update = vi.fn().mockResolvedValue({
       id: "user-1",
@@ -54,7 +54,7 @@ describe("createCreatorService", () => {
       telegramId: "123",
       role: "CREATOR",
       status: "ACTIVE",
-      walletProfile: { status: "VERIFIED" },
+      walletProfiles: [{ status: "VERIFIED" }],
     });
     const update = vi.fn();
 

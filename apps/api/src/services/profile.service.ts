@@ -14,8 +14,8 @@ export function isProfileVerified(user: Pick<User, "status">) {
   return user.status === "ACTIVE";
 }
 
-export function hasVerifiedWallet(wallet: Pick<WalletProfile, "status"> | null | undefined) {
-  return wallet?.status === "VERIFIED";
+export function hasVerifiedWallet(wallets: Pick<WalletProfile, "status">[] | null | undefined) {
+  return Boolean(wallets?.some((wallet) => wallet.status === "VERIFIED"));
 }
 
 export function createProfileService(db: PrismaClient) {
@@ -27,14 +27,14 @@ export function createProfileService(db: PrismaClient) {
       });
     },
 
-    assertVerifiedProfile(user: (User & { walletProfile?: WalletProfile | null }) | null) {
+    assertVerifiedProfile(user: (User & { walletProfiles?: WalletProfile[] }) | null) {
       if (!user) {
         throw new ProfileServiceError("User not found.", "USER_NOT_FOUND");
       }
       if (user.status === "SUSPENDED") {
         throw new ProfileServiceError("Account is suspended.", "SUSPENDED");
       }
-      if (!isProfileVerified(user) || !hasVerifiedWallet(user.walletProfile)) {
+      if (!isProfileVerified(user) || !hasVerifiedWallet(user.walletProfiles)) {
         throw new ProfileServiceError(
           "Profile verification required. Link a Nimiq wallet first.",
           "NOT_VERIFIED",
@@ -42,9 +42,9 @@ export function createProfileService(db: PrismaClient) {
       }
     },
 
-    verificationStatus(user: User & { walletProfile?: WalletProfile | null }) {
-      const walletLinked = Boolean(user.walletProfile);
-      const walletVerified = hasVerifiedWallet(user.walletProfile);
+    verificationStatus(user: User & { walletProfiles?: WalletProfile[] }) {
+      const walletLinked = Boolean(user.walletProfiles?.length);
+      const walletVerified = hasVerifiedWallet(user.walletProfiles);
       const profileVerified = isProfileVerified(user);
 
       return {

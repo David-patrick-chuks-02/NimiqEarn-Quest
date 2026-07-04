@@ -1,6 +1,9 @@
 import type { PrismaClient, User, WalletProfile } from "@nimiqearn/database";
 import type { CreateUserInput } from "@nimiqearn/shared";
-import { toWalletResponse } from "./wallet.service.js";
+import { toWalletListItem, toWalletResponse } from "./wallet.service.js";
+
+// Primary wallet first, then most recently linked.
+export const walletOrderBy = [{ isPrimary: "desc" as const }, { linkedAt: "desc" as const }];
 
 export function createUserService(db: PrismaClient) {
   return {
@@ -11,7 +14,7 @@ export function createUserService(db: PrismaClient) {
           telegramId: input.telegramId,
           telegramUsername: input.telegramUsername,
           displayName: input.displayName,
-          role: input.role ?? "WORKER",
+          // role is not client-settable; DB defaults new users to WORKER.
         },
         update: {
           telegramUsername: input.telegramUsername,
@@ -23,7 +26,7 @@ export function createUserService(db: PrismaClient) {
     findByTelegramId(telegramId: string) {
       return db.user.findUnique({
         where: { telegramId },
-        include: { walletProfile: true },
+        include: { walletProfiles: { orderBy: walletOrderBy } },
       });
     },
   };
@@ -31,7 +34,11 @@ export function createUserService(db: PrismaClient) {
 
 export type UserService = ReturnType<typeof createUserService>;
 
-export function toUserResponse(user: User & { walletProfile?: WalletProfile | null }) {
+export function toUserResponse(user: User & { walletProfiles?: WalletProfile[] }) {
+  const wallets = user.walletProfiles ?? [];
+  // Backward-compatible `wallet` = the primary (or first) wallet.
+  const primary = wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
+
   return {
     id: user.id,
     telegramId: user.telegramId,
@@ -42,6 +49,7 @@ export function toUserResponse(user: User & { walletProfile?: WalletProfile | nu
     reputationScore: user.reputationScore,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
-    wallet: user.walletProfile ? toWalletResponse(user.walletProfile) : null,
+    wallet: primary ? toWalletResponse(primary) : null,
+    wallets: wallets.map(toWalletListItem),
   };
 }
