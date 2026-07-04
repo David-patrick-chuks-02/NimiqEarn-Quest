@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nimiq/hub-api": "^1.14.0",
     "@nimiqearn/shared": "workspace:*",
     "next": "^15.3.3",
     "react": "^19.1.0",

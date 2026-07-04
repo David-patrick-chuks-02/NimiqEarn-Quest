@@ -94,6 +94,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@nimiq/hub-api':
+        specifier: ^1.14.0
+        version: 1.14.0(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4))
       '@nimiqearn/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -752,6 +755,18 @@ packages:
       vite:
         optional: true
 
+  '@nimiq/fastspot-api@1.10.3':
+    resolution: {integrity: sha512-CUkIAcF7R3OlN45idB+yC9Wnuz2YXTPx25xYswCdmbMGu/EGZFNnGHLIe6HkbHd8Eh+uBrwqBmLZGm8jyQ9+6A==}
+
+  '@nimiq/hub-api@1.14.0':
+    resolution: {integrity: sha512-KwosYfGvNYMtg47N7tElnPNgrrom54jmjUxVqMQrl4sAi5iuQBr/GfI8K081TG/7cFevwsUac7ZpmlEmx0oymw==}
+
+  '@nimiq/rpc@0.4.1':
+    resolution: {integrity: sha512-aQigD21o7S1+J9kfWBA9sDPjtQ+K1keL02eahc6UjSL/+9SVMY+zetSDdjq6d4zNBLRnVayjw0G2hc/yKUMZ0Q==}
+
+  '@nimiq/utils@0.11.7':
+    resolution: {integrity: sha512-FLeQ9kBFsOBfOjh0T+jI8kl9K77XOuyQA3yel1VIzOK4dLcnvMmgXjegJfuPAEht9oGe+gxcyzFsb0Yi9Js8Dg==}
+
   '@oxc-project/types@0.133.0':
     resolution: {integrity: sha512-KzkdCd6Uxqnf6l3HOw1xfatAlUURA0g14cvBYFyJ5SaNOQbOUvBr9PKArcPcrNIeRsBdgcUzOGrhKveVpvOIGA==}
 
@@ -1206,6 +1221,10 @@ packages:
 
   avvio@9.2.0:
     resolution: {integrity: sha512-2t/sy01ArdHHE0vRH5Hsay+RtCZt3dLPji7W7/MMOCEgze5b7SNDC4j5H6FnVgPkI1MTNFGzHdHrVXDDl7QSSQ==}
+
+  big-integer@1.6.52:
+    resolution: {integrity: sha512-QxD8cf2eVqJOOz63z6JIN9BzvVs/dlySa5HGSBH5xtR8dPteIRQnBxxKqkNTiT6jbDTF6jAfrd4oMcND9RGbQg==}
+    engines: {node: '>=0.6'}
 
   bufferutil@4.1.0:
     resolution: {integrity: sha512-ZMANVnAixE6AWWnPzlW2KpUrxhm9woycYvPOo67jWHyFowASTEd9s+QN1EIMsSDtwhIxN4sWE1jotpuDUIgyIw==}
@@ -2374,6 +2393,25 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@nimiq/fastspot-api@1.10.3': {}
+
+  '@nimiq/hub-api@1.14.0(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4))':
+    dependencies:
+      '@nimiq/core': 2.7.0(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4))
+      '@nimiq/fastspot-api': 1.10.3
+      '@nimiq/rpc': 0.4.1
+      '@nimiq/utils': 0.11.7
+      big-integer: 1.6.52
+    transitivePeerDependencies:
+      - supports-color
+      - vite
+
+  '@nimiq/rpc@0.4.1': {}
+
+  '@nimiq/utils@0.11.7':
+    dependencies:
+      big-integer: 1.6.52
+
   '@oxc-project/types@0.133.0': {}
 
   '@pinojs/redact@0.4.0': {}
@@ -2739,6 +2777,8 @@ snapshots:
     dependencies:
       '@fastify/error': 4.2.0
       fastq: 1.20.1
+
+  big-integer@1.6.52: {}
 
   bufferutil@4.1.0:
     dependencies:

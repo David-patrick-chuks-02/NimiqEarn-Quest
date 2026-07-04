@@ -3,10 +3,10 @@
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
+// Same-origin: the web server proxies /api/wallet/verify/* to the API (see next.config.ts),
+// so the browser never makes a cross-origin request and doesn't need to reach the API directly.
+const API_BASE = "";
 const HUB_URL = process.env.NEXT_PUBLIC_HUB_URL ?? "https://hub.nimiq.com";
-// Loaded at runtime so we don't need a build-time dependency on the Hub SDK.
-const HUB_SDK_URL = process.env.NEXT_PUBLIC_HUB_SDK_URL ?? "https://esm.sh/@nimiq/hub-api@1";
 
 type Status = "loading" | "ready" | "signing" | "success" | "error";
 
@@ -19,7 +19,7 @@ function toHex(bytes: Uint8Array): string {
 function Panel({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
+      <div className="glass w-full max-w-md rounded-3xl p-8 text-center">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <Image
             src="/logo.png"
@@ -41,7 +41,11 @@ function Panel({ children }: { children: React.ReactNode }) {
 export default function LinkWalletPage() {
   const [status, setStatus] = useState<Status>("loading");
   const [token, setToken] = useState<string | null>(null);
-  const [challenge, setChallenge] = useState<{ address: string; message: string } | null>(null);
+  const [challenge, setChallenge] = useState<{ message: string } | null>(null);
+  const [linkedAddress, setLinkedAddress] = useState<string | null>(null);
+  const [onChain, setOnChain] = useState<{ reachable: boolean; balanceNim: number | null } | null>(
+    null,
+  );
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -59,7 +63,7 @@ export default function LinkWalletPage() {
         if (!res.ok) {
           throw new Error("This verification link is invalid or has expired.");
         }
-        const data = (await res.json()) as { challenge: { address: string; message: string } };
+        const data = (await res.json()) as { challenge: { message: string } };
         setChallenge(data.challenge);
         setStatus("ready");
       } catch (e) {
@@ -75,18 +79,18 @@ export default function LinkWalletPage() {
     setError("");
 
     try {
-      // Runtime import of the Nimiq Hub SDK (opens the signing popup).
-      const mod = (await import(/* webpackIgnore: true */ HUB_SDK_URL)) as {
+      // Bundled Hub SDK, imported lazily so it only loads in the browser (opens the signing popup).
+      const mod = (await import("@nimiq/hub-api")) as unknown as {
         default?: new (url: string) => HubLike;
         HubApi?: new (url: string) => HubLike;
       };
       const HubApi = mod.default ?? mod.HubApi;
       if (!HubApi) throw new Error("Could not load the Nimiq signing library.");
 
+      // No `signer` — the user picks which wallet to sign with; we derive the address from it.
       const hub = new HubApi(HUB_URL);
       const signed = await hub.signMessage({
         appName: "NimiqEarn Quest",
-        signer: challenge.address,
         message: challenge.message,
       });
 
@@ -99,11 +103,18 @@ export default function LinkWalletPage() {
         }),
       });
 
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        wallet?: { nimiqAddress: string };
+        onChain?: { reachable: boolean; balanceNim: number | null };
+      };
+
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Verification failed. Please try again from Telegram.");
+        throw new Error(body.error ?? "Verification failed. Please try again from Telegram.");
       }
 
+      setLinkedAddress(body.wallet?.nimiqAddress ?? null);
+      setOnChain(body.onChain ?? null);
       setStatus("success");
     } catch (e) {
       setError((e as Error)?.message ?? "Signing was cancelled or failed.");
@@ -127,6 +138,19 @@ export default function LinkWalletPage() {
           Your Nimiq wallet is now linked and verified. Return to Telegram and tap{" "}
           <span className="font-semibold text-white">I&apos;ve signed</span> to continue.
         </p>
+        {linkedAddress && (
+          <p className="mt-4 break-all rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-[var(--brand-muted)]">
+            <span className="font-semibold text-white">{linkedAddress}</span>
+          </p>
+        )}
+        {onChain?.reachable && (
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-[var(--brand-muted)]">
+            On-chain balance:{" "}
+            <span className="font-semibold text-white">
+              {onChain.balanceNim?.toLocaleString() ?? 0} NIM
+            </span>
+          </p>
+        )}
       </Panel>
     );
   }
@@ -150,16 +174,11 @@ export default function LinkWalletPage() {
 
   return (
     <Panel>
-      <h1 className="text-xl font-bold text-white">Verify wallet ownership</h1>
+      <h1 className="text-xl font-bold text-white">Link your Nimiq wallet</h1>
       <p className="mt-3 text-sm text-[var(--brand-muted)]">
-        You&apos;ll sign a short message to prove you own this wallet. It moves no funds and
-        authorizes no transaction.
+        Choose a wallet and sign a short message to prove you own it. It moves no funds and
+        authorizes no transaction — the address is read from your signature.
       </p>
-      {challenge && (
-        <p className="mt-4 break-all rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-[var(--brand-muted)]">
-          {challenge.address}
-        </p>
-      )}
       <button
         onClick={sign}
         disabled={status === "signing"}

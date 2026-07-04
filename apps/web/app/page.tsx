@@ -1,35 +1,120 @@
-import Image from "next/image";
 import { APP_NAME } from "@nimiqearn/shared";
+import { BOT_URL, Button, IconArrow, SiteFooter, SiteHeader } from "./_components/chrome";
 
-const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL ?? "https://t.me/YourBot";
+/* ---------------------------------- icons --------------------------------- */
+
+type IconProps = { className?: string };
+const S = ({ className, children }: IconProps & { children: React.ReactNode }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.6}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+);
+
+const IconTelegram = (p: IconProps) => (
+  <S {...p}>
+    <path d="M21.5 4.5 2.9 11.3c-1 .4-1 1.8.1 2.1l4.6 1.4 1.7 5.2c.3.9 1.4 1 1.9.3l2.5-3 4.7 3.5c.6.4 1.5.1 1.7-.7l3-14c.2-1-.7-1.8-1.6-1.4Z" />
+    <path d="m8 14.5 9-6.5-6.5 7v3.5" />
+  </S>
+);
+const IconHex = (p: IconProps) => (
+  <S {...p}>
+    <path d="M12 2.5 20 7v10l-8 4.5L4 17V7l8-4.5Z" />
+  </S>
+);
+const IconShield = (p: IconProps) => (
+  <S {...p}>
+    <path d="M12 3 5 6v5c0 4.4 3 7.9 7 9 4-1.1 7-4.6 7-9V6l-7-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  </S>
+);
+const IconBolt = (p: IconProps) => (
+  <S {...p}>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+  </S>
+);
+const IconCompass = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" />
+  </S>
+);
+const IconUpload = (p: IconProps) => (
+  <S {...p}>
+    <path d="M12 15V4m0 0 4 4m-4-4-4 4" />
+    <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+  </S>
+);
+const IconCoins = (p: IconProps) => (
+  <S {...p}>
+    <ellipse cx="9" cy="7" rx="5.5" ry="2.5" />
+    <path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7" />
+    <path d="M9.5 13.4c.6 2 3.2 3.1 6 3.1 3 0 5.5-1.1 5.5-2.5v-4c0-1.3-2.1-2.3-4.9-2.5" />
+  </S>
+);
+const IconWallet = (p: IconProps) => (
+  <S {...p}>
+    <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1" />
+    <path d="M3 7v10a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-4H16a2 2 0 0 1 0-4h5V9a2 2 0 0 0-2-2" />
+    <circle cx="16.5" cy="13" r="0.9" fill="currentColor" stroke="none" />
+  </S>
+);
+const IconUsers = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+    <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 20a5.5 5.5 0 0 0-3-4.9" />
+  </S>
+);
+const IconMegaphone = (p: IconProps) => (
+  <S {...p}>
+    <path d="M4 9v4a1 1 0 0 0 1 1h2l7 4V4L7 8H5a1 1 0 0 0-1 1Z" />
+    <path d="M18 8a4 4 0 0 1 0 8" />
+  </S>
+);
+const IconCheck = (p: IconProps) => (
+  <S {...p}>
+    <path d="m5 12.5 4 4 10-10" />
+  </S>
+);
+
+/* --------------------------------- content -------------------------------- */
 
 const FEATURES = [
-  "Telegram powered",
-  "Built on Nimiq",
-  "AI-powered verification",
-  "Instant NIM rewards",
+  { icon: IconTelegram, label: "Telegram-native" },
+  { icon: IconHex, label: "Built on Nimiq" },
+  { icon: IconShield, label: "AI-assisted checks" },
+  { icon: IconBolt, label: "Instant NIM rewards" },
 ];
 
 const LOOP_STEPS = [
-  { label: "Discover", detail: "Browse paid quests inside Telegram." },
-  { label: "Submit proof", detail: "Send the proof a quest asks for." },
-  { label: "Get verified", detail: "Deterministic + AI-assisted checks." },
-  { label: "Earn NIM", detail: "Rewards land in your Nimiq wallet." },
+  { icon: IconCompass, label: "Discover", detail: "Browse paid quests inside Telegram." },
+  { icon: IconUpload, label: "Submit proof", detail: "Send the proof a quest asks for." },
+  { icon: IconShield, label: "Get verified", detail: "Deterministic + AI-assisted checks." },
+  { icon: IconCoins, label: "Earn NIM", detail: "Rewards land in your Nimiq wallet." },
 ];
 
 const HOW_IT_WORKS = [
   {
-    step: "1",
+    icon: IconTelegram,
     title: "Start in Telegram",
-    body: "Open NimiqEarn Quest in Telegram, send /start, and create your worker profile in seconds — no app install, no signup forms.",
+    body: "Open the bot, send /start, and create your worker profile in seconds — no app install, no signup forms.",
   },
   {
-    step: "2",
+    icon: IconWallet,
     title: "Link a Nimiq wallet",
-    body: "Add your NIM payout address. Validation and an audit trail keep payouts transparent and trackable.",
+    body: "Prove ownership by signing a message — no funds move. Validation and an audit trail keep payouts trackable.",
   },
   {
-    step: "3",
+    icon: IconCoins,
     title: "Complete quests & earn",
     body: "Pick quests, submit the required proof, and get paid in NIM once your submission is verified.",
   },
@@ -49,141 +134,117 @@ const CREATOR_POINTS = [
   "Reach a community of motivated contributors",
 ];
 
-function CtaButton({
-  href,
-  children,
-  variant = "primary",
-}: {
-  href: string;
-  children: React.ReactNode;
-  variant?: "primary" | "ghost" | "dark";
-}) {
-  const base =
-    "inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition-colors";
-  const styles = {
-    primary: "bg-[var(--brand-gold)] text-[var(--brand-ink)] hover:bg-[var(--brand-gold-600)]",
-    ghost: "border border-white/25 text-white hover:bg-white/10",
-    dark: "bg-[var(--brand-ink)] text-[var(--brand-gold)] hover:bg-[var(--brand-navy-700)]",
-  }[variant];
-  return (
-    <a href={href} className={`${base} ${styles}`}>
-      {children}
-    </a>
-  );
-}
+/* ------------------------------- ui elements ------------------------------ */
 
-function Logo() {
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <Image
-        src="/logo.png"
-        alt="NimiqEarn Quest logo"
-        width={36}
-        height={39}
-        className="rounded-lg"
-        priority
-      />
-      <span className="text-lg font-bold tracking-tight">
-        Nimiq<span className="text-[var(--brand-gold)]">Earn</span> Quest
-      </span>
+    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-gold)]">
+      {children}
     </span>
   );
 }
 
+/* ---------------------------------- page ---------------------------------- */
+
 export default function HomePage() {
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <Logo />
-        <nav className="hidden items-center gap-8 text-sm text-[var(--brand-muted)] md:flex">
-          <a href="#how" className="hover:text-white">
-            How it works
-          </a>
-          <a href="#workers" className="hover:text-white">
-            Workers
-          </a>
-          <a href="#creators" className="hover:text-white">
-            Creators
-          </a>
-        </nav>
-        <CtaButton href={BOT_URL}>Open App</CtaButton>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pb-16 pt-10 text-center md:pt-16">
-        <Image
-          src="/logo.png"
-          alt="NimiqEarn Quest logo"
-          width={96}
-          height={103}
-          className="mx-auto mb-8 rounded-2xl shadow-lg shadow-black/30"
-          priority
-        />
-        <span className="inline-block rounded-full border border-white/15 bg-white/5 px-4 py-1 text-xs font-medium text-[var(--brand-muted)]">
-          Telegram-native · powered by the Nimiq ecosystem
-        </span>
-        <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-white md:text-6xl">
-          Complete tasks. Earn{" "}
-          <span className="text-[var(--brand-gold)]">NIM</span>. Empower
-          communities.
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-[var(--brand-muted)]">
-          {APP_NAME} is a task and bounty marketplace that lives entirely inside
-          Telegram. Workers complete quests and get paid in NIM; creators run
-          structured, paid campaigns for the Nimiq community.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <CtaButton href={BOT_URL}>Start earning</CtaButton>
-          <CtaButton href="#creators" variant="ghost">
-            Publish a quest
-          </CtaButton>
-        </div>
+      <section className="relative overflow-hidden">
+        <div className="grid-texture pointer-events-none absolute inset-0" />
+        <div className="relative mx-auto max-w-4xl px-6 pb-20 pt-20 text-center md:pt-28">
+          <span className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-[var(--brand-muted)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-gold)]" />
+            Telegram-native · powered by the Nimiq ecosystem
+          </span>
+          <h1 className="mx-auto mt-7 max-w-3xl text-balance text-4xl font-extrabold leading-[1.05] tracking-tight text-white md:text-6xl">
+            Complete tasks.
+            <br className="hidden sm:block" /> Earn <span className="text-gradient-gold">NIM</span>.
+          </h1>
+          <p className="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-[var(--brand-muted)]">
+            A task and bounty marketplace that lives entirely inside Telegram. Workers complete
+            quests and get paid in NIM; creators run structured, paid campaigns.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Button href={BOT_URL} icon>
+              Start earning
+            </Button>
+            <Button href="#creators" variant="ghost">
+              Publish a quest
+            </Button>
+          </div>
 
-        {/* Feature chips (from the banner) */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
-          {FEATURES.map((feature) => (
-            <span key={feature} className="flex items-center gap-2">
-              <span className="text-[var(--brand-gold)]">◆</span>
-              {feature}
-            </span>
-          ))}
+          {/* Feature pills */}
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5">
+            {FEATURES.map(({ icon: Icon, label }) => (
+              <span
+                key={label}
+                className="glass inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium text-[var(--brand-muted)]"
+              >
+                <Icon className="h-3.5 w-3.5 text-[var(--brand-gold)]" />
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
+      </section>
 
-        {/* Reward loop */}
-        <div className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Reward loop */}
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {LOOP_STEPS.map((s, i) => (
             <div
               key={s.label}
-              className="rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-sm"
+              className="group glass glass-hover relative rounded-2xl p-5"
             >
-              <div className="text-xs font-semibold text-[var(--brand-gold)]">
-                Step {i + 1}
+              <div className="flex items-center justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--brand-gold)]/12 text-[var(--brand-gold)]">
+                  <s.icon className="h-5 w-5" />
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/25">
+                  Step {i + 1}
+                </span>
               </div>
-              <div className="mt-1 text-base font-bold text-white">{s.label}</div>
-              <div className="mt-1 text-sm text-[var(--brand-muted)]">{s.detail}</div>
+              <div className="mt-3 text-[15px] font-semibold text-white">{s.label}</div>
+              <div className="mt-1 text-sm leading-relaxed text-[var(--brand-muted)]">
+                {s.detail}
+              </div>
+              {i < LOOP_STEPS.length - 1 && (
+                <IconArrow className="absolute -right-3 top-1/2 hidden h-5 w-5 -translate-y-1/2 text-white/15 lg:block" />
+              )}
             </div>
           ))}
         </div>
       </section>
 
       {/* How it works */}
-      <section id="how" className="border-t border-white/10 bg-[var(--brand-navy-800)]/60">
+      <section id="how" className="border-y border-white/[0.06]">
         <div className="mx-auto max-w-6xl px-6 py-20">
-          <h2 className="text-center text-3xl font-bold tracking-tight text-white">
-            How it works
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-center text-[var(--brand-muted)]">
-            From first message to first payout — the whole loop happens in chat.
-          </p>
-          <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
-            {HOW_IT_WORKS.map((item) => (
-              <div key={item.step}>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-gold)] text-sm font-bold text-[var(--brand-ink)]">
-                  {item.step}
+          <div className="text-center">
+            <SectionEyebrow>How it works</SectionEyebrow>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white">
+              First message to first payout
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-[var(--brand-muted)]">
+              The whole loop happens in chat — no dashboards to learn.
+            </p>
+          </div>
+          <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {HOW_IT_WORKS.map((item, i) => (
+              <div
+                key={item.title}
+                className="glass glass-hover rounded-2xl p-7"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--brand-gold)]/20 bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <span className="text-xs font-semibold text-white/30">0{i + 1}</span>
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-sm text-[var(--brand-muted)]">{item.body}</p>
+                <h3 className="mt-5 text-lg font-semibold text-white">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--brand-muted)]">{item.body}</p>
               </div>
             ))}
           </div>
@@ -192,105 +253,85 @@ export default function HomePage() {
 
       {/* Workers + Creators */}
       <section className="mx-auto max-w-6xl px-6 py-20">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <div
-            id="workers"
-            className="rounded-3xl border border-white/10 bg-white/5 p-8"
-          >
-            <h2 className="text-2xl font-bold text-white">For workers</h2>
-            <p className="mt-2 text-[var(--brand-muted)]">
-              Turn spare minutes into NIM. Pick up quests that fit you and get
-              paid for genuine work.
-            </p>
-            <ul className="mt-6 space-y-3">
-              {WORKER_POINTS.map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-3 text-sm text-[var(--brand-text)]"
-                >
-                  <span className="mt-0.5 text-[var(--brand-gold)]">✓</span>
-                  {point}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8">
-              <CtaButton href={BOT_URL}>Start earning</CtaButton>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {[
+            {
+              id: "workers",
+              icon: IconUsers,
+              title: "For workers",
+              blurb:
+                "Turn spare minutes into NIM. Pick up quests that fit you and get paid for genuine work.",
+              points: WORKER_POINTS,
+              cta: { label: "Start earning", variant: "primary" as const },
+            },
+            {
+              id: "creators",
+              icon: IconMegaphone,
+              title: "For creators",
+              blurb:
+                "Activate your community with structured, paid campaigns — bounties, testing, feedback, and growth.",
+              points: CREATOR_POINTS,
+              cta: { label: "Open Creator Hub", variant: "ghost" as const },
+            },
+          ].map((card) => (
+            <div
+              key={card.id}
+              id={card.id}
+              className="glass glass-hover flex flex-col rounded-3xl p-8"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--brand-gold)]/20 bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]">
+                <card.icon className="h-6 w-6" />
+              </span>
+              <h2 className="mt-5 text-2xl font-bold text-white">{card.title}</h2>
+              <p className="mt-2 text-[var(--brand-muted)]">{card.blurb}</p>
+              <ul className="mt-6 space-y-3.5">
+                {card.points.map((point) => (
+                  <li key={point} className="flex items-start gap-3 text-sm text-[var(--brand-text)]">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-gold)]/15 text-[var(--brand-gold)]">
+                      <IconCheck className="h-3 w-3" />
+                    </span>
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 pt-2">
+                <Button href={BOT_URL} variant={card.cta.variant}>
+                  {card.cta.label}
+                </Button>
+              </div>
             </div>
-          </div>
-
-          <div
-            id="creators"
-            className="rounded-3xl border border-white/10 bg-white/5 p-8"
-          >
-            <h2 className="text-2xl font-bold text-white">For creators</h2>
-            <p className="mt-2 text-[var(--brand-muted)]">
-              Activate your community with structured, paid campaigns — bounties,
-              testing, feedback, and growth tasks.
-            </p>
-            <ul className="mt-6 space-y-3">
-              {CREATOR_POINTS.map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-3 text-sm text-[var(--brand-text)]"
-                >
-                  <span className="mt-0.5 text-[var(--brand-gold)]">✓</span>
-                  {point}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-8">
-              <CtaButton href={BOT_URL} variant="ghost">
-                Open Creator Hub
-              </CtaButton>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
       {/* CTA band */}
       <section className="px-6 pb-20">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-[var(--brand-gold)] px-6 py-16 text-center">
-          <h2 className="text-3xl font-bold text-[var(--brand-ink)]">
-            Ready to earn NIM in Telegram?
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-[var(--brand-ink)]/80">
-            Open NimiqEarn Quest in Telegram, create your profile, and complete your first quest.
-          </p>
-          <div className="mt-8">
-            <CtaButton href={BOT_URL} variant="dark">
-              Open {APP_NAME}
-            </CtaButton>
+        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[28px] bg-gradient-to-br from-[var(--brand-gold)] to-[#e0871a] px-6 py-16 text-center">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.12]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 20% 20%, #000 1px, transparent 1px), radial-gradient(circle at 70% 60%, #000 1px, transparent 1px)",
+              backgroundSize: "26px 26px",
+            }}
+          />
+          <div className="relative">
+            <h2 className="text-3xl font-bold tracking-tight text-[var(--brand-ink)]">
+              Ready to earn NIM in Telegram?
+            </h2>
+            <p className="mx-auto mt-3 max-w-lg text-[var(--brand-ink)]/70">
+              Open the app, create your profile, and complete your first quest.
+            </p>
+            <div className="mt-8">
+              <Button href={BOT_URL} variant="dark" icon>
+                Open {APP_NAME}
+              </Button>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-10 text-sm text-[var(--brand-muted)] md:flex-row">
-          <span>© {APP_NAME} · Built for the Nimiq ecosystem</span>
-          <nav className="flex items-center gap-6">
-            <a href={BOT_URL} className="hover:text-white">
-              Open App
-            </a>
-            <a
-              href="https://www.nimiq.com"
-              className="hover:text-white"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Nimiq
-            </a>
-            <a
-              href="https://github.com/David-patrick-chuks/NimiqEarn-Quest"
-              className="hover:text-white"
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub
-            </a>
-          </nav>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
