@@ -63,8 +63,8 @@ async function waitForEditField(
     const update = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: STEP_TIMEOUT_MS,
       otherwise: async () => {
-        await stepChat.clearPrompts();
-        await ctx.reply(messages.quest.edit.timeout);
+        const hint = await ctx.reply(messages.errors.useButtons);
+        stepChat.track(hint.message_id);
       },
     });
 

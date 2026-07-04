@@ -14,7 +14,7 @@ const KNOWN_COMMANDS = new Set(["start", "help", "menu", "wallet", "creator", "q
 export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
   bot.command("help", helpCommand);
   bot.command("menu", createMenuCommand(api));
-  bot.command("wallet", createWalletCommand());
+  bot.command("wallet", createWalletCommand(api));
   bot.command("creator", createCreatorCommand(api));
   bot.command("quests", createQuestsCommand(api));
   bot.command("start", createStartCommand(api));

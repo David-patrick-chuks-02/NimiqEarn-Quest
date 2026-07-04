@@ -23,8 +23,8 @@ async function waitForTermsAgreement(
     const termsUpdate = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: TERMS_WAIT_MS,
       otherwise: async () => {
-        await stepChat.clearPrompts();
-        await ctx.reply(messages.onboarding.termsTimeout);
+        const hint = await ctx.reply(messages.errors.useButtons);
+        stepChat.track(hint.message_id);
       },
     });
 
@@ -60,13 +60,11 @@ export function createOnboardingConversation(api: ApiClient) {
     const displayName = displayNameFromUser(from);
     const stepChat = new StepChat(ctx);
 
-    await stepChat.promptPhoto(welcomeBannerFile(), {
-      caption: messages.onboarding.welcome(displayName),
-      parse_mode: "Markdown",
-    });
-
+    // Single banner message with welcome + terms + the agree button (photo captions
+    // support up to 1024 chars, Markdown, and inline keyboards) so it doesn't feel spammy.
     const termsKeyboard = new InlineKeyboard().text("I agree", "terms:agree");
-    await stepChat.prompt(messages.onboarding.terms, {
+    await stepChat.promptPhoto(welcomeBannerFile(), {
+      caption: `${messages.onboarding.welcome(displayName)}\n\n${messages.onboarding.terms()}`,
       parse_mode: "Markdown",
       reply_markup: termsKeyboard,
     });
@@ -78,7 +76,6 @@ export function createOnboardingConversation(api: ApiClient) {
       telegramId: String(from.id),
       telegramUsername: from.username,
       displayName,
-      role: "WORKER" as const,
     };
 
     try {

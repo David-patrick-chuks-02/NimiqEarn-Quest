@@ -4,8 +4,8 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { helpCommand } from "../commands/help.js";
 import { openCreatorEntry } from "./creator.js";
-import { hasActiveConversation } from "../utils/conversation.js";
 import { formatWorkerStatus } from "./worker-status.js";
+import { renderWalletMenu } from "./wallet.js";
 
 export const MAIN_MENU_CALLBACKS = {
   startEarning: "menu:start-earning",
@@ -60,13 +60,12 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery(MAIN_MENU_CALLBACKS.wallet, async (ctx) => {
     await ctx.answerCallbackQuery();
-
-    if (hasActiveConversation(ctx)) {
-      await ctx.reply(messages.wallet.alreadyInProgress);
-      return;
+    try {
+      await renderWalletMenu(ctx, api);
+    } catch (error) {
+      console.error("Wallet menu from main menu failed:", error);
+      await ctx.reply(messages.errors.apiUnavailable);
     }
-
-    await ctx.conversation.enter("wallet");
   });
 
   bot.callbackQuery(MAIN_MENU_CALLBACKS.creator, async (ctx) => {

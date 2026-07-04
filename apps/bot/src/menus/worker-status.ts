@@ -37,7 +37,7 @@ export function formatWorkerStatus(user: ApiUser): string {
       "*Next step*",
       "Link your Nimiq wallet with /wallet to verify your account.",
       "",
-      "_One wallet per account. Duplicate addresses are not permitted._",
+      "_You can link multiple wallets and choose a primary. Each address maps to one account._",
     );
   } else {
     lines.push(

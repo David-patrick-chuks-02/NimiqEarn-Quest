@@ -22,7 +22,15 @@ export async function startWebhookServer(bot: Bot<BotContext>, env: WebhookBotEn
     }
 
     if (req.method === "POST" && req.url === WEBHOOK_PATH) {
-      return handler(req, res);
+      // Never let a handler rejection become an unhandled rejection (would crash the process).
+      Promise.resolve(handler(req, res)).catch((err) => {
+        logger.error({ err }, "webhook handler error");
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end();
+        }
+      });
+      return;
     }
 
     res.writeHead(404);

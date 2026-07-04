@@ -14,6 +14,7 @@ describe("formatWorkerStatus", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       wallet: null,
+      wallets: [],
     });
 
     expect(text).toContain("Worker profile");
@@ -35,9 +36,19 @@ describe("formatWorkerStatus", () => {
       wallet: {
         nimiqAddress: "NQ48VAXGJD1KYSCMX6H6DJSLAYN7FTYF0KAH",
         status: "VERIFIED",
+        isPrimary: true,
         linkedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
+      wallets: [
+        {
+          id: "wallet-1",
+          nimiqAddress: "NQ48VAXGJD1KYSCMX6H6DJSLAYN7FTYF0KAH",
+          status: "VERIFIED",
+          isPrimary: true,
+          linkedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
     });
 
     expect(text).toContain("Verified");

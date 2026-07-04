@@ -1,20 +1,21 @@
 import type { CommandContext } from "grammy";
+import type { ApiClient } from "../api/client.js";
 import { messages } from "../copy/messages.js";
 import type { BotContext } from "../context.js";
-import { hasActiveConversation } from "../utils/conversation.js";
+import { renderWalletMenu } from "../menus/wallet.js";
 
-export function createWalletCommand() {
+export function createWalletCommand(api: ApiClient) {
   return async function walletCommand(ctx: CommandContext<BotContext>) {
     if (!ctx.from) {
       await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
 
-    if (hasActiveConversation(ctx)) {
-      await ctx.reply(messages.wallet.alreadyInProgress);
-      return;
+    try {
+      await renderWalletMenu(ctx, api);
+    } catch (error) {
+      console.error("Wallet command failed:", error);
+      await ctx.reply(messages.errors.apiUnavailable);
     }
-
-    await ctx.conversation.enter("wallet");
   };
 }

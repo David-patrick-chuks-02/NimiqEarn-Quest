@@ -5,8 +5,13 @@ export interface RateLimitResult {
   retryAfterSec: number;
 }
 
+// Atomic INCR + first-hit EXPIRE so a crash between the two can't leave a key
+// without a TTL (which would throttle a user forever). Fixed window per key.
+const INCR_WITH_EXPIRE =
+  "local c = redis.call('INCR', KEYS[1]) if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return c";
+
 /**
- * Fixed-window per-key rate limiter backed by Redis (INCR + EXPIRE).
+ * Fixed-window per-key rate limiter backed by Redis.
  * Used to throttle sensitive bot flows (wallet linking, quest creation/editing).
  */
 export function createRateLimiter(redis: Redis) {
@@ -16,10 +21,7 @@ export function createRateLimiter(redis: Redis) {
     windowSec: number,
   ): Promise<RateLimitResult> {
     const redisKey = `ratelimit:${key}`;
-    const count = await redis.incr(redisKey);
-    if (count === 1) {
-      await redis.expire(redisKey, windowSec);
-    }
+    const count = (await redis.eval(INCR_WITH_EXPIRE, 1, redisKey, String(windowSec))) as number;
     if (count > limit) {
       const ttl = await redis.ttl(redisKey);
       return { allowed: false, retryAfterSec: ttl > 0 ? ttl : windowSec };

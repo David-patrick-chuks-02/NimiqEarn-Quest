@@ -15,6 +15,7 @@ import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { createRateLimiter } from "./utils/rate-limit.js";
 import { registerCreatorHandlers } from "./menus/creator.js";
 import { registerMainMenuHandlers } from "./menus/main.js";
+import { registerWalletHandlers } from "./menus/wallet.js";
 import { messages } from "./copy/messages.js";
 import { createRedisSessionStorage } from "./session.js";
 import type { SessionData } from "./types.js";
@@ -43,6 +44,7 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
+  registerWalletHandlers(bot, api);
   registerCreatorHandlers(bot, api);
   bot.use(fallbackMiddleware(logger));
 

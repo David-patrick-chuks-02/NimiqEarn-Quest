@@ -16,9 +16,14 @@ export async function waitForTextOrCancel(
 ): Promise<string | null> {
   const update = await conversation.waitFor(["message:text", "callback_query:data"], {
     maxMilliseconds: options.timeoutMs,
+    // `otherwise` fires on unexpected input (e.g. a photo/sticker), NOT on timeout.
+    // Re-prompt instead of clearing the step, so the user isn't stranded.
     otherwise: async () => {
-      await options.stepChat?.clearPrompts();
-      await ctx.reply(options.timeoutMessage);
+      const hint = await ctx.reply(options.inputHint ?? messages.quest.inputHint, {
+        parse_mode: "Markdown",
+        reply_markup: cancelStepKeyboard(),
+      });
+      options.stepChat?.track(hint.message_id);
     },
   });
 

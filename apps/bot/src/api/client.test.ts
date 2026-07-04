@@ -32,7 +32,6 @@ describe("createApiClient", () => {
       telegramId: "123",
       telegramUsername: "worker",
       displayName: "Worker",
-      role: "WORKER",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

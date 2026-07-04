@@ -5,13 +5,21 @@ import { parseApiError } from "./types.js";
 export interface ApiWallet {
   nimiqAddress: string;
   status: string;
+  isPrimary?: boolean;
   linkedAt: string;
   updatedAt: string;
 }
 
+export interface ApiWalletListItem {
+  id: string;
+  nimiqAddress: string;
+  status: string;
+  isPrimary: boolean;
+  linkedAt: string;
+}
+
 export interface WalletChallenge {
   token: string;
-  address: string;
   code: string;
   message: string;
   expiresAt: string;
@@ -28,6 +36,7 @@ export interface ApiUser {
   createdAt: string;
   updatedAt: string;
   wallet: ApiWallet | null;
+  wallets: ApiWalletListItem[];
 }
 
 export function createApiClient(baseUrl: string, sharedSecret?: string) {
@@ -49,7 +58,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         throw new Error(`Failed to save profile (${response.status})`);
       }
 
-      const data = (await response.json()) as { user: ApiUser };
+      const data = (await response.json().catch(() => ({}))) as { user: ApiUser };
       return data.user;
     },
 
@@ -67,24 +76,17 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         throw new Error(`Failed to look up profile (${response.status})`);
       }
 
-      const data = (await response.json()) as { user: ApiUser };
+      const data = (await response.json().catch(() => ({}))) as { user: ApiUser };
       return data.user;
     },
 
-    async startWalletChallenge(
-      telegramId: string,
-      nimiqAddress: string,
-    ): Promise<WalletChallenge> {
+    async startWalletChallenge(telegramId: string): Promise<WalletChallenge> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/challenge`,
-        {
-          method: "POST",
-          headers: jsonHeaders,
-          body: JSON.stringify({ nimiqAddress }),
-        },
+        { method: "POST", headers: authHeaders },
       );
 
-      const data = (await response.json()) as {
+      const data = (await response.json().catch(() => ({}))) as {
         challenge?: WalletChallenge;
         error?: string;
         code?: string;
@@ -97,13 +99,48 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.challenge!;
     },
 
+    async setPrimaryWallet(
+      telegramId: string,
+      walletId: string,
+    ): Promise<ApiWalletListItem[]> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallets/${encodeURIComponent(walletId)}/primary`,
+        { method: "POST", headers: authHeaders },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        wallets?: ApiWalletListItem[];
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to set primary wallet (${response.status})`);
+      }
+      return data.wallets ?? [];
+    },
+
+    async unlinkWallet(telegramId: string, walletId: string): Promise<ApiWalletListItem[]> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallets/${encodeURIComponent(walletId)}`,
+        { method: "DELETE", headers: authHeaders },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        wallets?: ApiWalletListItem[];
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to unlink wallet (${response.status})`);
+      }
+      return data.wallets ?? [];
+    },
+
     async registerCreator(telegramId: string): Promise<ApiUser> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/register`,
         { method: "POST", headers: authHeaders },
       );
 
-      const data = (await response.json()) as { user?: ApiUser; error?: string; code?: string };
+      const data = (await response.json().catch(() => ({}))) as { user?: ApiUser; error?: string; code?: string };
 
       if (!response.ok) {
         throw parseApiError(data, `Failed to register creator (${response.status})`);
@@ -118,7 +155,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         { headers: authHeaders },
       );
 
-      const data = (await response.json()) as {
+      const data = (await response.json().catch(() => ({}))) as {
         dashboard?: CreatorDashboard;
         error?: string;
         code?: string;
@@ -144,7 +181,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         },
       );
 
-      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+      const data = (await response.json().catch(() => ({}))) as { quest?: ApiQuest; error?: string; code?: string };
 
       if (!response.ok) {
         throw parseApiError(data, `Failed to create quest (${response.status})`);
@@ -172,7 +209,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         },
       );
 
-      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+      const data = (await response.json().catch(() => ({}))) as { quest?: ApiQuest; error?: string; code?: string };
 
       if (!response.ok) {
         throw parseApiError(data, `Failed to update quest (${response.status})`);
@@ -188,7 +225,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         { headers: authHeaders },
       );
 
-      const data = (await response.json()) as { quests?: ApiQuest[]; error?: string; code?: string };
+      const data = (await response.json().catch(() => ({}))) as { quests?: ApiQuest[]; error?: string; code?: string };
 
       if (!response.ok) {
         throw parseApiError(data, `Failed to list quests (${response.status})`);
@@ -203,7 +240,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         { method: "POST", headers: authHeaders },
       );
 
-      const data = (await response.json()) as { quest?: ApiQuest; error?: string; code?: string };
+      const data = (await response.json().catch(() => ({}))) as { quest?: ApiQuest; error?: string; code?: string };
 
       if (!response.ok) {
         throw parseApiError(data, `Failed to publish quest (${response.status})`);

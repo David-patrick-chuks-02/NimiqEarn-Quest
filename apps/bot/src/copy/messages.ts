@@ -5,6 +5,12 @@ function section(title: string, body: string) {
   return [`*${title}*`, "", body].join("\n");
 }
 
+/** Markdown links to the public Terms and Privacy pages (read at call time so env is loaded). */
+function legalLinks() {
+  const base = (process.env.WEB_PUBLIC_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return `[Terms of Service](${base}/terms) · [Privacy Policy](${base}/privacy)`;
+}
+
 export function questStep(step: number, total: number, title: string, instruction: string) {
   return section(`Step ${step} of ${total} · ${title}`, instruction);
 }
@@ -21,6 +27,7 @@ export const messages = {
       "Something went wrong. Please try again, or send /help for available commands.",
     rateLimited:
       "You're doing that a bit too fast. Please wait a moment and try again.",
+    useButtons: "Please use the buttons above to continue, or tap Cancel.",
   },
 
   help: (botUsername?: string) =>
@@ -53,6 +60,8 @@ export const messages = {
         "Community guidelines",
         "Complete tasks honestly and submit genuine proof. Misleading or fraudulent submissions may result in account suspension.",
       ),
+      "",
+      section("Legal", legalLinks()),
       "",
       botUsername ? `_Bot:_ @${botUsername}` : "",
       "For support, visit the Nimiq community forum.",
@@ -91,7 +100,23 @@ export const messages = {
             "To confirm this is your wallet, sign a short message — it moves no funds.",
             "",
             "1. Tap *Sign with Nimiq* below.",
-            "2. Approve the signature in your Nimiq wallet.",
+            "2. Choose a wallet and approve the signature.",
+            "3. Come back and tap *I've signed*.",
+          ].join("\n"),
+        ),
+        "",
+        `Verification code: \`${code}\``,
+      ].join("\n"),
+    verifyInstructionsLink: (code: string, url: string) =>
+      [
+        section(
+          "Verify wallet ownership",
+          [
+            "To confirm this is your wallet, sign a short message — it moves no funds.",
+            "",
+            "1. Open the signing page (copy into your browser):",
+            `\`${url}\``,
+            "2. Choose a wallet and approve the signature.",
             "3. Come back and tap *I've signed*.",
           ].join("\n"),
         ),
@@ -126,6 +151,8 @@ export const messages = {
       "The address provided is not a valid Nimiq address. Please send an address starting with `NQ`, or send /wallet to try again.",
     addressInUse:
       "This Nimiq address is already linked to another account. Please use a different address.",
+    alreadyLinked:
+      "This wallet is already linked to your account. Open *My Wallets* to manage it.",
     linkFailed:
       "We could not save your wallet at this time. Please send /wallet to try again.",
     timeout:
@@ -144,19 +171,22 @@ export const messages = {
         "",
         "To get started, review the terms below and create your worker profile.",
       ].join("\n"),
-    terms: section(
-      "Terms of participation",
-      [
-        "By continuing, you agree to:",
-        "• Complete tasks honestly",
-        "• Submit genuine proof of work",
-        "• Follow community and platform guidelines",
-        "",
-        "Accounts that submit misleading or fraudulent proof may be suspended.",
-        "",
-        "Tap *I agree* to create your worker profile.",
-      ].join("\n"),
-    ),
+    terms: () =>
+      section(
+        "Terms of participation",
+        [
+          "By continuing, you agree to:",
+          "• Complete tasks honestly",
+          "• Submit genuine proof of work",
+          "• Follow community and platform guidelines",
+          "",
+          "Accounts that submit misleading or fraudulent proof may be suspended.",
+          "",
+          `Read the full ${legalLinks()}.`,
+          "",
+          "Tap *I agree* to create your worker profile.",
+        ].join("\n"),
+      ),
     termsWrongButton:
       "Please tap *I agree* to continue, or send /start to begin again.",
     termsWrongButtonToast: "Select I agree to continue.",
@@ -195,6 +225,25 @@ export const messages = {
         "As a creator, open *My Quests* from the Creator Hub to manage your own drafts and published quests.",
       ].join("\n"),
     ),
+  },
+
+  walletMenu: {
+    header: section(
+      "My Wallets",
+      [
+        "Manage the Nimiq addresses that can receive your NIM payouts.",
+        "Your *primary* wallet is where rewards are sent.",
+        "",
+        "_Each address can be linked to only one account._",
+      ].join("\n"),
+    ),
+    empty: section(
+      "My Wallets",
+      "You haven't linked a Nimiq wallet yet. Link one to receive NIM payouts.",
+    ),
+    primarySet: "Primary wallet updated.",
+    unlinked: "Wallet unlinked.",
+    actionFailed: "That action failed. Please try again.",
   },
 
   menu: {

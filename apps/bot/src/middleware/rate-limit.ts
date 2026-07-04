@@ -3,8 +3,8 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import type { Logger } from "../logger.js";
 import type { RateLimiter } from "../utils/rate-limit.js";
-import { MAIN_MENU_CALLBACKS } from "../menus/main.js";
 import { CREATOR_CALLBACKS } from "../menus/creator.js";
+import { WALLET_CALLBACKS } from "../menus/wallet.js";
 import { QUEST_EDIT_CALLBACK_PREFIX } from "../conversations/quest-keyboards.js";
 
 const LIMIT = 5;
@@ -13,20 +13,17 @@ const WINDOW_SEC = 60;
 /**
  * Detects entry into a sensitive flow: linking a wallet, or creating/editing a quest.
  * Steps inside an active conversation are consumed by the conversations plugin before
- * this middleware runs, so only the flow entry points are throttled.
+ * this middleware runs, so only the flow entry points are throttled. (Opening the wallet
+ * or quest menus is not throttled — only the flows that create/verify are.)
  */
 function isSensitive(ctx: BotContext): boolean {
   const data = ctx.callbackQuery?.data;
-  if (data) {
-    return (
-      data === MAIN_MENU_CALLBACKS.wallet ||
-      data === CREATOR_CALLBACKS.createQuest ||
-      data.startsWith(QUEST_EDIT_CALLBACK_PREFIX)
-    );
-  }
-
-  const text = ctx.message?.text;
-  return Boolean(text && /^\/wallet(?:@\w+)?(?:\s|$)/i.test(text));
+  if (!data) return false;
+  return (
+    data === WALLET_CALLBACKS.link ||
+    data === CREATOR_CALLBACKS.createQuest ||
+    data.startsWith(QUEST_EDIT_CALLBACK_PREFIX)
+  );
 }
 
 export function rateLimitMiddleware(limiter: RateLimiter, logger: Logger) {
