@@ -36,14 +36,13 @@ export function hashNimiqMessage(message: string): Uint8Array {
 }
 
 /** Builds the human-readable challenge a user signs to prove wallet ownership. */
-export function buildVerificationMessage(address: string, code: string): string {
+export function buildVerificationMessage(code: string): string {
   return [
     "NimiqEarn Quest — wallet verification",
-    `Address: ${address}`,
     `Code: ${code}`,
     "",
-    "Sign this message to prove you own this wallet.",
-    "It authorizes no transaction and moves no funds.",
+    "Sign this message with the wallet you want to link.",
+    "It proves ownership, authorizes no transaction, and moves no funds.",
   ].join("\n");
 }
 
@@ -65,6 +64,69 @@ export function signMessageWithRandomKey(message: string): {
     publicKey: publicKey.toHex(),
     signature: signature.toHex(),
   };
+}
+
+export interface NimiqAccountInfo {
+  /** Whether the RPC node was reachable and returned a result. */
+  reachable: boolean;
+  /** Balance in luna (1 NIM = 100_000 luna), or null if unreachable. */
+  balanceLuna: number | null;
+  /** Balance in NIM, or null if unreachable. */
+  balanceNim: number | null;
+}
+
+const LUNA_PER_NIM = 100_000;
+
+/**
+ * Best-effort on-chain lookup via the Nimiq Albatross JSON-RPC (`getAccountByAddress`).
+ * See https://nimiq.dev/rpc/. Never throws — returns `{ reachable: false }` on any error,
+ * so callers can treat it as a non-blocking signal (a valid new wallet has a 0 balance).
+ */
+export async function fetchNimiqAccount(
+  rpcUrl: string,
+  address: string,
+  timeoutMs = 5000,
+): Promise<NimiqAccountInfo> {
+  const unreachable: NimiqAccountInfo = { reachable: false, balanceLuna: null, balanceNim: null };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getAccountByAddress",
+        params: [address],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return unreachable;
+
+    const json = (await response.json()) as {
+      result?: { data?: { balance?: number }; balance?: number };
+      error?: unknown;
+    };
+    if (json.error) return unreachable;
+
+    // Albatross wraps results as { result: { data, metadata } }; some proxies flatten it.
+    const account = json.result?.data ?? json.result;
+    const balanceLuna = typeof account?.balance === "number" ? account.balance : null;
+    if (balanceLuna === null) return unreachable;
+
+    return {
+      reachable: true,
+      balanceLuna,
+      balanceNim: balanceLuna / LUNA_PER_NIM,
+    };
+  } catch {
+    return unreachable;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export interface VerifySignedMessageInput {
@@ -98,5 +160,27 @@ export function verifyNimiqSignedMessage(input: VerifySignedMessageInput): boole
     return derived === expected;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Verifies a signed message and, if valid, returns the address derived from the signing
+ * public key — so we learn which wallet the user chose to sign with (no address entry).
+ * Returns null on any malformed input or invalid signature.
+ */
+export function recoverAddressFromSignedMessage(input: {
+  message: string;
+  publicKey: string;
+  signature: string;
+}): string | null {
+  try {
+    const publicKey = PublicKey.fromHex(input.publicKey);
+    const signature = Signature.fromHex(input.signature);
+    if (!publicKey.verify(signature, hashNimiqMessage(input.message))) {
+      return null;
+    }
+    return publicKey.toAddress().toUserFriendlyAddress();
+  } catch {
+    return null;
   }
 }

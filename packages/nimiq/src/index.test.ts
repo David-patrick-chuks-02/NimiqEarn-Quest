@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrivateKey, PublicKey, Signature } from "@nimiq/core";
 import {
   buildVerificationMessage,
+  fetchNimiqAccount,
   hashNimiqMessage,
+  recoverAddressFromSignedMessage,
   validateNimiqAddress,
   verifyNimiqSignedMessage,
 } from "./index.js";
@@ -48,7 +50,7 @@ describe("verifyNimiqSignedMessage", () => {
   }
 
   it("accepts a valid signature from the matching address", () => {
-    const message = buildVerificationMessage("NQ...", "ABC123");
+    const message = buildVerificationMessage("ABC123");
     const signed = signMessage(message);
 
     expect(
@@ -74,7 +76,7 @@ describe("verifyNimiqSignedMessage", () => {
   });
 
   it("rejects when the public key does not match the claimed address", () => {
-    const message = buildVerificationMessage("NQ...", "XYZ789");
+    const message = buildVerificationMessage("XYZ789");
     const signed = signMessage(message);
     const other = signMessage(message);
 
@@ -97,5 +99,82 @@ describe("verifyNimiqSignedMessage", () => {
         signature: "not-hex",
       }),
     ).toBe(false);
+  });
+});
+
+describe("recoverAddressFromSignedMessage", () => {
+  function signMessage(message: string) {
+    const privateKey = PrivateKey.generate();
+    const publicKey = PublicKey.derive(privateKey);
+    const signature = Signature.create(privateKey, publicKey, hashNimiqMessage(message));
+    return {
+      address: publicKey.toAddress().toUserFriendlyAddress(),
+      publicKey: publicKey.toHex(),
+      signature: signature.toHex(),
+    };
+  }
+
+  it("recovers the signer's address from a valid signature", () => {
+    const message = buildVerificationMessage("CODE01");
+    const signed = signMessage(message);
+
+    expect(
+      recoverAddressFromSignedMessage({
+        message,
+        publicKey: signed.publicKey,
+        signature: signed.signature,
+      }),
+    ).toBe(signed.address);
+  });
+
+  it("returns null for a signature over a different message", () => {
+    const signed = signMessage("message-a");
+    expect(
+      recoverAddressFromSignedMessage({
+        message: "message-b",
+        publicKey: signed.publicKey,
+        signature: signed.signature,
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null on malformed input", () => {
+    expect(
+      recoverAddressFromSignedMessage({ message: "x", publicKey: "nope", signature: "nope" }),
+    ).toBeNull();
+  });
+});
+
+describe("fetchNimiqAccount", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("parses the balance from a getAccountByAddress response (luna → NIM)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ result: { data: { balance: 250_000, type: "basic" } } }), {
+        status: 200,
+      }),
+    );
+
+    const account = await fetchNimiqAccount("http://rpc.local", VALID_ADDRESS);
+    expect(account.reachable).toBe(true);
+    expect(account.balanceLuna).toBe(250_000);
+    expect(account.balanceNim).toBe(2.5);
+  });
+
+  it("returns unreachable on an RPC error payload", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: -32602, message: "bad" } }), { status: 200 }),
+    );
+
+    const account = await fetchNimiqAccount("http://rpc.local", VALID_ADDRESS);
+    expect(account.reachable).toBe(false);
+    expect(account.balanceNim).toBeNull();
+  });
+
+  it("returns unreachable when the node is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const account = await fetchNimiqAccount("http://rpc.local", VALID_ADDRESS);
+    expect(account.reachable).toBe(false);
   });
 });

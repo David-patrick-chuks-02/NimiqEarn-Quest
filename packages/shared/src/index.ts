@@ -22,15 +22,21 @@ export const questProofTypeSchema = z.enum([
 ]);
 export const questStatusSchema = z.enum(["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]);
 
+// NOTE: `role` is intentionally NOT accepted from clients — it is assigned
+// server-side only (new users default to WORKER; creator/admin via dedicated flows).
 export const createUserSchema = z.object({
   telegramId: z.string().min(1),
   telegramUsername: z.string().optional(),
   displayName: z.string().optional(),
-  role: userRoleSchema.default("WORKER"),
 });
 
+// User-friendly Nimiq addresses look like "NQxx XXXX ..." (uppercase base32 + spaces).
 export const linkWalletSchema = z.object({
-  nimiqAddress: z.string().min(10).max(120),
+  nimiqAddress: z
+    .string()
+    .min(10)
+    .max(120)
+    .regex(/^NQ[0-9A-Z ]+$/i, "Expected a Nimiq address"),
 });
 
 // Proof returned by a Nimiq wallet after signing the verification challenge.
@@ -46,9 +52,15 @@ const rewardAmountSchema = z
   .number()
   .positive()
   .max(MAX_REWARD_AMOUNT)
-  .refine((value) => (value.toString().split(".")[1]?.length ?? 0) <= 8, {
-    message: "Reward supports at most 8 decimal places.",
-  });
+  // At most 8 decimal places. Uses a scaled-integer check so exponential-notation
+  // values (e.g. 1e-9) can't slip past a naive string ".split('.')" test.
+  .refine(
+    (value) => {
+      const scaled = value * 1e8;
+      return Number.isFinite(scaled) && Math.abs(scaled - Math.round(scaled)) < 1e-3;
+    },
+    { message: "Reward supports at most 8 decimal places." },
+  );
 
 export const createQuestSchema = z.object({
   title: z.string().min(3).max(100),
