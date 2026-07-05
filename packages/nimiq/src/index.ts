@@ -36,13 +36,11 @@ export function hashNimiqMessage(message: string): Uint8Array {
 }
 
 /** Builds the human-readable challenge a user signs to prove wallet ownership. */
-export function buildVerificationMessage(code: string): string {
+export function buildVerificationMessage(): string {
   return [
-    "NimiqEarn Quest — wallet verification",
-    `Code: ${code}`,
+    "Link this wallet to your NimiqEarn Quest account.",
     "",
-    "Sign this message with the wallet you want to link.",
-    "It proves ownership, authorizes no transaction, and moves no funds.",
+    "Signing proves you own this wallet. It moves no funds and authorizes no transaction.",
   ].join("\n");
 }
 

@@ -93,7 +93,6 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
         return {
           challenge: {
             token: challenge.token,
-            code: challenge.code,
             message: challenge.message,
             expiresAt: challenge.expiresAt.toISOString(),
           },

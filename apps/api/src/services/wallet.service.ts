@@ -28,7 +28,6 @@ export class WalletServiceError extends Error {
 
 export interface WalletChallenge {
   token: string;
-  code: string;
   message: string;
   expiresAt: Date;
 }
@@ -57,8 +56,7 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
       }
 
       const token = randomBytes(24).toString("hex");
-      const code = randomBytes(3).toString("hex").toUpperCase();
-      const message = buildVerificationMessage(code);
+      const message = buildVerificationMessage();
       const expiresAt = new Date(now().getTime() + CHALLENGE_TTL_MS);
 
       await db.walletVerificationChallenge.upsert({
@@ -67,7 +65,7 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
         update: { token, message, expiresAt },
       });
 
-      return { token, code, message, expiresAt };
+      return { token, message, expiresAt };
     },
 
     /** Returns the challenge details a signing page needs, or null if missing/expired. */

@@ -50,7 +50,7 @@ describe("verifyNimiqSignedMessage", () => {
   }
 
   it("accepts a valid signature from the matching address", () => {
-    const message = buildVerificationMessage("ABC123");
+    const message = buildVerificationMessage();
     const signed = signMessage(message);
 
     expect(
@@ -76,7 +76,7 @@ describe("verifyNimiqSignedMessage", () => {
   });
 
   it("rejects when the public key does not match the claimed address", () => {
-    const message = buildVerificationMessage("XYZ789");
+    const message = buildVerificationMessage();
     const signed = signMessage(message);
     const other = signMessage(message);
 
@@ -115,7 +115,7 @@ describe("recoverAddressFromSignedMessage", () => {
   }
 
   it("recovers the signer's address from a valid signature", () => {
-    const message = buildVerificationMessage("CODE01");
+    const message = buildVerificationMessage();
     const signed = signMessage(message);
 
     expect(

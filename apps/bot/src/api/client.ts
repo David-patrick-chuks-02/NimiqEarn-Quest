@@ -20,7 +20,6 @@ export interface ApiWalletListItem {
 
 export interface WalletChallenge {
   token: string;
-  code: string;
   message: string;
   expiresAt: string;
 }

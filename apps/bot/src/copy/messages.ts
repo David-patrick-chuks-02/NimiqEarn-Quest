@@ -92,37 +92,33 @@ export const messages = {
         "Paste the full address in chat, or tap *Cancel* to return.",
       ].join("\n"),
     ),
-    verifyInstructions: (code: string) =>
-      [
-        section(
-          "Verify wallet ownership",
-          [
-            "To confirm this is your wallet, sign a short message — it moves no funds.",
-            "",
-            "1. Tap *Sign with Nimiq* below.",
-            "2. Choose a wallet and approve the signature.",
-            "3. Come back and tap *I've signed*.",
-          ].join("\n"),
-        ),
-        "",
-        `Verification code: \`${code}\``,
-      ].join("\n"),
-    verifyInstructionsLink: (code: string, url: string) =>
-      [
-        section(
-          "Verify wallet ownership",
-          [
-            "To confirm this is your wallet, sign a short message — it moves no funds.",
-            "",
-            "1. Open the signing page (copy into your browser):",
-            `\`${url}\``,
-            "2. Choose a wallet and approve the signature.",
-            "3. Come back and tap *I've signed*.",
-          ].join("\n"),
-        ),
-        "",
-        `Verification code: \`${code}\``,
-      ].join("\n"),
+    verifyInstructions: () =>
+      section(
+        "Link your wallet",
+        [
+          "Sign a short message to prove you own your wallet — it moves no funds.",
+          "",
+          "1. Tap *Sign with Nimiq* below.",
+          "2. Approve the signature in your wallet.",
+          "3. Come back and tap *I've signed*.",
+          "",
+          "💡 Best experience: open the link in *Nimiq Pay* (Mini Apps) to sign right in your wallet. No Nimiq Pay? It also works in any browser.",
+        ].join("\n"),
+      ),
+    verifyInstructionsLink: (url: string) =>
+      section(
+        "Link your wallet",
+        [
+          "Sign a short message to prove you own your wallet — it moves no funds.",
+          "",
+          "1. Open this link:",
+          `\`${url}\``,
+          "2. Approve the signature in your wallet.",
+          "3. Come back and tap *I've signed*.",
+          "",
+          "💡 Best experience: open it in *Nimiq Pay* (Mini Apps). It also works in any browser.",
+        ].join("\n"),
+      ),
     notVerifiedYet:
       "We haven't received your signed proof yet. Finish signing, then tap I've signed again.",
     verificationExpired:

@@ -6,7 +6,7 @@ const FIXED_NOW = new Date("2026-06-30T00:00:00.000Z");
 
 /** A stored (address-less) challenge + a valid proof; the signer's address is derived on confirm. */
 function buildSignedChallenge() {
-  const message = buildVerificationMessage("ABC123");
+  const message = buildVerificationMessage();
   const signed = signMessageWithRandomKey(message);
   return { address: signed.address, message, publicKey: signed.publicKey, signature: signed.signature };
 }
@@ -35,7 +35,7 @@ describe("wallet verification service", () => {
     const challenge = await service.startVerification("123");
 
     expect(challenge.token).toHaveLength(48);
-    expect(challenge.message).toContain(challenge.code);
+    expect(challenge.message).toContain("Link this wallet");
     expect(upsert).toHaveBeenCalled();
   });
 

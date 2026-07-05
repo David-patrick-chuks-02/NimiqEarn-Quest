@@ -46,7 +46,7 @@ describe("wallet routes", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.challenge.token).toBeTruthy();
-    expect(body.challenge.message).toContain(body.challenge.code);
+    expect(body.challenge.message).toContain("Link this wallet");
     expect(body.challenge.address).toBeUndefined();
     await app.close();
   });

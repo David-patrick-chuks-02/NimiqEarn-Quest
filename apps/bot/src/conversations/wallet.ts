@@ -81,8 +81,8 @@ export function createWalletConversation(api: ApiClient, webBaseUrl: string) {
     keyboard.text("I've signed", WALLET_VERIFY_CHECK).row().text("Cancel", NAV_CANCEL);
 
     const body = isHttpsLink
-      ? messages.wallet.verifyInstructions(challenge.code)
-      : messages.wallet.verifyInstructionsLink(challenge.code, signUrl);
+      ? messages.wallet.verifyInstructions()
+      : messages.wallet.verifyInstructionsLink(signUrl);
 
     await stepChat.prompt(body, { parse_mode: "Markdown", reply_markup: keyboard });
 

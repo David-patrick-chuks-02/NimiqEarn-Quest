@@ -188,8 +188,12 @@ export default function LinkWalletPage() {
     <Panel>
       <h1 className="text-xl font-bold text-white">Link your Nimiq wallet</h1>
       <p className="mt-3 text-sm text-[var(--brand-muted)]">
-        Choose a wallet and sign a short message to prove you own it. It moves no funds and
-        authorizes no transaction — the address is read from your signature.
+        Sign a short message to prove you own your wallet. It moves no funds and authorizes no
+        transaction — the address is read from your signature.
+      </p>
+      <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-[var(--brand-muted)]">
+        💡 Best experience: open this page in <span className="text-white">Nimiq Pay</span> (Mini
+        Apps) to sign right in your wallet. It also works in any browser.
       </p>
       <button
         onClick={sign}
