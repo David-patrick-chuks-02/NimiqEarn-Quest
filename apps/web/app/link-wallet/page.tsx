@@ -79,28 +79,40 @@ export default function LinkWalletPage() {
     setError("");
 
     try {
-      // Bundled Hub SDK, imported lazily so it only loads in the browser (opens the signing popup).
-      const mod = (await import("@nimiq/hub-api")) as unknown as {
-        default?: new (url: string) => HubLike;
-        HubApi?: new (url: string) => HubLike;
-      };
-      const HubApi = mod.default ?? mod.HubApi;
-      if (!HubApi) throw new Error("Could not load the Nimiq signing library.");
+      let publicKey: string;
+      let signature: string;
 
-      // No `signer` — the user picks which wallet to sign with; we derive the address from it.
-      const hub = new HubApi(HUB_URL);
-      const signed = await hub.signMessage({
-        appName: "NimiqEarn Quest",
-        message: challenge.message,
-      });
+      if (typeof window !== "undefined" && (window as WithNimiqPay).nimiqPay) {
+        // Inside Nimiq Pay: sign natively through the injected provider (native dialog, no web tab).
+        const { init } = await import("@nimiq/mini-app-sdk");
+        const nimiq = await init();
+        const signed = await nimiq.sign(challenge.message);
+        if ("error" in signed) {
+          throw new Error(signed.error.message || "Signing was cancelled.");
+        }
+        publicKey = signed.publicKey;
+        signature = signed.signature;
+      } else {
+        // Regular browser: use the Nimiq Hub popup. No `signer` — user picks the wallet.
+        const mod = (await import("@nimiq/hub-api")) as unknown as {
+          default?: new (url: string) => HubLike;
+          HubApi?: new (url: string) => HubLike;
+        };
+        const HubApi = mod.default ?? mod.HubApi;
+        if (!HubApi) throw new Error("Could not load the Nimiq signing library.");
+        const hub = new HubApi(HUB_URL);
+        const signed = await hub.signMessage({
+          appName: "NimiqEarn Quest",
+          message: challenge.message,
+        });
+        publicKey = toHex(signed.signerPublicKey);
+        signature = toHex(signed.signature);
+      }
 
       const res = await fetch(`${API_BASE}/api/wallet/verify/${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          publicKey: toHex(signed.signerPublicKey),
-          signature: toHex(signed.signature),
-        }),
+        body: JSON.stringify({ publicKey, signature }),
       });
 
       const body = (await res.json().catch(() => ({}))) as {
@@ -196,3 +208,6 @@ interface HubLike {
     signature: Uint8Array;
   }>;
 }
+
+// Nimiq Pay injects `window.nimiqPay` before the page's scripts run.
+type WithNimiqPay = Window & { nimiqPay?: unknown };
