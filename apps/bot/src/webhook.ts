@@ -41,14 +41,13 @@ export async function startWebhookServer(bot: Bot<BotContext>, env: WebhookBotEn
     secret_token: env.WEBHOOK_SECRET,
   });
 
+  // Prefer the platform-injected PORT (Render/Heroku/etc.); fall back to BOT_WEBHOOK_PORT locally.
+  const port = Number(process.env.PORT) || env.BOT_WEBHOOK_PORT;
   await new Promise<void>((resolve) => {
-    server.listen(env.BOT_WEBHOOK_PORT, "0.0.0.0", () => resolve());
+    server.listen(port, "0.0.0.0", () => resolve());
   });
 
-  logger.info(
-    { publicUrl, port: env.BOT_WEBHOOK_PORT },
-    "Webhook server listening — point ngrok at this port",
-  );
+  logger.info({ publicUrl, port }, "Webhook server listening");
 
   return { server, publicUrl };
 }
