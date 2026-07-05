@@ -24,10 +24,12 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / agent tooling
 .idea/
 .vscode/
 *.swp
+.agents/
+.claude/
 
 # Prisma
 packages/database/prisma/migrations/**/migration_lock.toml
