@@ -32,7 +32,11 @@ export interface WalletChallenge {
   expiresAt: Date;
 }
 
-export function createWalletService(db: PrismaClient, now: () => Date = () => new Date()) {
+export function createWalletService(
+  db: PrismaClient,
+  now: () => Date = () => new Date(),
+  onWalletLinked?: (telegramId: string, wallet: WalletProfile) => void,
+) {
   return {
     async getWalletsByTelegramId(telegramId: string): Promise<WalletProfile[] | null> {
       const user = await db.user.findUnique({
@@ -128,8 +132,9 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
         );
       }
 
+      let wallet: WalletProfile;
       try {
-        return await db.$transaction(async (tx) => {
+        wallet = await db.$transaction(async (tx) => {
           // Consume the challenge FIRST. Concurrent confirms on the same token serialize on
           // this row delete; only one sees count === 1, so no double-link / double-primary.
           const consumed = await tx.walletVerificationChallenge.deleteMany({
@@ -144,7 +149,7 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
 
           const existingCount = await tx.walletProfile.count({ where: { userId } });
 
-          const wallet = await tx.walletProfile.create({
+          const created = await tx.walletProfile.create({
             data: {
               userId,
               nimiqAddress: normalized,
@@ -162,7 +167,7 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
             data: { status: "ACTIVE" },
           });
 
-          return wallet;
+          return created;
         });
       } catch (error) {
         if ((error as { code?: string }).code === "P2002") {
@@ -173,6 +178,10 @@ export function createWalletService(db: PrismaClient, now: () => Date = () => ne
         }
         throw error;
       }
+
+      // Best-effort side-channel notification (e.g. "wallet connected" Telegram message).
+      onWalletLinked?.(challenge.user.telegramId, wallet);
+      return wallet;
     },
 
     async setPrimaryWallet(telegramId: string, walletId: string): Promise<WalletProfile[]> {

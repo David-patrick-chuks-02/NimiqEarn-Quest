@@ -7,7 +7,6 @@ import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
 import { createQuestConversation } from "./conversations/create-quest.js";
 import { createEditQuestConversation } from "./conversations/edit-quest.js";
-import { createWalletConversation } from "./conversations/wallet.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
@@ -34,7 +33,6 @@ export function createBot(env: BotEnv, logger: Logger) {
   );
   bot.use(conversations());
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
-  bot.use(createConversation(createWalletConversation(api, env.WEB_PUBLIC_URL), "wallet"));
   bot.use(createConversation(createQuestConversation(api), "createQuest"));
   bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
 
@@ -44,7 +42,7 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
-  registerWalletHandlers(bot, api);
+  registerWalletHandlers(bot, api, env.WEB_PUBLIC_URL);
   registerCreatorHandlers(bot, api);
   bot.use(fallbackMiddleware(logger));
 

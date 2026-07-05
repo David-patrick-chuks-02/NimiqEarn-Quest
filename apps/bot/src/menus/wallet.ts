@@ -2,7 +2,6 @@ import { InlineKeyboard, type Bot } from "grammy";
 import type { ApiClient, ApiWalletListItem } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
-import { hasActiveConversation } from "../utils/conversation.js";
 import { escapeMarkdown } from "../utils/markdown.js";
 import { CREATOR_CALLBACKS } from "./creator.js";
 
@@ -67,7 +66,9 @@ export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
   await ctx.reply(renderWalletList(wallets), { parse_mode: "Markdown", reply_markup: keyboard });
 }
 
-export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
+export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, webBaseUrl: string) {
+  const base = webBaseUrl.replace(/\/$/, "");
+
   const openWallet = async (ctx: BotContext) => {
     await ctx.answerCallbackQuery();
     try {
@@ -80,13 +81,37 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery(WALLET_CALLBACKS.open, openWallet);
 
+  // Create a signing challenge and hand the user a link. No "I've signed" step — the API
+  // pushes a "wallet connected" message here automatically once they sign.
   bot.callbackQuery(WALLET_CALLBACKS.link, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (hasActiveConversation(ctx)) {
-      await ctx.reply(messages.wallet.alreadyInProgress);
+    const from = ctx.from;
+    if (!from) {
+      await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
-    await ctx.conversation.enter("wallet");
+
+    let challenge;
+    try {
+      challenge = await api.startWalletChallenge(String(from.id));
+    } catch (error) {
+      console.error("Wallet challenge failed:", error);
+      await ctx.reply(messages.wallet.challengeFailed, { parse_mode: "Markdown" });
+      return;
+    }
+
+    const signUrl = `${base}/link-wallet?token=${encodeURIComponent(challenge.token)}`;
+    const isHttps = signUrl.startsWith("https://");
+
+    const keyboard = new InlineKeyboard();
+    if (isHttps) keyboard.url("Sign with Nimiq", signUrl).row();
+    keyboard.text("My Wallets", WALLET_CALLBACKS.open);
+
+    const body = isHttps
+      ? messages.wallet.verifyInstructions()
+      : messages.wallet.verifyInstructionsLink(signUrl);
+
+    await ctx.reply(body, { parse_mode: "Markdown", reply_markup: keyboard });
   });
 
   bot.callbackQuery(new RegExp(`^${WALLET_CALLBACKS.primaryPrefix}`), async (ctx) => {

@@ -59,7 +59,7 @@ export async function buildServer() {
   await app.register(healthRoutes);
   await app.register(statsRoutes);
   await app.register(userRoutes);
-  await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL });
+  await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL, botToken: env.BOT_TOKEN });
   await app.register(creatorRoutes);
   await app.register(questRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });

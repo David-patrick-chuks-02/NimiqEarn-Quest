@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { verifyWalletSchema } from "@nimiqearn/shared";
 import { fetchNimiqAccount } from "@nimiqearn/nimiq";
+import { sendTelegramMessage } from "../notify.js";
 import {
   createWalletService,
   toWalletListItem,
@@ -10,6 +11,7 @@ import {
 
 interface WalletRouteOptions {
   nimiqRpcUrl?: string;
+  botToken?: string;
 }
 
 function walletErrorStatus(code: WalletServiceError["code"]) {
@@ -40,8 +42,22 @@ function sendWalletError(reply: FastifyReply, error: unknown) {
 }
 
 export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, opts) => {
-  const wallets = createWalletService(app.db);
   const nimiqRpcUrl = opts.nimiqRpcUrl;
+  const botToken = opts.botToken;
+
+  // When the wallet links, push a "connected" message to the user in Telegram — so they
+  // don't have to tap anything after signing (in Nimiq Pay or a browser).
+  const onWalletLinked = botToken
+    ? (telegramId: string, wallet: { nimiqAddress: string }) => {
+        void sendTelegramMessage(
+          botToken,
+          telegramId,
+          `✅ *Wallet connected*\n\n\`${wallet.nimiqAddress}\` is now linked and verified. You're all set.`,
+        ).catch((err) => app.log.error({ err }, "wallet-linked notification failed"));
+      }
+    : undefined;
+
+  const wallets = createWalletService(app.db, undefined, onWalletLinked);
 
   // List all wallets for a user (primary first).
   app.get<{ Params: { telegramId: string } }>(
