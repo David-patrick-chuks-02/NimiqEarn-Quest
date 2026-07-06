@@ -77,6 +77,10 @@ model WalletVerificationChallenge {
   message      String   @db.Text
   expiresAt    DateTime @map("expires_at")
   createdAt    DateTime @default(now()) @map("created_at")
+  // Telegram message_id of the "Link your wallet" prompt, so linking can edit it in
+  // place ("Wallet connected") instead of sending a fresh message. chat_id == user's
+  // telegram id in a 1:1 chat, so we don't need to store it separately.
+  notifyMessageId Int? @map("notify_message_id")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

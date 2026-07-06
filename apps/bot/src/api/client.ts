@@ -98,6 +98,14 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.challenge!;
     },
 
+    /** Best-effort: tell the API which message to edit into a confirmation once the wallet links. */
+    async setWalletChallengeNotify(telegramId: string, messageId: number): Promise<void> {
+      await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/challenge/notify`,
+        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ messageId }) },
+      );
+    },
+
     async setPrimaryWallet(
       telegramId: string,
       walletId: string,

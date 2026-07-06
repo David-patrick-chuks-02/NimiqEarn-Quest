@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { verifyWalletSchema } from "@nimiqearn/shared";
 import { fetchNimiqAccount } from "@nimiqearn/nimiq";
-import { sendTelegramMessage } from "../notify.js";
+import { editTelegramMessage, sendTelegramMessage, type InlineKeyboardMarkup } from "../notify.js";
 import {
   createWalletService,
   toWalletListItem,
   toWalletResponse,
   WalletServiceError,
+  type WalletNotifyTarget,
 } from "../services/wallet.service.js";
 
 interface WalletRouteOptions {
@@ -45,13 +46,46 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
   const nimiqRpcUrl = opts.nimiqRpcUrl;
   const botToken = opts.botToken;
 
-  // When the wallet links, push a "connected" message to the user in Telegram — so they
+  // Buttons shown on the confirmation, so the user can jump straight back into the app.
+  // These callback_data values mirror the bot's WALLET_CALLBACKS.open / CREATOR_CALLBACKS.backToMenu.
+  const connectedKeyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [
+        { text: "My Wallets", callback_data: "wallet:open" },
+        { text: "Main Menu", callback_data: "creator:back-menu" },
+      ],
+    ],
+  };
+
+  // Deliver wallet feedback by editing the original "Link your wallet" prompt in place
+  // (chat_id == telegramId in a 1:1 chat). Falls back to a fresh message if that prompt
+  // is gone or was never recorded — so the user always gets confirmation.
+  const notifyWalletResult = async (token: string, target: WalletNotifyTarget, text: string) => {
+    if (!botToken) return;
+    if (target.messageId != null) {
+      try {
+        await editTelegramMessage(
+          botToken,
+          target.telegramId,
+          target.messageId,
+          text,
+          connectedKeyboard,
+        );
+        return;
+      } catch (err) {
+        app.log.warn({ err, token }, "wallet notification edit failed; sending fresh message");
+      }
+    }
+    await sendTelegramMessage(botToken, target.telegramId, text, connectedKeyboard);
+  };
+
+  // When the wallet links, turn the link prompt into a "connected" confirmation — so they
   // don't have to tap anything after signing (in Nimiq Pay or a browser).
   const onWalletLinked = botToken
-    ? (telegramId: string, wallet: { nimiqAddress: string }) => {
-        void sendTelegramMessage(
-          botToken,
-          telegramId,
+    ? (target: WalletNotifyTarget, wallet: { nimiqAddress: string }) => {
+        void notifyWalletResult(
+          "linked",
+          target,
           `✅ *Wallet connected*\n\n\`${wallet.nimiqAddress}\` is now linked and verified. You're all set.`,
         ).catch((err) => app.log.error({ err }, "wallet-linked notification failed"));
       }
@@ -60,10 +94,10 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
   // When a user re-signs a wallet they've already linked, confirm it in Telegram too
   // (mirrors the "already linked" screen on the web) instead of staying silent.
   const onWalletAlreadyLinked = botToken
-    ? (telegramId: string, wallet: { nimiqAddress: string }) => {
-        void sendTelegramMessage(
-          botToken,
-          telegramId,
+    ? (target: WalletNotifyTarget, wallet: { nimiqAddress: string }) => {
+        void notifyWalletResult(
+          "already-linked",
+          target,
           `ℹ️ *Wallet already linked*\n\n\`${wallet.nimiqAddress}\` is already linked to your account — you're all set.`,
         ).catch((err) => app.log.error({ err }, "wallet-already-linked notification failed"));
       }
@@ -128,6 +162,19 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
       } catch (error) {
         return sendWalletError(reply, error);
       }
+    },
+  );
+
+  // Step 1b: record the Telegram message_id of the link prompt, so linking edits it in place.
+  app.post<{ Params: { telegramId: string }; Body: { messageId?: number } }>(
+    "/api/users/:telegramId/wallet/challenge/notify",
+    async (request, reply) => {
+      const messageId = request.body?.messageId;
+      if (typeof messageId !== "number" || !Number.isInteger(messageId)) {
+        return reply.code(400).send({ error: "messageId (integer) is required" });
+      }
+      await wallets.setChallengeNotifyMessage(request.params.telegramId, messageId);
+      return { ok: true };
     },
   );
 

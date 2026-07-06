@@ -18,6 +18,7 @@ function challengeRow(message: string) {
     token: "tok",
     message,
     expiresAt: new Date(FIXED_NOW.getTime() + 60_000),
+    notifyMessageId: null,
     user: { id: "user-1", status: "PENDING", telegramId: "tg-1" },
   };
 }
@@ -131,7 +132,10 @@ describe("wallet verification service", () => {
     ).rejects.toMatchObject({ code: "ALREADY_LINKED" } satisfies Partial<WalletServiceError>);
 
     // The user still gets a Telegram confirmation even though it's a re-link.
-    expect(onAlreadyLinked).toHaveBeenCalledWith("tg-1", existingWallet);
+    expect(onAlreadyLinked).toHaveBeenCalledWith(
+      { telegramId: "tg-1", messageId: null },
+      existingWallet,
+    );
   });
 
   it("rejects a signature that does not match the challenge message", async () => {

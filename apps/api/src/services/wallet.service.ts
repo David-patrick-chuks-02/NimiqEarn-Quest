@@ -32,11 +32,17 @@ export interface WalletChallenge {
   expiresAt: Date;
 }
 
+/** Where to deliver the "wallet connected" feedback. In a 1:1 chat, chat_id == telegramId. */
+export interface WalletNotifyTarget {
+  telegramId: string;
+  messageId: number | null;
+}
+
 export function createWalletService(
   db: PrismaClient,
   now: () => Date = () => new Date(),
-  onWalletLinked?: (telegramId: string, wallet: WalletProfile) => void,
-  onWalletAlreadyLinked?: (telegramId: string, wallet: WalletProfile) => void,
+  onWalletLinked?: (target: WalletNotifyTarget, wallet: WalletProfile) => void,
+  onWalletAlreadyLinked?: (target: WalletNotifyTarget, wallet: WalletProfile) => void,
 ) {
   return {
     async getWalletsByTelegramId(telegramId: string): Promise<WalletProfile[] | null> {
@@ -71,6 +77,19 @@ export function createWalletService(
       });
 
       return { token, message, expiresAt };
+    },
+
+    /**
+     * Record the Telegram message_id of the "Link your wallet" prompt so that, once the
+     * wallet links, we edit that message in place instead of sending a fresh one.
+     */
+    async setChallengeNotifyMessage(telegramId: string, messageId: number): Promise<void> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) return;
+      await db.walletVerificationChallenge.updateMany({
+        where: { userId: user.id },
+        data: { notifyMessageId: messageId },
+      });
     },
 
     /** Returns the challenge details a signing page needs, or null if missing/expired. */
@@ -119,12 +138,17 @@ export function createWalletService(
       const userId = challenge.userId;
       const normalized = address;
 
+      const notifyTarget: WalletNotifyTarget = {
+        telegramId: challenge.user.telegramId,
+        messageId: challenge.notifyMessageId,
+      };
+
       const existing = await db.walletProfile.findUnique({ where: { nimiqAddress: normalized } });
       if (existing) {
         if (existing.userId === userId) {
           // Not a failure — the user re-proved a wallet they already own. Nudge them in
           // Telegram so they get the same "you're all set" feedback as a fresh link.
-          onWalletAlreadyLinked?.(challenge.user.telegramId, existing);
+          onWalletAlreadyLinked?.(notifyTarget, existing);
           throw new WalletServiceError(
             "This wallet is already linked to your account.",
             "ALREADY_LINKED",
@@ -184,7 +208,7 @@ export function createWalletService(
       }
 
       // Best-effort side-channel notification (e.g. "wallet connected" Telegram message).
-      onWalletLinked?.(challenge.user.telegramId, wallet);
+      onWalletLinked?.(notifyTarget, wallet);
       return wallet;
     },
 

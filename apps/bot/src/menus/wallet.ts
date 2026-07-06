@@ -119,7 +119,15 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, web
       ? messages.wallet.verifyInstructions()
       : messages.wallet.verifyInstructionsLink(signUrl);
 
-    await editOrReply(ctx, body, { parse_mode: "Markdown", reply_markup: keyboard });
+    const messageId = await editOrReply(ctx, body, { parse_mode: "Markdown", reply_markup: keyboard });
+
+    // Record this message so the API can edit it into a "Wallet connected" confirmation
+    // once the user signs — instead of sending a separate message. Best-effort.
+    if (messageId != null) {
+      await api.setWalletChallengeNotify(String(from.id), messageId).catch((error) => {
+        console.error("Failed to record wallet notify target:", error);
+      });
+    }
   });
 
   bot.callbackQuery(new RegExp(`^${WALLET_CALLBACKS.primaryPrefix}`), async (ctx) => {
