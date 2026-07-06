@@ -279,6 +279,14 @@ export const messages = {
         "Please link your Nimiq wallet with /wallet, then return to the Creator Hub.",
       ].join("\n"),
     ),
+    walletRequired: section(
+      "Link a wallet first",
+      [
+        "The Creator Hub needs a linked Nimiq wallet — it's where your payouts and refunds go.",
+        "",
+        "Paste your Nimiq address (starts with `NQ`) to link it in seconds, then come back.",
+      ].join("\n"),
+    ),
   },
 
   quest: {

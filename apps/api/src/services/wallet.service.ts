@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient, WalletProfile } from "@nimiqearn/database";
-import { buildVerificationMessage, recoverAddressFromSignedMessage } from "@nimiqearn/nimiq";
+import {
+  buildVerificationMessage,
+  recoverAddressFromSignedMessage,
+  validateNimiqAddress,
+} from "@nimiqearn/nimiq";
 
 const CHALLENGE_TTL_MS = 15 * 60 * 1000;
 
@@ -90,6 +94,75 @@ export function createWalletService(
         where: { userId: user.id },
         data: { notifyMessageId: messageId },
       });
+    },
+
+    /**
+     * Link a wallet by pasted address — a lighter alternative to the sign-to-prove flow.
+     * We validate the address format/checksum and link it; ownership isn't cryptographically
+     * proven, so this trades security for a much simpler onboarding UX.
+     */
+    async linkWalletByAddress(telegramId: string, rawAddress: string): Promise<WalletProfile> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new WalletServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      if (user.status === "SUSPENDED") {
+        throw new WalletServiceError("Account is suspended.", "SUSPENDED");
+      }
+
+      const validation = validateNimiqAddress(rawAddress);
+      if (!validation.valid || !validation.normalized) {
+        throw new WalletServiceError(
+          "That doesn't look like a valid Nimiq address.",
+          "INVALID_ADDRESS",
+        );
+      }
+      const normalized = validation.normalized;
+
+      const existing = await db.walletProfile.findUnique({ where: { nimiqAddress: normalized } });
+      if (existing) {
+        if (existing.userId === user.id) {
+          throw new WalletServiceError(
+            "This wallet is already linked to your account.",
+            "ALREADY_LINKED",
+          );
+        }
+        throw new WalletServiceError(
+          "This Nimiq address is already linked to another account.",
+          "ADDRESS_IN_USE",
+        );
+      }
+
+      try {
+        const wallet = await db.$transaction(async (tx) => {
+          const existingCount = await tx.walletProfile.count({ where: { userId: user.id } });
+          const created = await tx.walletProfile.create({
+            data: {
+              userId: user.id,
+              nimiqAddress: normalized,
+              status: "VERIFIED",
+              isPrimary: existingCount === 0,
+            },
+          });
+          await tx.walletAddressAudit.create({
+            data: { userId: user.id, oldAddress: null, newAddress: normalized },
+          });
+          await tx.user.updateMany({
+            where: { id: user.id, status: "PENDING" },
+            data: { status: "ACTIVE" },
+          });
+          return created;
+        });
+        return wallet;
+      } catch (error) {
+        if ((error as { code?: string }).code === "P2002") {
+          throw new WalletServiceError(
+            "This Nimiq address is already linked to another account.",
+            "ADDRESS_IN_USE",
+          );
+        }
+        throw error;
+      }
     },
 
     /** Returns the challenge details a signing page needs, or null if missing/expired. */

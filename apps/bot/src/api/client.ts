@@ -98,6 +98,23 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.challenge!;
     },
 
+    /** Link a wallet by pasted address (validated server-side; no signing). */
+    async linkWalletByAddress(telegramId: string, nimiqAddress: string): Promise<ApiWallet> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/link`,
+        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ nimiqAddress }) },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        wallet?: ApiWallet;
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) {
+        throw parseApiError(data, `Failed to link wallet (${response.status})`);
+      }
+      return data.wallet!;
+    },
+
     /** Best-effort: tell the API which message to edit into a confirmation once the wallet links. */
     async setWalletChallengeNotify(telegramId: string, messageId: number): Promise<void> {
       await fetch(

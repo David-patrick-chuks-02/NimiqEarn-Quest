@@ -6,6 +6,7 @@ import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
+import { createLinkWalletConversation } from "./conversations/link-wallet.js";
 import { createQuestConversation } from "./conversations/create-quest.js";
 import { createEditQuestConversation } from "./conversations/edit-quest.js";
 import type { Logger } from "./logger.js";
@@ -34,6 +35,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   );
   bot.use(conversations());
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
+  bot.use(createConversation(createLinkWalletConversation(api), "linkWallet"));
   bot.use(createConversation(createQuestConversation(api), "createQuest"));
   bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
 

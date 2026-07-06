@@ -130,6 +130,8 @@ model Quest {
   status             QuestStatus    @default(DRAFT)
   createdAt          DateTime       @default(now()) @map("created_at")
   publishedAt        DateTime?      @map("published_at")
+  // Analytics — incremented when a worker views the quest (worker discovery, M2).
+  viewCount          Int            @default(0) @map("view_count")
   // Per-quest escrow wallet: the creator funds this address with the total reward pool.
   // The private key is stored encrypted (AES-256-GCM); we only ever expose the address.
   escrowAddress       String?  @map("escrow_address")

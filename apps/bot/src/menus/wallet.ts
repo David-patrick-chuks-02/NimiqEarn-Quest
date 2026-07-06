@@ -4,14 +4,26 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { escapeMarkdown } from "../utils/markdown.js";
+import { hasActiveConversation } from "../utils/conversation.js";
 import { CREATOR_CALLBACKS } from "./creator.js";
 
 export const WALLET_CALLBACKS = {
   open: "wallet:open",
-  link: "wallet:link",
+  link: "wallet:link", // paste-to-link (primary)
+  sign: "wallet:sign", // prove ownership by signing (secondary)
   primaryPrefix: "wallet:primary:",
   unlinkPrefix: "wallet:unlink:",
 } as const;
+
+/** Keyboard shown when a user has no wallet yet — paste primary, sign secondary. */
+export function linkWalletPromptKeyboard() {
+  return new InlineKeyboard()
+    .text("➕ Paste wallet address", WALLET_CALLBACKS.link)
+    .row()
+    .text("🔐 Verify by signing instead", WALLET_CALLBACKS.sign)
+    .row()
+    .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
+}
 
 function walletMenuKeyboard(wallets: ApiWalletListItem[]) {
   const keyboard = new InlineKeyboard();
@@ -25,6 +37,7 @@ function walletMenuKeyboard(wallets: ApiWalletListItem[]) {
   });
 
   keyboard.text("➕ Link another wallet", WALLET_CALLBACKS.link).row();
+  keyboard.text("🔐 Verify by signing", WALLET_CALLBACKS.sign).row();
   keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
   return keyboard;
 }
@@ -57,12 +70,7 @@ export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
   }
 
   const wallets = user.wallets ?? [];
-  const keyboard = wallets.length
-    ? walletMenuKeyboard(wallets)
-    : new InlineKeyboard()
-        .text("➕ Link a wallet", WALLET_CALLBACKS.link)
-        .row()
-        .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
+  const keyboard = wallets.length ? walletMenuKeyboard(wallets) : linkWalletPromptKeyboard();
 
   // Edit the existing message when navigating via buttons so the chat isn't flooded
   // with a new wallet list on every tap; fall back to a fresh reply for /wallet.
@@ -87,9 +95,19 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, web
 
   bot.callbackQuery(WALLET_CALLBACKS.open, openWallet);
 
-  // Create a signing challenge and hand the user a link. No "I've signed" step — the API
-  // pushes a "wallet connected" message here automatically once they sign.
+  // Primary: paste-to-link. Enter the conversation that asks for the address and links it.
   bot.callbackQuery(WALLET_CALLBACKS.link, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (hasActiveConversation(ctx)) {
+      await ctx.reply(messages.wallet.alreadyInProgress);
+      return;
+    }
+    await ctx.conversation.enter("linkWallet");
+  });
+
+  // Secondary: prove ownership by signing. Creates a challenge and hands the user a link.
+  // The API pushes a "wallet connected" confirmation here automatically once they sign.
+  bot.callbackQuery(WALLET_CALLBACKS.sign, async (ctx) => {
     await ctx.answerCallbackQuery();
     const from = ctx.from;
     if (!from) {

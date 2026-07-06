@@ -35,6 +35,8 @@ interface Quest {
   deadline: string;
   status: "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
   escrowAddress: string | null;
+  viewCount: number;
+  publishedAt: string | null;
 }
 
 interface Funding {
@@ -554,14 +556,15 @@ function QuestList({
         return (
           <div key={q.id} className="glass rounded-xl p-4">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{q.title}</p>
-                <p className="mt-0.5 text-xs text-[var(--brand-muted)]">
-                  {Number(q.rewardAmount).toLocaleString()} NIM · {q.filledSlots}/{q.totalSlots}{" "}
-                  slots · pool {(Number(q.rewardAmount) * q.totalSlots).toLocaleString()} NIM
-                </p>
-              </div>
+              <p className="min-w-0 truncate text-sm font-semibold text-white">{q.title}</p>
               <StatusBadge status={q.status} />
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-4 gap-2">
+              <Metric label="Views" value={q.viewCount.toLocaleString()} />
+              <Metric label="Reward" value={Number(q.rewardAmount).toLocaleString()} />
+              <Metric label="Slots" value={`${q.filledSlots}/${q.totalSlots}`} />
+              <Metric label="Pool" value={(Number(q.rewardAmount) * q.totalSlots).toLocaleString()} />
             </div>
 
             {escrowSupported && (
@@ -659,6 +662,15 @@ function FundingPanel({
       >
         {checking ? "Checking…" : "↻ Refresh balance"}
       </button>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-white/[0.03] px-2 py-1.5 text-center">
+      <p className="text-sm font-bold text-white">{value}</p>
+      <p className="text-[0.6rem] uppercase tracking-wide text-[var(--brand-muted)]">{label}</p>
     </div>
   );
 }

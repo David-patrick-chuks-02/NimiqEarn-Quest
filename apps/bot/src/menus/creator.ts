@@ -4,6 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { sendMainMenu } from "./main.js";
+import { linkWalletPromptKeyboard } from "./wallet.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
 import { creatorQuestListKeyboard, formatCreatorQuestList } from "./quest-list.js";
@@ -26,16 +27,19 @@ function creatorStudioUrl(): string | null {
 }
 
 export function creatorHubKeyboard() {
-  const keyboard = new InlineKeyboard();
-
-  // A themed web form is a far better creation experience than the chat wizard; offer it
-  // first when available. The chat wizard stays as a universal fallback (and for HTTP dev).
+  // The Studio Mini App is the single surface for creating quests AND reviewing all of
+  // them with analytics — so when it's available we don't duplicate those as chat buttons.
   const studioUrl = creatorStudioUrl();
   if (studioUrl) {
-    keyboard.webApp("🎨 Open Creator Studio", studioUrl).row();
+    return new InlineKeyboard()
+      .webApp("🎨 Open Creator Studio", studioUrl)
+      .row()
+      .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
   }
 
-  return keyboard
+  // Fallback when the web app isn't served over HTTPS (web_app buttons require HTTPS) —
+  // e.g. local dev. Keeps the chat wizard reachable.
+  return new InlineKeyboard()
     .text("Create Quest", CREATOR_CALLBACKS.createQuest)
     .row()
     .text("My Quests", CREATOR_CALLBACKS.myQuests)
@@ -64,6 +68,16 @@ export async function openCreatorEntry(ctx: BotContext, api: ApiClient) {
   const user = await api.getUserByTelegramId(String(from.id));
   if (!user) {
     await ctx.reply(messages.creator.notRegistered, { parse_mode: "Markdown" });
+    return;
+  }
+
+  // Gate the Creator Hub behind a linked wallet — payouts and refunds need one.
+  const hasWallet = Boolean(user.wallet) || (user.wallets?.length ?? 0) > 0;
+  if (!hasWallet) {
+    await editOrReply(ctx, messages.creator.walletRequired, {
+      parse_mode: "Markdown",
+      reply_markup: linkWalletPromptKeyboard(),
+    });
     return;
   }
 

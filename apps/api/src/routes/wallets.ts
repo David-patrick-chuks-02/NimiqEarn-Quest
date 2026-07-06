@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
-import { verifyWalletSchema } from "@nimiqearn/shared";
+import { linkWalletSchema, verifyWalletSchema } from "@nimiqearn/shared";
 import { fetchNimiqAccount } from "@nimiqearn/nimiq";
 import { editTelegramMessage, sendTelegramMessage, type InlineKeyboardMarkup } from "../notify.js";
 import {
@@ -140,6 +140,26 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
       try {
         const list = await wallets.unlinkWallet(request.params.telegramId, request.params.walletId);
         return { wallets: list.map(toWalletListItem) };
+      } catch (error) {
+        return sendWalletError(reply, error);
+      }
+    },
+  );
+
+  // Link a wallet by pasted address (no signature). Validates format/checksum and links it.
+  app.post<{ Params: { telegramId: string } }>(
+    "/api/users/:telegramId/wallet/link",
+    async (request, reply) => {
+      const parsed = linkWalletSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "Invalid request", code: "INVALID_ADDRESS" });
+      }
+      try {
+        const wallet = await wallets.linkWalletByAddress(
+          request.params.telegramId,
+          parsed.data.nimiqAddress,
+        );
+        return { wallet: toWalletResponse(wallet) };
       } catch (error) {
         return sendWalletError(reply, error);
       }

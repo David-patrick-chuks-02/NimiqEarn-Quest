@@ -261,5 +261,6 @@ export function toQuestResponse(quest: Quest) {
     publishedAt: quest.publishedAt?.toISOString() ?? null,
     escrowAddress: quest.escrowAddress ?? null,
     fundedAt: quest.fundedAt?.toISOString() ?? null,
+    viewCount: quest.viewCount,
   };
 }
