@@ -11,6 +11,7 @@ import { questRoutes } from "./routes/quests.js";
 import { creatorRoutes } from "./routes/creators.js";
 import { walletRoutes } from "./routes/wallets.js";
 import { adminRoutes } from "./routes/admin.js";
+import { studioRoutes } from "./routes/studio.js";
 
 export async function buildServer() {
   const env = loadEnv();
@@ -58,6 +59,8 @@ export async function buildServer() {
     app.addHook("onRequest", async (request, reply) => {
       if (!request.url.startsWith("/api/")) return;
       if (request.url.startsWith("/api/wallet/verify/")) return;
+      // Creator Studio authenticates with verified Telegram Mini App initData instead.
+      if (request.url.startsWith("/api/studio/")) return;
       if (!safeCompare(request.headers["x-internal-key"], secret)) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
@@ -71,6 +74,7 @@ export async function buildServer() {
   await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL, botToken: env.BOT_TOKEN });
   await app.register(creatorRoutes);
   await app.register(questRoutes);
+  await app.register(studioRoutes, { botToken: env.BOT_TOKEN });
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 
   app.get("/", async () => ({

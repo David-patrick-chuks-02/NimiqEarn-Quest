@@ -13,10 +13,8 @@ if (process.env.NODE_ENV === "production") {
 // being able to reach the API host directly. Set API_INTERNAL_URL where the API actually is.
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
 
-const securityHeaders = [
+const baseSecurityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  // The signing page performs a sensitive action — never allow it to be framed (clickjacking).
-  { key: "X-Frame-Options", value: "DENY" },
   // Don't let the ?token= in the signing URL leak to third parties via Referer.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
@@ -26,13 +24,35 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   transpilePackages: ["@nimiqearn/shared"],
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      {
+        // The signing page performs a sensitive action — never allow it to be framed.
+        source: "/link-wallet",
+        headers: [...baseSecurityHeaders, { key: "X-Frame-Options", value: "DENY" }],
+      },
+      {
+        // Creator Studio is a Telegram Mini App — Telegram Web loads it in an iframe,
+        // so allow embedding by Telegram's origins (native app/webviews are unaffected).
+        source: "/studio",
+        headers: [
+          ...baseSecurityHeaders,
+          { key: "Content-Security-Policy", value: "frame-ancestors https://web.telegram.org https://*.telegram.org" },
+        ],
+      },
+      { source: "/:path*", headers: baseSecurityHeaders },
+    ];
   },
   async rewrites() {
     return [
       {
         source: "/api/wallet/verify/:path*",
         destination: `${API_INTERNAL_URL}/api/wallet/verify/:path*`,
+      },
+      {
+        // Creator Studio (Telegram Mini App) → API. Auth is the Mini App's initData,
+        // verified server-side; the browser only ever talks to the web origin.
+        source: "/api/studio/:path*",
+        destination: `${API_INTERNAL_URL}/api/studio/:path*`,
       },
     ];
   },

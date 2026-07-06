@@ -19,8 +19,23 @@ export const CREATOR_CALLBACKS = {
   backToMenu: "creator:back-menu",
 } as const;
 
+/** Studio Mini App URL — only usable over HTTPS (a Telegram requirement for web_app buttons). */
+function creatorStudioUrl(): string | null {
+  const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
+  return base.startsWith("https://") ? `${base}/studio` : null;
+}
+
 export function creatorHubKeyboard() {
-  return new InlineKeyboard()
+  const keyboard = new InlineKeyboard();
+
+  // A themed web form is a far better creation experience than the chat wizard; offer it
+  // first when available. The chat wizard stays as a universal fallback (and for HTTP dev).
+  const studioUrl = creatorStudioUrl();
+  if (studioUrl) {
+    keyboard.webApp("🎨 Open Creator Studio", studioUrl).row();
+  }
+
+  return keyboard
     .text("Create Quest", CREATOR_CALLBACKS.createQuest)
     .row()
     .text("My Quests", CREATOR_CALLBACKS.myQuests)
