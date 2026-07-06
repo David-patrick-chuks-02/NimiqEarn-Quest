@@ -2,6 +2,10 @@ import type { Bot } from "grammy";
 import type { BotContext } from "../context.js";
 import type { Logger } from "../logger.js";
 
+// NOTE: the bot's profile photo (avatar) cannot be set via the Bot API — there is no
+// setMyPhoto method. Set it once through @BotFather → /setuserpic, uploading the
+// square, circular-crop-safe logo at `assets/bot-avatar.png` (640×640).
+
 export const BOT_COMMANDS = [
   { command: "start", description: "Create your profile or open the main menu" },
   { command: "menu", description: "Open the main menu" },
