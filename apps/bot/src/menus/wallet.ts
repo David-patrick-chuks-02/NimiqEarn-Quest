@@ -2,6 +2,7 @@ import { InlineKeyboard, type Bot } from "grammy";
 import type { ApiClient, ApiWalletListItem } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
+import { editOrReply } from "../utils/edit-or-reply.js";
 import { escapeMarkdown } from "../utils/markdown.js";
 import { CREATOR_CALLBACKS } from "./creator.js";
 
@@ -63,7 +64,12 @@ export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
         .row()
         .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 
-  await ctx.reply(renderWalletList(wallets), { parse_mode: "Markdown", reply_markup: keyboard });
+  // Edit the existing message when navigating via buttons so the chat isn't flooded
+  // with a new wallet list on every tap; fall back to a fresh reply for /wallet.
+  await editOrReply(ctx, renderWalletList(wallets), {
+    parse_mode: "Markdown",
+    reply_markup: keyboard,
+  });
 }
 
 export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, webBaseUrl: string) {
@@ -104,14 +110,16 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, web
     const isHttps = signUrl.startsWith("https://");
 
     const keyboard = new InlineKeyboard();
-    if (isHttps) keyboard.url("Sign with Nimiq", signUrl).row();
+    if (isHttps) keyboard.url("🔗 Sign with Nimiq", signUrl).row();
+    // Copy the raw link so the user can paste it into Nimiq Pay or another browser.
+    keyboard.copyText("📋 Copy link", signUrl).row();
     keyboard.text("My Wallets", WALLET_CALLBACKS.open);
 
     const body = isHttps
       ? messages.wallet.verifyInstructions()
       : messages.wallet.verifyInstructionsLink(signUrl);
 
-    await ctx.reply(body, { parse_mode: "Markdown", reply_markup: keyboard });
+    await editOrReply(ctx, body, { parse_mode: "Markdown", reply_markup: keyboard });
   });
 
   bot.callbackQuery(new RegExp(`^${WALLET_CALLBACKS.primaryPrefix}`), async (ctx) => {

@@ -98,12 +98,12 @@ export const messages = {
         [
           "Sign a short message to prove you own your wallet — it moves no funds.",
           "",
-          "1. Tap *Sign with Nimiq* below.",
+          "1. Tap *🔗 Sign with Nimiq* below.",
           "2. Approve the signature in your wallet.",
           "",
           "You'll get a confirmation here automatically once it's connected — no need to come back and tap anything.",
           "",
-          "💡 Best experience: open the link in *Nimiq Pay* (Mini Apps) to sign right in your wallet. No Nimiq Pay? It also works in any browser.",
+          "💡 Best experience: tap *📋 Copy link* and open it in *Nimiq Pay* (Mini Apps) to sign right in your wallet. No Nimiq Pay? *🔗 Sign with Nimiq* works in any browser.",
         ].join("\n"),
       ),
     verifyInstructionsLink: (url: string) =>

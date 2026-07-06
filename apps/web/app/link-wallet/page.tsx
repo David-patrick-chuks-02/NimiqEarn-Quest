@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Same-origin: the web server proxies /api/wallet/verify/* to the API (see next.config.ts),
 // so the browser never makes a cross-origin request and doesn't need to reach the API directly.
@@ -47,6 +47,41 @@ export default function LinkWalletPage() {
     null,
   );
   const [error, setError] = useState("");
+  // Preloaded signers. The Nimiq Hub opens a popup, which browsers only allow from
+  // within a user gesture — if we `await import(...)` the SDK *inside* the click handler,
+  // the gesture is already gone and the popup is blocked ("failed to open popup"). So we
+  // load the SDK ahead of time and keep the signer here, ready to call synchronously.
+  const hubRef = useRef<HubLike | null>(null);
+  const nimiqPayRef = useRef<NimiqPaySigner | null>(null);
+  const [signerReady, setSignerReady] = useState(false);
+
+  // Preload the right signer as soon as the page mounts, before the user clicks.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (typeof window !== "undefined" && (window as WithNimiqPay).nimiqPay) {
+          const { init } = await import("@nimiq/mini-app-sdk");
+          const nimiq = (await init()) as unknown as NimiqPaySigner;
+          if (!cancelled) nimiqPayRef.current = nimiq;
+        } else {
+          const mod = (await import("@nimiq/hub-api")) as unknown as {
+            default?: new (url: string) => HubLike;
+            HubApi?: new (url: string) => HubLike;
+          };
+          const HubApi = mod.default ?? mod.HubApi;
+          if (HubApi && !cancelled) hubRef.current = new HubApi(HUB_URL);
+        }
+      } catch {
+        // Leave the refs empty — sign() falls back to a lazy import if preloading failed.
+      } finally {
+        if (!cancelled) setSignerReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("token");
@@ -82,31 +117,45 @@ export default function LinkWalletPage() {
       let publicKey: string;
       let signature: string;
 
-      if (typeof window !== "undefined" && (window as WithNimiqPay).nimiqPay) {
+      // Prefer the signer preloaded on mount so the Hub popup opens inside the click
+      // gesture (no `await` before signMessage). Fall back to a lazy import only if
+      // preloading hasn't finished or failed.
+      let nimiqPay = nimiqPayRef.current;
+      let hub = hubRef.current;
+      if (!nimiqPay && !hub) {
+        if (typeof window !== "undefined" && (window as WithNimiqPay).nimiqPay) {
+          const { init } = await import("@nimiq/mini-app-sdk");
+          nimiqPay = (await init()) as unknown as NimiqPaySigner;
+        } else {
+          const mod = (await import("@nimiq/hub-api")) as unknown as {
+            default?: new (url: string) => HubLike;
+            HubApi?: new (url: string) => HubLike;
+          };
+          const HubApi = mod.default ?? mod.HubApi;
+          if (!HubApi) throw new Error("Could not load the Nimiq signing library.");
+          hub = new HubApi(HUB_URL);
+        }
+      }
+
+      if (nimiqPay) {
         // Inside Nimiq Pay: sign natively through the injected provider (native dialog, no web tab).
-        const { init } = await import("@nimiq/mini-app-sdk");
-        const nimiq = await init();
-        const signed = await nimiq.sign(challenge.message);
+        const signed = await nimiqPay.sign(challenge.message);
         if ("error" in signed) {
           throw new Error(signed.error.message || "Signing was cancelled.");
         }
         publicKey = signed.publicKey;
         signature = signed.signature;
-      } else {
-        // Regular browser: use the Nimiq Hub popup. No `signer` — user picks the wallet.
-        const mod = (await import("@nimiq/hub-api")) as unknown as {
-          default?: new (url: string) => HubLike;
-          HubApi?: new (url: string) => HubLike;
-        };
-        const HubApi = mod.default ?? mod.HubApi;
-        if (!HubApi) throw new Error("Could not load the Nimiq signing library.");
-        const hub = new HubApi(HUB_URL);
+      } else if (hub) {
+        // Regular browser: open the Nimiq Hub popup. Called first thing in this gesture so
+        // the browser lets the popup through. No `signer` — the user picks the wallet.
         const signed = await hub.signMessage({
           appName: "NimiqEarn Quest",
           message: challenge.message,
         });
         publicKey = toHex(signed.signerPublicKey);
         signature = toHex(signed.signature);
+      } else {
+        throw new Error("Could not load the Nimiq signing library.");
       }
 
       const res = await fetch(`${API_BASE}/api/wallet/verify/${encodeURIComponent(token)}`, {
@@ -197,10 +246,14 @@ export default function LinkWalletPage() {
       </p>
       <button
         onClick={sign}
-        disabled={status === "signing"}
+        disabled={status === "signing" || !signerReady}
         className="mt-6 inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-6 py-3 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-gold-600)] disabled:opacity-60"
       >
-        {status === "signing" ? "Waiting for signature…" : "Sign with Nimiq"}
+        {status === "signing"
+          ? "Waiting for signature…"
+          : signerReady
+            ? "Sign with Nimiq"
+            : "Preparing signer…"}
       </button>
     </Panel>
   );
@@ -211,6 +264,13 @@ interface HubLike {
     signerPublicKey: Uint8Array;
     signature: Uint8Array;
   }>;
+}
+
+// The Nimiq Pay Mini App SDK's signer, injected inside the Nimiq Pay app.
+interface NimiqPaySigner {
+  sign(
+    message: string,
+  ): Promise<{ publicKey: string; signature: string } | { error: { message: string } }>;
 }
 
 // Nimiq Pay injects `window.nimiqPay` before the page's scripts run.

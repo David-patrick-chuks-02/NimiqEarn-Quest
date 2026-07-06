@@ -2,7 +2,8 @@ import { InlineKeyboard, type Bot } from "grammy";
 import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
-import { mainMenuKeyboard } from "./main.js";
+import { editOrReply } from "../utils/edit-or-reply.js";
+import { sendMainMenu } from "./main.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
 import { creatorQuestListKeyboard, formatCreatorQuestList } from "./quest-list.js";
@@ -56,7 +57,7 @@ export async function openCreatorEntry(ctx: BotContext, api: ApiClient) {
     return;
   }
 
-  await ctx.reply(messages.creator.invite, {
+  await editOrReply(ctx, messages.creator.invite, {
     parse_mode: "Markdown",
     reply_markup: creatorRegisterKeyboard(),
   });
@@ -91,7 +92,7 @@ export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
   if (!from) return;
 
   const dashboard = await api.getCreatorDashboard(String(from.id));
-  await ctx.reply(formatCreatorDashboard(dashboard), {
+  await editOrReply(ctx, formatCreatorDashboard(dashboard), {
     parse_mode: "Markdown",
     reply_markup: creatorHubKeyboard(),
   });
@@ -99,19 +100,20 @@ export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
 
 export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
   bot.callbackQuery(CREATOR_CALLBACKS.register, async (ctx) => {
-    await ctx.answerCallbackQuery();
-
     const from = ctx.from;
     if (!from) {
+      await ctx.answerCallbackQuery();
       await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
 
     try {
       await api.registerCreator(String(from.id));
-      await ctx.reply(messages.creator.welcome, { parse_mode: "Markdown" });
+      // Toast confirms the upgrade; the invite message edits straight into the hub.
+      await ctx.answerCallbackQuery({ text: "Creator account activated" });
       await sendCreatorHub(ctx, api);
     } catch (error) {
+      await ctx.answerCallbackQuery();
       const code = (error as Error & { code?: string }).code;
       if (code === "SUSPENDED") {
         await ctx.reply(messages.creator.suspended);
@@ -231,9 +233,6 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
   bot.callbackQuery(CREATOR_CALLBACKS.backToMenu, async (ctx) => {
     await ctx.answerCallbackQuery();
     const name = ctx.from?.first_name ?? "there";
-    await ctx.reply(messages.menu.greeting(name), {
-      parse_mode: "Markdown",
-      reply_markup: mainMenuKeyboard(),
-    });
+    await sendMainMenu(ctx, messages.menu.greeting(name));
   });
 }

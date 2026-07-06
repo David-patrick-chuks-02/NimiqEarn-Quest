@@ -2,7 +2,7 @@ import { InlineKeyboard, type Bot } from "grammy";
 import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
-import { helpCommand } from "../commands/help.js";
+import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
 import { formatWorkerStatus } from "./worker-status.js";
 import { renderWalletMenu } from "./wallet.js";
@@ -25,7 +25,9 @@ export function mainMenuKeyboard() {
 }
 
 export async function sendMainMenu(ctx: BotContext, greeting: string) {
-  await ctx.reply(greeting, {
+  // Edits the current message when reached via a button (single-message navigation);
+  // replies fresh for /start and /menu.
+  await editOrReply(ctx, greeting, {
     parse_mode: "Markdown",
     reply_markup: mainMenuKeyboard(),
   });
@@ -48,7 +50,7 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
         return;
       }
 
-      await ctx.reply(formatWorkerStatus(user), {
+      await editOrReply(ctx, formatWorkerStatus(user), {
         parse_mode: "Markdown",
         reply_markup: mainMenuKeyboard(),
       });
@@ -81,7 +83,10 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   bot.callbackQuery(MAIN_MENU_CALLBACKS.help, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await helpCommand(ctx);
-    await ctx.reply(messages.menu.returnPrompt, { reply_markup: mainMenuKeyboard() });
+    // Show help in place with the menu keyboard, instead of stacking two new messages.
+    await editOrReply(ctx, messages.help(ctx.me?.username), {
+      parse_mode: "Markdown",
+      reply_markup: mainMenuKeyboard(),
+    });
   });
 }
