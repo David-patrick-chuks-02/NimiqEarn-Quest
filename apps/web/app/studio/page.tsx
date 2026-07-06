@@ -34,6 +34,16 @@ interface Quest {
   filledSlots: number;
   deadline: string;
   status: "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
+  escrowAddress: string | null;
+}
+
+interface Funding {
+  supported: boolean;
+  escrowAddress?: string;
+  requiredNim?: number;
+  balanceNim?: number | null;
+  reachable?: boolean;
+  funded?: boolean;
 }
 
 interface Dashboard {
@@ -65,6 +75,9 @@ export default function StudioPage() {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [funding, setFunding] = useState<Record<string, Funding>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
   const initDataRef = useRef<string>("");
 
@@ -92,10 +105,46 @@ export default function StudioPage() {
     return body;
   }, []);
 
+  const loadFunding = useCallback(
+    async (id: string) => {
+      const f = (await api(`/api/studio/quests/${id}/funding`)) as unknown as Funding;
+      setFunding((prev) => ({ ...prev, [id]: f }));
+      return f;
+    },
+    [api],
+  );
+
   const loadQuests = useCallback(async () => {
     const body = (await api("/api/studio/quests")) as { quests?: Quest[] };
-    setQuests(body.quests ?? []);
-  }, [api]);
+    const list = body.quests ?? [];
+    setQuests(list);
+    // Pull escrow funding status for drafts so the creator can fund + publish.
+    await Promise.all(
+      list.filter((q) => q.status === "DRAFT" && q.escrowAddress).map((q) => loadFunding(q.id).catch(() => undefined)),
+    );
+  }, [api, loadFunding]);
+
+  const checkFunding = useCallback(
+    async (id: string) => {
+      setCheckingId(id);
+      try {
+        await loadFunding(id);
+      } finally {
+        setCheckingId(null);
+      }
+    },
+    [loadFunding],
+  );
+
+  const copyAddress = useCallback(async (id: string, address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+    } catch {
+      // Clipboard unavailable — the address is still shown for manual copy.
+    }
+  }, []);
 
   const refreshDashboard = useCallback(async () => {
     const me = (await api("/api/studio/me")) as { dashboard?: Dashboard };
@@ -398,7 +447,16 @@ export default function StudioPage() {
               </div>
             </form>
 
-            <QuestList quests={quests} publishingId={publishingId} onPublish={publish} />
+            <QuestList
+              quests={quests}
+              funding={funding}
+              publishingId={publishingId}
+              checkingId={checkingId}
+              copiedId={copiedId}
+              onPublish={publish}
+              onCheckFunding={checkFunding}
+              onCopy={copyAddress}
+            />
           </div>
         )}
       </main>
@@ -461,12 +519,22 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
 
 function QuestList({
   quests,
+  funding,
   publishingId,
+  checkingId,
+  copiedId,
   onPublish,
+  onCheckFunding,
+  onCopy,
 }: {
   quests: Quest[];
+  funding: Record<string, Funding>;
   publishingId: string | null;
+  checkingId: string | null;
+  copiedId: string | null;
   onPublish: (id: string) => void;
+  onCheckFunding: (id: string) => void;
+  onCopy: (id: string, address: string) => void;
 }) {
   if (quests.length === 0) {
     return (
@@ -478,29 +546,119 @@ function QuestList({
   return (
     <div className="space-y-2.5">
       <h2 className="text-base font-bold text-white">Your quests</h2>
-      {quests.map((q) => (
-        <div key={q.id} className="glass rounded-xl p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{q.title}</p>
-              <p className="mt-0.5 text-xs text-[var(--brand-muted)]">
-                {Number(q.rewardAmount).toLocaleString()} NIM · {q.filledSlots}/{q.totalSlots} slots ·
-                pool {(Number(q.rewardAmount) * q.totalSlots).toLocaleString()} NIM
-              </p>
+      {quests.map((q) => {
+        const f = funding[q.id];
+        const escrowSupported = q.status === "DRAFT" && f?.supported;
+        // Can publish if there's no escrow requirement, or the escrow is funded.
+        const canPublish = q.status === "DRAFT" && (!f?.supported || f?.funded === true);
+        return (
+          <div key={q.id} className="glass rounded-xl p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">{q.title}</p>
+                <p className="mt-0.5 text-xs text-[var(--brand-muted)]">
+                  {Number(q.rewardAmount).toLocaleString()} NIM · {q.filledSlots}/{q.totalSlots}{" "}
+                  slots · pool {(Number(q.rewardAmount) * q.totalSlots).toLocaleString()} NIM
+                </p>
+              </div>
+              <StatusBadge status={q.status} />
             </div>
-            <StatusBadge status={q.status} />
+
+            {escrowSupported && (
+              <FundingPanel
+                questId={q.id}
+                funding={f}
+                checking={checkingId === q.id}
+                copied={copiedId === q.id}
+                onCheck={() => onCheckFunding(q.id)}
+                onCopy={(addr) => onCopy(q.id, addr)}
+              />
+            )}
+
+            {q.status === "DRAFT" && (
+              <button
+                onClick={() => onPublish(q.id)}
+                disabled={publishingId === q.id || !canPublish}
+                className={`${primaryBtn} mt-3 w-full`}
+              >
+                {publishingId === q.id
+                  ? "Publishing…"
+                  : escrowSupported && !canPublish
+                    ? "Fund escrow to publish"
+                    : "Publish"}
+              </button>
+            )}
           </div>
-          {q.status === "DRAFT" && (
-            <button
-              onClick={() => onPublish(q.id)}
-              disabled={publishingId === q.id}
-              className={`${primaryBtn} mt-3 w-full`}
-            >
-              {publishingId === q.id ? "Publishing…" : "Publish"}
-            </button>
-          )}
-        </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+function FundingPanel({
+  funding,
+  checking,
+  copied,
+  onCheck,
+  onCopy,
+}: {
+  questId: string;
+  funding: Funding;
+  checking: boolean;
+  copied: boolean;
+  onCheck: () => void;
+  onCopy: (address: string) => void;
+}) {
+  const funded = funding.funded === true;
+  const balance = funding.balanceNim ?? 0;
+  const required = funding.requiredNim ?? 0;
+  const address = funding.escrowAddress ?? "";
+
+  return (
+    <div
+      className={`mt-3 rounded-xl border p-3.5 ${
+        funded
+          ? "border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/[0.07]"
+          : "border-white/10 bg-black/20"
+      }`}
+    >
+      {funded ? (
+        <p className="text-sm font-semibold text-[var(--brand-gold)]">✓ Escrow funded</p>
+      ) : (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+            Fund this quest
+          </p>
+          <p className="mt-1 text-sm text-white">
+            Send{" "}
+            <span className="font-bold text-[var(--brand-gold)]">
+              {required.toLocaleString()} NIM
+            </span>{" "}
+            to this quest&apos;s wallet to publish it.
+          </p>
+          <button
+            type="button"
+            onClick={() => onCopy(address)}
+            className="mt-2.5 w-full break-all rounded-lg border border-white/10 bg-[var(--brand-navy-700)] px-3 py-2 text-left text-xs text-white transition hover:border-[var(--brand-gold)]/40"
+          >
+            <span className="text-[var(--brand-muted)]">{copied ? "Copied ✓" : "Tap to copy"}</span>
+            <br />
+            {address}
+          </button>
+          <p className="mt-2 text-xs text-[var(--brand-muted)]">
+            Balance: {balance.toLocaleString()} / {required.toLocaleString()} NIM
+            {funding.reachable === false && " · balance check unavailable"}
+          </p>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={onCheck}
+        disabled={checking}
+        className="mt-2 text-xs font-semibold text-[var(--brand-gold)] disabled:opacity-60"
+      >
+        {checking ? "Checking…" : "↻ Refresh balance"}
+      </button>
     </div>
   );
 }

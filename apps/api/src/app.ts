@@ -12,6 +12,7 @@ import { creatorRoutes } from "./routes/creators.js";
 import { walletRoutes } from "./routes/wallets.js";
 import { adminRoutes } from "./routes/admin.js";
 import { studioRoutes } from "./routes/studio.js";
+import { createEscrowService } from "./services/escrow.service.js";
 
 export async function buildServer() {
   const env = loadEnv();
@@ -72,9 +73,14 @@ export async function buildServer() {
   await app.register(statsRoutes);
   await app.register(userRoutes);
   await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL, botToken: env.BOT_TOKEN });
+  const escrow = createEscrowService({
+    encryptionKey: env.ESCROW_ENCRYPTION_KEY,
+    rpcUrl: env.NIMIQ_RPC_URL,
+  });
+
   await app.register(creatorRoutes);
-  await app.register(questRoutes);
-  await app.register(studioRoutes, { botToken: env.BOT_TOKEN });
+  await app.register(questRoutes, { escrow });
+  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow });
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 
   app.get("/", async () => ({

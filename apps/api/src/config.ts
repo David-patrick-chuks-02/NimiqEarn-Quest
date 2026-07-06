@@ -13,8 +13,12 @@ const envSchema = z.object({
   ADMIN_API_KEY: z.string().optional(),
   // Shared secret for bot → API calls. When set, all /api routes require it.
   API_SHARED_SECRET: z.string().optional(),
-  // Nimiq Albatross JSON-RPC node. When set, wallet verification adds an on-chain balance check.
+  // Nimiq Albatross JSON-RPC node. When set, wallet verification adds an on-chain balance check
+  // and per-quest escrow funding can be verified.
   NIMIQ_RPC_URL: z.string().optional(),
+  // Encrypts per-quest escrow wallet private keys at rest. When set (with NIMIQ_RPC_URL),
+  // creating a quest provisions a funded-escrow wallet.
+  ESCROW_ENCRYPTION_KEY: z.string().optional(),
   // Sentry error monitoring. When empty, monitoring is disabled (local dev, tests, CI).
   SENTRY_DSN: z.string().optional(),
 });

@@ -130,6 +130,11 @@ model Quest {
   status             QuestStatus    @default(DRAFT)
   createdAt          DateTime       @default(now()) @map("created_at")
   publishedAt        DateTime?      @map("published_at")
+  // Per-quest escrow wallet: the creator funds this address with the total reward pool.
+  // The private key is stored encrypted (AES-256-GCM); we only ever expose the address.
+  escrowAddress       String?  @map("escrow_address")
+  escrowKeyCiphertext String?  @map("escrow_key_ciphertext") @db.Text
+  fundedAt            DateTime? @map("funded_at")
 
   creator User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 

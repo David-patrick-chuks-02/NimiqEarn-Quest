@@ -64,6 +64,19 @@ export function signMessageWithRandomKey(message: string): {
   };
 }
 
+/**
+ * Generate a fresh Nimiq keypair for a per-quest escrow wallet. The private key hex must
+ * be treated as a secret (encrypted at rest) — it controls the quest's funds.
+ */
+export function generateNimiqKeypair(): { address: string; privateKeyHex: string } {
+  const privateKey = PrivateKey.generate();
+  const publicKey = PublicKey.derive(privateKey);
+  return {
+    address: publicKey.toAddress().toUserFriendlyAddress(),
+    privateKeyHex: privateKey.toHex(),
+  };
+}
+
 export interface NimiqAccountInfo {
   /** Whether the RPC node was reachable and returned a result. */
   reachable: boolean;

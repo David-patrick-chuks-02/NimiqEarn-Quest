@@ -361,6 +361,8 @@ export const messages = {
       "Quest not found. Please refresh *My Quests* and try again.",
     publishDeadlinePassed:
       "This quest deadline has passed. Please create a new draft with a future date.",
+    publishNotFunded:
+      "This quest isn't funded yet. Open *🎨 Creator Studio* from the Creator Hub to fund its escrow wallet with the reward pool, then publish from there.",
     saveFailed:
       "The quest draft could not be saved. Please try again from the Creator Hub.",
     invalidQuest:

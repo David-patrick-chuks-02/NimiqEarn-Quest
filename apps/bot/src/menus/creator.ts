@@ -215,6 +215,10 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
         await ctx.reply(messages.quest.publishDeadlinePassed);
         return;
       }
+      if (code === "NOT_FUNDED") {
+        await ctx.reply(messages.quest.publishNotFunded, { parse_mode: "Markdown" });
+        return;
+      }
       console.error("Quest publish failed:", error);
       await ctx.reply(messages.quest.publishFailed);
     }

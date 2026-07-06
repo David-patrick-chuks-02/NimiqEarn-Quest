@@ -6,31 +6,27 @@ import {
   QuestServiceError,
   toQuestResponse,
 } from "../services/quest.service.js";
+import { questErrorStatus } from "./quests.js";
 import { createCreatorService, CreatorServiceError } from "../services/creator.service.js";
+import type { EscrowService } from "../services/escrow.service.js";
 
 interface StudioRouteOptions {
   botToken?: string;
-}
-
-type ServiceError = QuestServiceError | CreatorServiceError;
-
-function studioErrorStatus(code: ServiceError["code"]): number {
-  switch (code) {
-    case "USER_NOT_FOUND":
-    case "QUEST_NOT_FOUND":
-      return 404;
-    case "NOT_CREATOR":
-    case "SUSPENDED":
-    case "NOT_VERIFIED":
-      return 403;
-    default:
-      return 400;
-  }
+  escrow?: EscrowService;
 }
 
 function sendStudioError(reply: FastifyReply, error: unknown) {
-  if (error instanceof QuestServiceError || error instanceof CreatorServiceError) {
-    return reply.code(studioErrorStatus(error.code)).send({ error: error.message, code: error.code });
+  if (error instanceof QuestServiceError) {
+    return reply.code(questErrorStatus(error.code)).send({ error: error.message, code: error.code });
+  }
+  if (error instanceof CreatorServiceError) {
+    const status =
+      error.code === "USER_NOT_FOUND"
+        ? 404
+        : error.code === "NOT_CREATOR" || error.code === "SUSPENDED" || error.code === "NOT_VERIFIED"
+          ? 403
+          : 400;
+    return reply.code(status).send({ error: error.message, code: error.code });
   }
   throw error;
 }
@@ -53,7 +49,7 @@ function readInitData(request: FastifyRequest): string | null {
  */
 export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, opts) => {
   const botToken = opts.botToken;
-  const quests = createQuestService(app.db);
+  const quests = createQuestService(app.db, opts.escrow);
   const creators = createCreatorService(app.db);
 
   app.addHook("onRequest", async (request, reply) => {
@@ -125,6 +121,28 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       try {
         const quest = await quests.publishQuest(telegramId(request), request.params.questId);
         return { quest: toQuestResponse(quest) };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  // Live escrow funding status for a quest — the studio polls this to show the deposit
+  // address, amount due, current balance, and whether it's funded enough to publish.
+  app.get<{ Params: { questId: string } }>(
+    "/api/studio/quests/:questId/funding",
+    async (request, reply) => {
+      try {
+        const funding = await quests.getQuestFunding(telegramId(request), request.params.questId);
+        if (!funding) return { supported: false };
+        return {
+          supported: true,
+          escrowAddress: funding.address,
+          requiredNim: funding.requiredNim,
+          balanceNim: funding.balanceNim,
+          reachable: funding.reachable,
+          funded: funding.funded,
+        };
       } catch (error) {
         return sendStudioError(reply, error);
       }

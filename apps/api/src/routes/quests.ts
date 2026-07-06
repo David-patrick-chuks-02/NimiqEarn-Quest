@@ -5,8 +5,13 @@ import {
   QuestServiceError,
   toQuestResponse,
 } from "../services/quest.service.js";
+import type { EscrowService } from "../services/escrow.service.js";
 
-function questErrorStatus(code: QuestServiceError["code"]) {
+interface QuestRouteOptions {
+  escrow?: EscrowService;
+}
+
+export function questErrorStatus(code: QuestServiceError["code"]) {
   switch (code) {
     case "USER_NOT_FOUND":
     case "QUEST_NOT_FOUND":
@@ -15,13 +20,15 @@ function questErrorStatus(code: QuestServiceError["code"]) {
     case "SUSPENDED":
     case "NOT_VERIFIED":
       return 403;
+    case "NOT_FUNDED":
+      return 402;
     default:
       return 400;
   }
 }
 
-export const questRoutes: FastifyPluginAsync = async (app) => {
-  const quests = createQuestService(app.db);
+export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
+  const quests = createQuestService(app.db, opts.escrow);
 
   app.post<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/quests",

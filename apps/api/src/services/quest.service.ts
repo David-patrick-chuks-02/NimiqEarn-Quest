@@ -2,6 +2,7 @@ import type { PrismaClient, Quest } from "@nimiqearn/database";
 import type { CreateQuestInput, UpdateQuestInput } from "@nimiqearn/shared";
 import { createQuestSchema, questStatusSchema, updateQuestSchema } from "@nimiqearn/shared";
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
+import type { EscrowService, QuestFunding } from "./escrow.service.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -13,7 +14,8 @@ export class QuestServiceError extends Error {
       | "INVALID_QUEST"
       | "QUEST_NOT_FOUND"
       | "INVALID_STATUS"
-      | "NOT_VERIFIED",
+      | "NOT_VERIFIED"
+      | "NOT_FUNDED",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -24,7 +26,7 @@ function isCreatorRole(role: string) {
   return role === "CREATOR" || role === "ADMIN";
 }
 
-export function createQuestService(db: PrismaClient) {
+export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
   const profiles = createProfileService(db);
 
   return {
@@ -58,6 +60,10 @@ export function createQuestService(db: PrismaClient) {
         throw error;
       }
 
+      // Provision a dedicated escrow wallet for this quest, if escrow is configured. The
+      // creator funds it with the total reward pool before the quest can go live.
+      const wallet = escrow?.enabled ? escrow.createWallet() : null;
+
       return db.quest.create({
         data: {
           creatorId: user.id,
@@ -70,6 +76,8 @@ export function createQuestService(db: PrismaClient) {
           proofType: parsed.data.proofType,
           proofInstructions: parsed.data.proofInstructions,
           status: "DRAFT",
+          escrowAddress: wallet?.address ?? null,
+          escrowKeyCiphertext: wallet?.keyCiphertext ?? null,
         },
       });
     },
@@ -185,13 +193,51 @@ export function createQuestService(db: PrismaClient) {
         throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
       }
 
+      // A quest with an escrow wallet must be funded with the full reward pool before it
+      // goes live — this is where the creator "pays" for the quest.
+      let fundedAt: Date | null = null;
+      if (escrow?.enabled && quest.escrowAddress) {
+        const requiredLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
+        const funding = await escrow.getFunding(quest.escrowAddress, requiredLuna);
+        if (!funding.funded) {
+          throw new QuestServiceError(
+            "This quest's escrow wallet isn't fully funded yet.",
+            "NOT_FUNDED",
+          );
+        }
+        fundedAt = new Date();
+      }
+
       return db.quest.update({
         where: { id: quest.id },
         data: {
           status: "PUBLISHED",
           publishedAt: new Date(),
+          ...(fundedAt ? { fundedAt } : {}),
         },
       });
+    },
+
+    /** Live escrow funding status for a single quest the caller owns. */
+    async getQuestFunding(telegramId: string, questId: string): Promise<QuestFunding | null> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const quest = await db.quest.findFirst({ where: { id: questId, creatorId: user.id } });
+      if (!quest) {
+        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      }
+      if (!escrow?.enabled || !quest.escrowAddress) {
+        return null; // escrow not configured for this quest
+      }
+
+      const requiredLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
+      return escrow.getFunding(quest.escrowAddress, requiredLuna);
     },
   };
 }
@@ -213,5 +259,7 @@ export function toQuestResponse(quest: Quest) {
     status: quest.status,
     createdAt: quest.createdAt.toISOString(),
     publishedAt: quest.publishedAt?.toISOString() ?? null,
+    escrowAddress: quest.escrowAddress ?? null,
+    fundedAt: quest.fundedAt?.toISOString() ?? null,
   };
 }

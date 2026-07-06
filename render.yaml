@@ -44,7 +44,9 @@ services:
       - key: NIMIQ_NETWORK
         value: mainnet
       - key: NIMIQ_RPC_URL
-        sync: false # optional: a reachable Albatross RPC node for on-chain checks
+        sync: false # Albatross RPC node (balance checks + escrow funding). Testnet: https://rpc.testnet.nimiqwatch.com/
+      - key: ESCROW_ENCRYPTION_KEY
+        generateValue: true # encrypts per-quest escrow wallet keys at rest (generated once)
       - key: ADMIN_API_KEY
         sync: false # optional: enables /api/admin/* endpoints
       - key: SENTRY_DSN
