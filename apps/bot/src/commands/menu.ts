@@ -20,7 +20,7 @@ export function createMenuCommand(api: ApiClient) {
       }
 
       const name = user.displayName ?? from.first_name ?? "worker";
-      await sendMainMenu(ctx, messages.menu.greeting(name));
+      await sendMainMenu(ctx, api, messages.menu.greeting(name));
     } catch (error) {
       console.error("Menu lookup failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);

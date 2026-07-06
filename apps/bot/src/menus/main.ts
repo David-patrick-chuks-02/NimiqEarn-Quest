@@ -5,6 +5,7 @@ import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
 import { formatWorkerStatus } from "./worker-status.js";
+import { walletHeader } from "./wallet-summary.js";
 import { renderWalletMenu } from "./wallet.js";
 
 export const MAIN_MENU_CALLBACKS = {
@@ -24,10 +25,12 @@ export function mainMenuKeyboard() {
     .text("Help", MAIN_MENU_CALLBACKS.help);
 }
 
-export async function sendMainMenu(ctx: BotContext, greeting: string) {
+export async function sendMainMenu(ctx: BotContext, api: ApiClient, greeting: string) {
+  // Show the wallet balance + address at the top of the menu.
+  const header = ctx.from ? await walletHeader(api, String(ctx.from.id)) : "";
   // Edits the current message when reached via a button (single-message navigation);
   // replies fresh for /start and /menu.
-  await editOrReply(ctx, greeting, {
+  await editOrReply(ctx, header + greeting, {
     parse_mode: "Markdown",
     reply_markup: mainMenuKeyboard(),
   });
@@ -44,13 +47,15 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
     await ctx.answerCallbackQuery();
 
     try {
+      const from = ctx.from;
       const user = await lookupUser(ctx, api);
       if (!user) {
         await ctx.reply(messages.menu.notRegistered, { parse_mode: "Markdown" });
         return;
       }
 
-      await editOrReply(ctx, formatWorkerStatus(user), {
+      const header = from ? await walletHeader(api, String(from.id)) : "";
+      await editOrReply(ctx, header + formatWorkerStatus(user), {
         parse_mode: "Markdown",
         reply_markup: mainMenuKeyboard(),
       });

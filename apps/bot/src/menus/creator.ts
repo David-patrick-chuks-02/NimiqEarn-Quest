@@ -4,6 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { sendMainMenu } from "./main.js";
+import { walletHeader } from "./wallet-summary.js";
 import { walletSetupKeyboard } from "./wallet.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
@@ -120,8 +121,11 @@ export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
   const from = ctx.from;
   if (!from) return;
 
-  const dashboard = await api.getCreatorDashboard(String(from.id));
-  await editOrReply(ctx, formatCreatorDashboard(dashboard), {
+  const [dashboard, header] = await Promise.all([
+    api.getCreatorDashboard(String(from.id)),
+    walletHeader(api, String(from.id)),
+  ]);
+  await editOrReply(ctx, header + formatCreatorDashboard(dashboard), {
     parse_mode: "Markdown",
     reply_markup: creatorHubKeyboard(),
   });
@@ -266,6 +270,6 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
   bot.callbackQuery(CREATOR_CALLBACKS.backToMenu, async (ctx) => {
     await ctx.answerCallbackQuery();
     const name = ctx.from?.first_name ?? "there";
-    await sendMainMenu(ctx, messages.menu.greeting(name));
+    await sendMainMenu(ctx, api, messages.menu.greeting(name));
   });
 }

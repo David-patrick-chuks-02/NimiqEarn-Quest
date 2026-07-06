@@ -57,7 +57,7 @@ async function runStart(ctx: BotContext, api: ApiClient, payload: string) {
     const existing = await api.getUserByTelegramId(telegramId);
     if (existing) {
       const name = existing.displayName ?? from.first_name ?? "worker";
-      await sendMainMenu(ctx, messages.menu.greeting(name));
+      await sendMainMenu(ctx, api, messages.menu.greeting(name));
       return;
     }
   } catch (error) {
