@@ -69,6 +69,27 @@ export const messages = {
       .filter(Boolean)
       .join("\n"),
 
+  captcha: {
+    prompt: "🟢 Enter the characters shown above to verify you're human:",
+    incorrect: "❌ Incorrect CAPTCHA. Please try again.",
+    success: "✅ Verification complete. You can now access the bot!",
+  },
+
+  securityNotice: (botUsername?: string) =>
+    [
+      "⚠️ *SECURITY NOTICE — please read*",
+      "",
+      "*DO NOT CLICK any ads at the top of Telegram.* They are NOT from us and are most likely SCAMS.",
+      "",
+      'Telegram now shows ads inside bots without our approval. NimiqEarn Quest will *never* advertise airdrops, giveaways, "claim" links, external groups, or fee discounts.',
+      "",
+      "Our team, moderators and admins will *never* message you first, call you, or ask for your seed phrase or private keys.",
+      "",
+      botUsername
+        ? `Our only official bot is @${escapeMarkdown(botUsername)}. Please don't search Telegram for us — there are many impersonators.`
+        : "Please don't search Telegram for our bot — there are many impersonators.",
+    ].join("\n"),
+
   unknownCommand:
     "That command is not recognized. Send /help for available commands, or /menu to open the main menu.",
 
@@ -80,84 +101,62 @@ export const messages = {
   },
 
   wallet: {
-    notRegistered:
-      "A worker profile is required before linking a wallet. Please send /start to register.",
-    promptLink: section(
-      "Link your Nimiq wallet",
-      [
-        "Send your Nimiq payout address (starts with `NQ`).",
-        "",
-        "You'll then prove you own it by signing a quick message — no transaction, no fees.",
-        "",
-        "Paste the full address in chat, or tap *Cancel* to return.",
-      ].join("\n"),
+    noneYet: section(
+      "My Wallet",
+      "You don't have a wallet yet. Create one now to receive NIM payouts.",
     ),
-    verifyInstructions: () =>
-      section(
-        "Link your wallet",
-        [
-          "Sign a short message to prove you own your wallet — it moves no funds.",
-          "",
-          "1. Tap *🔗 Sign with Nimiq* below.",
-          "2. Approve the signature in your wallet.",
-          "",
-          "You'll get a confirmation here automatically once it's connected — no need to come back and tap anything.",
-          "",
-          "💡 Best experience: tap *📋 Copy link* and open it in *Nimiq Pay* (Mini Apps) to sign right in your wallet. No Nimiq Pay? *🔗 Sign with Nimiq* works in any browser.",
-        ].join("\n"),
-      ),
-    verifyInstructionsLink: (url: string) =>
-      section(
-        "Link your wallet",
-        [
-          "Sign a short message to prove you own your wallet — it moves no funds.",
-          "",
-          "1. Open this link:",
-          `\`${url}\``,
-          "2. Approve the signature in your wallet.",
-          "",
-          "You'll get a confirmation here automatically once it's connected.",
-          "",
-          "💡 Best experience: open it in *Nimiq Pay* (Mini Apps). It also works in any browser.",
-        ].join("\n"),
-      ),
-    notVerifiedYet:
-      "We haven't received your signed proof yet. Finish signing, then tap I've signed again.",
-    verificationExpired:
-      "This verification link expired. Please send /wallet to start again.",
-    challengeFailed:
-      "We could not start wallet verification. Please send /wallet to try again.",
-    promptUpdate: section(
-      "Update wallet address",
-      [
-        "Send the new Nimiq address you would like to use for payouts.",
+    custodialView: (address: string, balanceNim: number | null) => {
+      const lines = [
+        section("My Wallet", "This is your NimiqEarn wallet — rewards are paid to this address."),
         "",
-        "Paste the full address in chat, or tap *Cancel* to return.",
-      ].join("\n"),
+        "*Address*",
+        `\`${address}\``,
+      ];
+      if (balanceNim !== null) {
+        lines.push("", `*Balance:* ${balanceNim.toLocaleString()} NIM`);
+      }
+      lines.push(
+        "",
+        "Tap *Export private key* to back up or move your funds. Keep it secret — anyone with it controls this wallet.",
+      );
+      return lines.join("\n");
+    },
+    createFailed:
+      "We couldn't set up your wallet right now. Please try again in a moment from /wallet.",
+  },
+
+  withdraw: {
+    promptAddress: section(
+      "Withdraw NIM",
+      "Send the Nimiq address you want to withdraw to (starts with `NQ`).\n\nOr tap *Cancel* to go back.",
     ),
-    current: (address: string) =>
-      section("Current wallet", `\`${address}\``),
-    linked: (address: string) =>
-      [
-        section("Wallet linked", "Your profile is now verified and your account is active."),
-        "",
-        `*Payout address*\n\`${address}\``,
-        "",
-        "You will receive NIM rewards at this address when eligible quests are completed.",
-      ].join("\n"),
     invalidAddress:
-      "The address provided is not a valid Nimiq address. Please send an address starting with `NQ`, or send /wallet to try again.",
-    addressInUse:
-      "This Nimiq address is already linked to another account. Please use a different address.",
-    alreadyLinked:
-      "This wallet is already linked to your account. Open *My Wallets* to manage it.",
-    linkFailed:
-      "We could not save your wallet at this time. Please send /wallet to try again.",
-    timeout:
-      "Wallet linking timed out. Send /wallet when you are ready to continue.",
-    alreadyInProgress:
-      "A wallet flow is already in progress. Please complete or cancel it before starting again.",
-    cancelled: "Wallet linking was cancelled.",
+      "That doesn't look like a Nimiq address. Send one starting with `NQ`, or tap *Cancel*.",
+    promptAmount: section(
+      "Withdraw amount",
+      "How much NIM would you like to send? Enter an amount (e.g. `5`), or send `all` to withdraw everything.",
+    ),
+    invalidAmount: "Please enter a positive amount (e.g. `5`), or `all`.",
+    confirm: (address: string, amount: number | "all") =>
+      [
+        "*Confirm withdrawal*",
+        "",
+        `*Amount:* ${amount === "all" ? "your full balance" : `${amount.toLocaleString()} NIM`}`,
+        `*To:* \`${address}\``,
+        "",
+        "This sends NIM on-chain and *cannot be reversed*. Tap *✅ Confirm* to send.",
+      ].join("\n"),
+    success: (sentNim: number, address: string, hash: string) =>
+      [
+        section("Withdrawal sent ✓", `Sent *${sentNim.toLocaleString()} NIM* to:`),
+        `\`${address}\``,
+        "",
+        `*Transaction*\n\`${hash}\``,
+        "",
+        "It may take a few seconds to confirm on-chain.",
+      ].join("\n"),
+    timeout: "Withdrawal timed out. Send /wallet when you're ready.",
+    cancelled: "Withdrawal cancelled.",
   },
 
   onboarding: {
@@ -192,13 +191,11 @@ export const messages = {
       "Setup timed out. Send /start when you are ready to continue.",
     complete: (displayName: string) =>
       [
-        section("Profile created", `Welcome aboard, *${escapeMarkdown(displayName)}*.`),
+        section("You're all set", `Welcome aboard, *${escapeMarkdown(displayName)}*.`),
         "",
-        "Your worker profile has been saved.",
+        "Your worker profile and NimiqEarn wallet are ready — rewards are paid straight to your wallet.",
         "",
-        "*Next step:* link your Nimiq wallet with /wallet to verify your account.",
-        "",
-        "Use the menu below to continue.",
+        "Use the menu below to explore quests and manage your wallet.",
       ].join("\n"),
     alreadyInProgress:
       "Profile setup is already in progress. Please complete the steps above, or wait a moment and send /start again.",
@@ -225,25 +222,6 @@ export const messages = {
     ),
     sharedUnavailable:
       "That quest link is no longer available — it may be a draft, closed, or removed. Use the menu below to get started.",
-  },
-
-  walletMenu: {
-    header: section(
-      "My Wallets",
-      [
-        "Manage the Nimiq addresses that can receive your NIM payouts.",
-        "Your *primary* wallet is where rewards are sent.",
-        "",
-        "_Each address can be linked to only one account._",
-      ].join("\n"),
-    ),
-    empty: section(
-      "My Wallets",
-      "You haven't linked a Nimiq wallet yet. Link one to receive NIM payouts.",
-    ),
-    primarySet: "Primary wallet updated.",
-    unlinked: "Wallet unlinked.",
-    actionFailed: "That action failed. Please try again.",
   },
 
   menu: {
@@ -282,11 +260,11 @@ export const messages = {
       ].join("\n"),
     ),
     walletRequired: section(
-      "Link a wallet first",
+      "Set up your wallet first",
       [
-        "The Creator Hub needs a linked Nimiq wallet — it's where your payouts and refunds go.",
+        "The Creator Hub needs your NimiqEarn wallet — it's where payouts and refunds go.",
         "",
-        "Paste your Nimiq address (starts with `NQ`) to link it in seconds, then come back.",
+        "Create your wallet below, then come back.",
       ].join("\n"),
     ),
   },

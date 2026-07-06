@@ -18,12 +18,6 @@ export interface ApiWalletListItem {
   linkedAt: string;
 }
 
-export interface WalletChallenge {
-  token: string;
-  message: string;
-  expiresAt: string;
-}
-
 export interface PublicQuest {
   id: string;
   title: string;
@@ -96,23 +90,82 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.user;
     },
 
-    async startWalletChallenge(telegramId: string): Promise<WalletChallenge> {
+    /** Get-or-create the user's custodial wallet. Returns the private key ONCE (to show + save). */
+    async createCustodialWallet(
+      telegramId: string,
+    ): Promise<{ nimiqAddress: string; privateKey: string; created: boolean }> {
       const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/challenge`,
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/custodial`,
         { method: "POST", headers: authHeaders },
       );
-
       const data = (await response.json().catch(() => ({}))) as {
-        challenge?: WalletChallenge;
+        nimiqAddress?: string;
+        privateKey?: string;
+        created?: boolean;
         error?: string;
         code?: string;
       };
+      if (!response.ok) throw parseApiError(data, `Failed to create wallet (${response.status})`);
+      return {
+        nimiqAddress: data.nimiqAddress!,
+        privateKey: data.privateKey!,
+        created: Boolean(data.created),
+      };
+    },
 
-      if (!response.ok) {
-        throw parseApiError(data, `Failed to start wallet verification (${response.status})`);
-      }
+    /** Re-reveal (export) the user's custodial private key. */
+    async exportWalletKey(
+      telegramId: string,
+    ): Promise<{ nimiqAddress: string; privateKey: string }> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/export`,
+        { method: "POST", headers: authHeaders },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        nimiqAddress?: string;
+        privateKey?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) throw parseApiError(data, `Failed to export key (${response.status})`);
+      return { nimiqAddress: data.nimiqAddress!, privateKey: data.privateKey! };
+    },
 
-      return data.challenge!;
+    /** On-chain balance of the user's wallet, or null if they have none. */
+    async getWalletBalance(
+      telegramId: string,
+    ): Promise<{ nimiqAddress: string; balanceNim: number | null; reachable: boolean } | null> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/balance`,
+        { headers: authHeaders },
+      );
+      if (!response.ok) return null;
+      return (await response.json().catch(() => null)) as {
+        nimiqAddress: string;
+        balanceNim: number | null;
+        reachable: boolean;
+      } | null;
+    },
+
+    /** Withdraw NIM from the custodial wallet to an external address (amount NIM or "all"). */
+    async withdraw(
+      telegramId: string,
+      toAddress: string,
+      amount: number | "all",
+    ): Promise<{ hash: string; sentNim: number; recipient: string }> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/withdraw`,
+        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ toAddress, amount }) },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        hash?: string;
+        sentNim?: number;
+        recipient?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) throw parseApiError(data, `Withdrawal failed (${response.status})`);
+      return { hash: data.hash!, sentNim: data.sentNim!, recipient: data.recipient! };
     },
 
     /** Public: fetch a shared (published) quest by id, or null if unavailable. */
@@ -124,66 +177,6 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       if (!response.ok) return null;
       const data = (await response.json().catch(() => ({}))) as { quest?: PublicQuest };
       return data.quest ?? null;
-    },
-
-    /** Link a wallet by pasted address (validated server-side; no signing). */
-    async linkWalletByAddress(telegramId: string, nimiqAddress: string): Promise<ApiWallet> {
-      const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/link`,
-        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ nimiqAddress }) },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        wallet?: ApiWallet;
-        error?: string;
-        code?: string;
-      };
-      if (!response.ok) {
-        throw parseApiError(data, `Failed to link wallet (${response.status})`);
-      }
-      return data.wallet!;
-    },
-
-    /** Best-effort: tell the API which message to edit into a confirmation once the wallet links. */
-    async setWalletChallengeNotify(telegramId: string, messageId: number): Promise<void> {
-      await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/challenge/notify`,
-        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ messageId }) },
-      );
-    },
-
-    async setPrimaryWallet(
-      telegramId: string,
-      walletId: string,
-    ): Promise<ApiWalletListItem[]> {
-      const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallets/${encodeURIComponent(walletId)}/primary`,
-        { method: "POST", headers: authHeaders },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        wallets?: ApiWalletListItem[];
-        error?: string;
-        code?: string;
-      };
-      if (!response.ok) {
-        throw parseApiError(data, `Failed to set primary wallet (${response.status})`);
-      }
-      return data.wallets ?? [];
-    },
-
-    async unlinkWallet(telegramId: string, walletId: string): Promise<ApiWalletListItem[]> {
-      const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallets/${encodeURIComponent(walletId)}`,
-        { method: "DELETE", headers: authHeaders },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        wallets?: ApiWalletListItem[];
-        error?: string;
-        code?: string;
-      };
-      if (!response.ok) {
-        throw parseApiError(data, `Failed to unlink wallet (${response.status})`);
-      }
-      return data.wallets ?? [];
     },
 
     async registerCreator(telegramId: string): Promise<ApiUser> {

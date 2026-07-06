@@ -4,7 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { sendMainMenu } from "./main.js";
-import { linkWalletPromptKeyboard } from "./wallet.js";
+import { walletSetupKeyboard } from "./wallet.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { formatCreatorDashboard } from "./creator-dashboard.js";
 import { creatorQuestListKeyboard, formatCreatorQuestList } from "./quest-list.js";
@@ -76,7 +76,7 @@ export async function openCreatorEntry(ctx: BotContext, api: ApiClient) {
   if (!hasWallet) {
     await editOrReply(ctx, messages.creator.walletRequired, {
       parse_mode: "Markdown",
-      reply_markup: linkWalletPromptKeyboard(),
+      reply_markup: walletSetupKeyboard(),
     });
     return;
   }

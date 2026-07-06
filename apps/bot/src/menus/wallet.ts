@@ -1,61 +1,42 @@
 import { InlineKeyboard, type Bot } from "grammy";
-import type { ApiClient, ApiWalletListItem } from "../api/client.js";
+import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
-import { escapeMarkdown } from "../utils/markdown.js";
+import { deleteMessageSafe } from "../utils/chat-cleanup.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { CREATOR_CALLBACKS } from "./creator.js";
+import { sendWalletReveal, WALLET_REVEAL_DISMISS } from "./wallet-reveal.js";
 
 export const WALLET_CALLBACKS = {
   open: "wallet:open",
-  link: "wallet:link", // paste-to-link (primary)
-  sign: "wallet:sign", // prove ownership by signing (secondary)
-  primaryPrefix: "wallet:primary:",
-  unlinkPrefix: "wallet:unlink:",
+  create: "wallet:create",
+  export: "wallet:export",
+  withdraw: "wallet:withdraw",
+  refresh: "wallet:refresh",
+  dismiss: WALLET_REVEAL_DISMISS,
 } as const;
 
-/** Keyboard shown when a user has no wallet yet — paste primary, sign secondary. */
-export function linkWalletPromptKeyboard() {
+/** Prompt shown when a user needs a wallet (e.g. the Creator Hub gate). */
+export function walletSetupKeyboard() {
   return new InlineKeyboard()
-    .text("➕ Paste wallet address", WALLET_CALLBACKS.link)
-    .row()
-    .text("🔐 Verify by signing instead", WALLET_CALLBACKS.sign)
+    .text("🔐 Create my wallet", WALLET_CALLBACKS.create)
     .row()
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
-function walletMenuKeyboard(wallets: ApiWalletListItem[]) {
-  const keyboard = new InlineKeyboard();
-
-  wallets.forEach((wallet, index) => {
-    const n = index + 1;
-    if (!wallet.isPrimary) {
-      keyboard.text(`⭐ Make #${n} primary`, `${WALLET_CALLBACKS.primaryPrefix}${wallet.id}`);
-    }
-    keyboard.text(`🗑 Unlink #${n}`, `${WALLET_CALLBACKS.unlinkPrefix}${wallet.id}`).row();
-  });
-
-  keyboard.text("➕ Link another wallet", WALLET_CALLBACKS.link).row();
-  keyboard.text("🔐 Verify by signing", WALLET_CALLBACKS.sign).row();
-  keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
-  return keyboard;
+function custodialWalletKeyboard(address: string) {
+  return new InlineKeyboard()
+    .copyText("📋 Copy address", address)
+    .text("💸 Withdraw", WALLET_CALLBACKS.withdraw)
+    .row()
+    .text("🔑 Export private key", WALLET_CALLBACKS.export)
+    .text("↻ Refresh", WALLET_CALLBACKS.refresh)
+    .row()
+    .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
-function renderWalletList(wallets: ApiWalletListItem[]): string {
-  if (wallets.length === 0) {
-    return messages.walletMenu.empty;
-  }
-
-  const lines = wallets.map((wallet, index) => {
-    const badge = wallet.isPrimary ? " ⭐ *Primary*" : "";
-    return `${index + 1}. \`${escapeMarkdown(wallet.nimiqAddress)}\`${badge}`;
-  });
-
-  return [messages.walletMenu.header, "", ...lines].join("\n");
-}
-
-/** Fetches the user's wallets and renders the management view. */
+/** Renders the user's custodial wallet (address + balance), or a create prompt. */
 export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
   const from = ctx.from;
   if (!from) {
@@ -69,20 +50,31 @@ export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
     return;
   }
 
-  const wallets = user.wallets ?? [];
-  const keyboard = wallets.length ? walletMenuKeyboard(wallets) : linkWalletPromptKeyboard();
+  const wallet = user.wallet ?? user.wallets?.[0] ?? null;
+  if (!wallet) {
+    await editOrReply(ctx, messages.wallet.noneYet, {
+      parse_mode: "Markdown",
+      reply_markup: walletSetupKeyboard(),
+    });
+    return;
+  }
 
-  // Edit the existing message when navigating via buttons so the chat isn't flooded
-  // with a new wallet list on every tap; fall back to a fresh reply for /wallet.
-  await editOrReply(ctx, renderWalletList(wallets), {
+  // Best-effort on-chain balance.
+  let balanceNim: number | null = null;
+  try {
+    const balance = await api.getWalletBalance(String(from.id));
+    if (balance?.reachable) balanceNim = balance.balanceNim;
+  } catch (error) {
+    console.error("Wallet balance lookup failed:", error);
+  }
+
+  await editOrReply(ctx, messages.wallet.custodialView(wallet.nimiqAddress, balanceNim), {
     parse_mode: "Markdown",
-    reply_markup: keyboard,
+    reply_markup: custodialWalletKeyboard(wallet.nimiqAddress),
   });
 }
 
-export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, webBaseUrl: string) {
-  const base = webBaseUrl.replace(/\/$/, "");
-
+export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
   const openWallet = async (ctx: BotContext) => {
     await ctx.answerCallbackQuery();
     try {
@@ -94,100 +86,56 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient, web
   };
 
   bot.callbackQuery(WALLET_CALLBACKS.open, openWallet);
+  bot.callbackQuery(WALLET_CALLBACKS.refresh, openWallet);
 
-  // Primary: paste-to-link. Enter the conversation that asks for the address and links it.
-  bot.callbackQuery(WALLET_CALLBACKS.link, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    if (hasActiveConversation(ctx)) {
-      await ctx.reply(messages.wallet.alreadyInProgress);
-      return;
-    }
-    await ctx.conversation.enter("linkWallet");
-  });
-
-  // Secondary: prove ownership by signing. Creates a challenge and hands the user a link.
-  // The API pushes a "wallet connected" confirmation here automatically once they sign.
-  bot.callbackQuery(WALLET_CALLBACKS.sign, async (ctx) => {
+  // Create the custodial wallet on demand (recovery path; onboarding already creates one).
+  bot.callbackQuery(WALLET_CALLBACKS.create, async (ctx) => {
     await ctx.answerCallbackQuery();
     const from = ctx.from;
     if (!from) {
       await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
-
-    let challenge;
     try {
-      challenge = await api.startWalletChallenge(String(from.id));
+      const wallet = await api.createCustodialWallet(String(from.id));
+      await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
+      await renderWalletMenu(ctx, api);
     } catch (error) {
-      console.error("Wallet challenge failed:", error);
-      await ctx.reply(messages.wallet.challengeFailed, { parse_mode: "Markdown" });
-      return;
-    }
-
-    const signUrl = `${base}/link-wallet?token=${encodeURIComponent(challenge.token)}`;
-    const isHttps = signUrl.startsWith("https://");
-
-    const keyboard = new InlineKeyboard();
-    if (isHttps) keyboard.url("🔗 Sign with Nimiq", signUrl).row();
-    // Copy the raw link so the user can paste it into Nimiq Pay or another browser.
-    keyboard.copyText("📋 Copy link", signUrl).row();
-    keyboard.text("My Wallets", WALLET_CALLBACKS.open);
-
-    const body = isHttps
-      ? messages.wallet.verifyInstructions()
-      : messages.wallet.verifyInstructionsLink(signUrl);
-
-    const messageId = await editOrReply(ctx, body, { parse_mode: "Markdown", reply_markup: keyboard });
-
-    // Record this message so the API can edit it into a "Wallet connected" confirmation
-    // once the user signs — instead of sending a separate message. Best-effort.
-    if (messageId != null) {
-      await api.setWalletChallengeNotify(String(from.id), messageId).catch((error) => {
-        console.error("Failed to record wallet notify target:", error);
-      });
+      console.error("Custodial wallet create failed:", error);
+      await ctx.reply(messages.wallet.createFailed);
     }
   });
 
-  bot.callbackQuery(new RegExp(`^${WALLET_CALLBACKS.primaryPrefix}`), async (ctx) => {
-    const from = ctx.from;
-    const walletId = ctx.callbackQuery.data?.slice(WALLET_CALLBACKS.primaryPrefix.length);
-    if (!from || !walletId) {
-      await ctx.answerCallbackQuery();
+  // Withdraw NIM to an external address (multi-step conversation).
+  bot.callbackQuery(WALLET_CALLBACKS.withdraw, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (hasActiveConversation(ctx)) {
+      await ctx.reply(messages.errors.rateLimited);
       return;
     }
-
-    try {
-      await api.setPrimaryWallet(String(from.id), walletId);
-    } catch (error) {
-      console.error("Set primary wallet failed:", error);
-      await ctx.answerCallbackQuery({ text: messages.walletMenu.actionFailed });
-      return;
-    }
-    await ctx.answerCallbackQuery({ text: messages.walletMenu.primarySet });
-    // Re-render separately so a refresh blip can't trigger a second answerCallbackQuery.
-    await renderWalletMenu(ctx, api).catch((error) => {
-      console.error("Wallet menu refresh failed:", error);
-    });
+    await ctx.conversation.enter("withdraw");
   });
 
-  bot.callbackQuery(new RegExp(`^${WALLET_CALLBACKS.unlinkPrefix}`), async (ctx) => {
+  // Re-reveal the private key (export). Same spoiler + delete-after-saved treatment.
+  bot.callbackQuery(WALLET_CALLBACKS.export, async (ctx) => {
+    await ctx.answerCallbackQuery();
     const from = ctx.from;
-    const walletId = ctx.callbackQuery.data?.slice(WALLET_CALLBACKS.unlinkPrefix.length);
-    if (!from || !walletId) {
-      await ctx.answerCallbackQuery();
+    if (!from) {
+      await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
-
     try {
-      await api.unlinkWallet(String(from.id), walletId);
+      const wallet = await api.exportWalletKey(String(from.id));
+      await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
     } catch (error) {
-      console.error("Unlink wallet failed:", error);
-      await ctx.answerCallbackQuery({ text: messages.walletMenu.actionFailed });
-      return;
+      console.error("Wallet export failed:", error);
+      await ctx.reply(messages.wallet.createFailed);
     }
-    await ctx.answerCallbackQuery({ text: messages.walletMenu.unlinked });
-    await renderWalletMenu(ctx, api).catch((error) => {
-      console.error("Wallet menu refresh failed:", error);
-    });
+  });
+
+  // "I've saved it" — remove the key message from the chat.
+  bot.callbackQuery(WALLET_CALLBACKS.dismiss, async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Removed. Keep your key safe." });
+    await deleteMessageSafe(ctx, ctx.chat?.id, ctx.callbackQuery.message?.message_id);
   });
 }

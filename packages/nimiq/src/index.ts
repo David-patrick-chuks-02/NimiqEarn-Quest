@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Address, PrivateKey, PublicKey, Signature } from "@nimiq/core";
+import { Address, KeyPair, PrivateKey, PublicKey, Signature, TransactionBuilder } from "@nimiq/core";
 
 export function validateNimiqAddress(address: string): {
   valid: boolean;
@@ -75,6 +75,92 @@ export function generateNimiqKeypair(): { address: string; privateKeyHex: string
     address: publicKey.toAddress().toUserFriendlyAddress(),
     privateKeyHex: privateKey.toHex(),
   };
+}
+
+/** Numeric Albatross network id used when building transactions. */
+export function networkIdFor(network: string | undefined): number {
+  return network === "mainnet" ? 24 : 5; // MainAlbatross / TestAlbatross
+}
+
+export interface BasicTxParams {
+  privateKeyHex: string;
+  /** Recipient, user-friendly Nimiq address ("NQ..."). */
+  recipient: string;
+  valueLuna: bigint;
+  feeLuna?: bigint;
+  validityStartHeight: number;
+  networkId: number;
+}
+
+/**
+ * Build and sign a basic NIM transfer entirely offline (we hold the custodial key).
+ * Returns the raw serialized transaction hex to broadcast, plus its hash.
+ */
+export function buildBasicTransaction(params: BasicTxParams): { hex: string; hash: string } {
+  const keyPair = KeyPair.derive(PrivateKey.fromHex(params.privateKeyHex));
+  const tx = TransactionBuilder.newBasic(
+    keyPair.toAddress(),
+    Address.fromUserFriendlyAddress(params.recipient),
+    params.valueLuna,
+    params.feeLuna ?? 0n,
+    params.validityStartHeight,
+    params.networkId,
+  );
+  tx.sign(keyPair, undefined);
+  return { hex: tx.toHex(), hash: tx.hash() };
+}
+
+async function rpcCall(
+  rpcUrl: string,
+  method: string,
+  params: unknown[],
+  timeoutMs: number,
+): Promise<{ result?: unknown; error?: { message?: string } } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as { result?: unknown; error?: { message?: string } };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Albatross wraps results as { result: { data, metadata } }; some proxies flatten it.
+function unwrap(result: unknown): unknown {
+  if (result && typeof result === "object" && "data" in result) {
+    return (result as { data: unknown }).data;
+  }
+  return result;
+}
+
+/** Current block height (used as a transaction's validity start height), or null. */
+export async function getRpcBlockNumber(rpcUrl: string, timeoutMs = 5000): Promise<number | null> {
+  const json = await rpcCall(rpcUrl, "getBlockNumber", [], timeoutMs);
+  if (!json || json.error) return null;
+  const value = unwrap(json.result);
+  return typeof value === "number" ? value : null;
+}
+
+/** Broadcast a signed raw transaction. Returns the tx hash, or an error message. */
+export async function sendRawTransaction(
+  rpcUrl: string,
+  txHex: string,
+  timeoutMs = 8000,
+): Promise<{ hash?: string; error?: string }> {
+  const json = await rpcCall(rpcUrl, "sendRawTransaction", [txHex], timeoutMs);
+  if (!json) return { error: "The Nimiq network node was unreachable." };
+  if (json.error) return { error: json.error.message ?? "The network rejected the transaction." };
+  const value = unwrap(json.result);
+  return typeof value === "string" ? { hash: value } : { error: "Unexpected node response." };
 }
 
 export interface NimiqAccountInfo {

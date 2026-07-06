@@ -11,16 +11,18 @@ const LIMIT = 5;
 const WINDOW_SEC = 60;
 
 /**
- * Detects entry into a sensitive flow: linking a wallet, or creating/editing a quest.
- * Steps inside an active conversation are consumed by the conversations plugin before
- * this middleware runs, so only the flow entry points are throttled. (Opening the wallet
- * or quest menus is not throttled — only the flows that create/verify are.)
+ * Detects entry into a sensitive flow: creating a wallet, revealing/exporting the private
+ * key, or creating/editing a quest. Steps inside an active conversation are consumed by the
+ * conversations plugin before this middleware runs, so only entry points are throttled.
+ * (Opening the wallet or quest menus is not throttled — only the sensitive actions are.)
  */
 function isSensitive(ctx: BotContext): boolean {
   const data = ctx.callbackQuery?.data;
   if (!data) return false;
   return (
-    data === WALLET_CALLBACKS.link ||
+    data === WALLET_CALLBACKS.create ||
+    data === WALLET_CALLBACKS.export ||
+    data === WALLET_CALLBACKS.withdraw ||
     data === CREATOR_CALLBACKS.createQuest ||
     data.startsWith(QUEST_EDIT_CALLBACK_PREFIX)
   );

@@ -4,11 +4,12 @@ import { captureException } from "@nimiqearn/observability";
 import { createApiClient } from "./api/client.js";
 import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
+import { createCaptchaGuard } from "./commands/start.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
-import { createLinkWalletConversation } from "./conversations/link-wallet.js";
 import { createQuestConversation } from "./conversations/create-quest.js";
 import { createEditQuestConversation } from "./conversations/edit-quest.js";
+import { createWithdrawConversation } from "./conversations/withdraw.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
@@ -35,9 +36,13 @@ export function createBot(env: BotEnv, logger: Logger) {
   );
   bot.use(conversations());
   bot.use(createConversation(createOnboardingConversation(api), "onboarding"));
-  bot.use(createConversation(createLinkWalletConversation(api), "linkWallet"));
   bot.use(createConversation(createQuestConversation(api), "createQuest"));
   bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
+  bot.use(createConversation(createWithdrawConversation(api), "withdraw"));
+
+  // Human-verification gate — until a user solves the image CAPTCHA, everything they send is
+  // consumed here (anti-spam). Placed after conversations() so ctx.conversation is available.
+  bot.use(createCaptchaGuard(api));
 
   // Throttle sensitive flow entries (wallet linking, quest creation/editing).
   // Placed after conversations() so in-flow steps are consumed before this runs.
@@ -45,7 +50,7 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
-  registerWalletHandlers(bot, api, env.WEB_PUBLIC_URL);
+  registerWalletHandlers(bot, api);
   registerCreatorHandlers(bot, api);
   bot.use(fallbackMiddleware(logger));
 

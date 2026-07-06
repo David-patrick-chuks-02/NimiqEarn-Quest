@@ -59,7 +59,6 @@ export async function buildServer() {
     const secret = env.API_SHARED_SECRET;
     app.addHook("onRequest", async (request, reply) => {
       if (!request.url.startsWith("/api/")) return;
-      if (request.url.startsWith("/api/wallet/verify/")) return;
       // Creator Studio authenticates with verified Telegram Mini App initData instead.
       if (request.url.startsWith("/api/studio/")) return;
       // Public shareable quest pages (GET /api/quests/:id) — no secret needed.
@@ -74,7 +73,11 @@ export async function buildServer() {
   await app.register(healthRoutes);
   await app.register(statsRoutes);
   await app.register(userRoutes);
-  await app.register(walletRoutes, { nimiqRpcUrl: env.NIMIQ_RPC_URL, botToken: env.BOT_TOKEN });
+  await app.register(walletRoutes, {
+    nimiqRpcUrl: env.NIMIQ_RPC_URL,
+    encryptionKey: env.ESCROW_ENCRYPTION_KEY,
+    network: env.NIMIQ_NETWORK,
+  });
   const escrow = createEscrowService({
     encryptionKey: env.ESCROW_ENCRYPTION_KEY,
     rpcUrl: env.NIMIQ_RPC_URL,

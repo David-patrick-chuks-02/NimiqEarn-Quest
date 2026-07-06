@@ -64,27 +64,9 @@ model User {
 
   walletProfiles WalletProfile[]
   walletAudits  WalletAddressAudit[]
-  walletChallenge WalletVerificationChallenge?
   quests        Quest[]
 
   @@map("users")
-}
-
-model WalletVerificationChallenge {
-  id           String   @id @default(uuid()) @db.Uuid
-  userId       String   @unique @map("user_id") @db.Uuid
-  token        String   @unique
-  message      String   @db.Text
-  expiresAt    DateTime @map("expires_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-  // Telegram message_id of the "Link your wallet" prompt, so linking can edit it in
-  // place ("Wallet connected") instead of sending a fresh message. chat_id == user's
-  // telegram id in a 1:1 chat, so we don't need to store it separately.
-  notifyMessageId Int? @map("notify_message_id")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("wallet_verification_challenges")
 }
 
 model WalletProfile {
@@ -93,12 +75,17 @@ model WalletProfile {
   nimiqAddress String       @unique @map("nimiq_address")
   status       WalletStatus @default(PENDING)
   isPrimary    Boolean      @default(false) @map("is_primary")
+  // Custodial wallets: the private key, encrypted at rest (AES-256-GCM). Null for
+  // externally-linked (non-custodial) wallets. Never leaves the server.
+  keyCiphertext String?     @map("key_ciphertext") @db.Text
   linkedAt     DateTime     @default(now()) @map("linked_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  // One wallet per user (custodial model). Also serialises concurrent wallet creation:
+  // a racing insert hits this constraint instead of creating a duplicate.
+  @@unique([userId])
   @@map("wallet_profiles")
 }
 
