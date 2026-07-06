@@ -9,8 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nimiq/hub-api": "^1.14.0",
-    "@nimiq/mini-app-sdk": "^0.1.0",
     "@nimiqearn/shared": "workspace:*",
     "@sentry/nextjs": "^10.63.0",
     "@vercel/analytics": "^2.0.1",

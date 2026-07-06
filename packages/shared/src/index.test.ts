@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createQuestSchema, createUserSchema, linkWalletSchema } from "./index.js";
+import { createQuestSchema, createUserSchema } from "./index.js";
 
 describe("createUserSchema", () => {
   it("accepts a valid telegram user payload", () => {
@@ -13,13 +13,6 @@ describe("createUserSchema", () => {
 
   it("rejects an empty telegram id", () => {
     const result = createUserSchema.safeParse({ telegramId: "" });
-    expect(result.success).toBe(false);
-  });
-});
-
-describe("linkWalletSchema", () => {
-  it("rejects a too-short wallet address", () => {
-    const result = linkWalletSchema.safeParse({ nimiqAddress: "short" });
     expect(result.success).toBe(false);
   });
 });

@@ -8,14 +8,12 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 
-// The web server proxies the wallet-verify endpoints to the API so the browser only ever
-// talks to the web origin — no cross-origin fetch, no CORS, no reliance on the client
-// being able to reach the API host directly. Set API_INTERNAL_URL where the API actually is.
+// The web server proxies the Creator Studio API to the API host so the browser only ever
+// talks to the web origin. Set API_INTERNAL_URL where the API actually is.
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
 
 const baseSecurityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  // Don't let the ?token= in the signing URL leak to third parties via Referer.
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
@@ -25,11 +23,6 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@nimiqearn/shared"],
   async headers() {
     return [
-      {
-        // The signing page performs a sensitive action — never allow it to be framed.
-        source: "/link-wallet",
-        headers: [...baseSecurityHeaders, { key: "X-Frame-Options", value: "DENY" }],
-      },
       {
         // Creator Studio is a Telegram Mini App — Telegram Web loads it in an iframe,
         // so allow embedding by Telegram's origins (native app/webviews are unaffected).
@@ -44,10 +37,6 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
-      {
-        source: "/api/wallet/verify/:path*",
-        destination: `${API_INTERNAL_URL}/api/wallet/verify/:path*`,
-      },
       {
         // Creator Studio (Telegram Mini App) → API. Auth is the Mini App's initData,
         // verified server-side; the browser only ever talks to the web origin.

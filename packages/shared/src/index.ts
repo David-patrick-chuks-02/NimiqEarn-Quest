@@ -30,21 +30,6 @@ export const createUserSchema = z.object({
   displayName: z.string().optional(),
 });
 
-// User-friendly Nimiq addresses look like "NQxx XXXX ..." (uppercase base32 + spaces).
-export const linkWalletSchema = z.object({
-  nimiqAddress: z
-    .string()
-    .min(10)
-    .max(120)
-    .regex(/^NQ[0-9A-Z ]+$/i, "Expected a Nimiq address"),
-});
-
-// Proof returned by a Nimiq wallet after signing the verification challenge.
-const hexString = z.string().regex(/^[0-9a-fA-F]+$/, "Expected a hex string");
-export const verifyWalletSchema = z.object({
-  publicKey: hexString.min(64).max(64),
-  signature: hexString.min(128).max(128),
-});
 
 // reward_amount is stored as Decimal(18, 8): max 10 integer digits, 8 fractional.
 const MAX_REWARD_AMOUNT = 1_000_000_000; // 1e9, comfortably within the Decimal range
@@ -77,8 +62,6 @@ export const createQuestSchema = z.object({
 export const updateQuestSchema = createQuestSchema.partial();
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
-export type LinkWalletInput = z.infer<typeof linkWalletSchema>;
-export type VerifyWalletInput = z.infer<typeof verifyWalletSchema>;
 export type CreateQuestInput = z.infer<typeof createQuestSchema>;
 export type UpdateQuestInput = z.infer<typeof updateQuestSchema>;
 
