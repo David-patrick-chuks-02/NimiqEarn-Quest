@@ -68,6 +68,14 @@ export default function StudioPage() {
   const [registering, setRegistering] = useState(false);
   const initDataRef = useRef<string>("");
 
+  // Total reward pool the creator funds = reward per completion × number of taskers.
+  const reward = Number(form.rewardAmount);
+  const slots = Number(form.totalSlots);
+  const totalCost =
+    Number.isFinite(reward) && Number.isFinite(slots) && reward > 0 && slots > 0
+      ? reward * slots
+      : null;
+
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(path, {
       ...init,
@@ -370,6 +378,20 @@ export default function StudioPage() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between rounded-xl border border-[var(--brand-gold)]/25 bg-[var(--brand-gold)]/[0.07] px-3.5 py-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">
+                      Total reward pool
+                    </p>
+                    <p className="text-[0.7rem] text-[var(--brand-muted)]">
+                      {reward > 0 && slots > 0 ? `${reward.toLocaleString()} NIM × ${slots} taskers` : "reward × taskers"}
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-[var(--brand-gold)]">
+                    {totalCost != null ? `${totalCost.toLocaleString()} NIM` : "—"}
+                  </p>
+                </div>
+
                 <button type="submit" disabled={submitting} className={`${primaryBtn} w-full`}>
                   {submitting ? "Saving…" : "Save draft"}
                 </button>
@@ -462,7 +484,8 @@ function QuestList({
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{q.title}</p>
               <p className="mt-0.5 text-xs text-[var(--brand-muted)]">
-                {Number(q.rewardAmount).toLocaleString()} NIM · {q.filledSlots}/{q.totalSlots} slots
+                {Number(q.rewardAmount).toLocaleString()} NIM · {q.filledSlots}/{q.totalSlots} slots ·
+                pool {(Number(q.rewardAmount) * q.totalSlots).toLocaleString()} NIM
               </p>
             </div>
             <StatusBadge status={q.status} />
