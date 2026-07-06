@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // L8: warn loudly if public URLs are left at their placeholders in a production build.
 if (process.env.NODE_ENV === "production") {
@@ -37,4 +38,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry wraps the build to instrument the app and (when SENTRY_AUTH_TOKEN is set)
+// upload source maps. Without a DSN/token at runtime the SDK is a no-op, so this is
+// safe to keep on in every environment.
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI,
+  // Only uploads source maps when SENTRY_AUTH_TOKEN is present; otherwise skipped.
+  telemetry: false,
+});

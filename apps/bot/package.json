@@ -12,6 +12,7 @@
   "dependencies": {
     "@grammyjs/conversations": "^2.1.1",
     "@grammyjs/storage-redis": "^2.5.1",
+    "@nimiqearn/observability": "workspace:*",
     "@nimiqearn/shared": "workspace:*",
     "dotenv": "^16.5.0",
     "grammy": "^1.36.3",

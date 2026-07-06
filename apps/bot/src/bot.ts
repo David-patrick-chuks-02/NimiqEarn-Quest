@@ -1,5 +1,6 @@
 import { Bot, session } from "grammy";
 import { conversations, createConversation } from "@grammyjs/conversations";
+import { captureException } from "@nimiqearn/observability";
 import { createApiClient } from "./api/client.js";
 import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
@@ -48,6 +49,10 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   bot.catch((error) => {
     logger.error({ err: error.error ?? error }, "bot error");
+    captureException(error.error ?? error, {
+      updateId: error.ctx?.update.update_id,
+      from: error.ctx?.from?.id,
+    });
     error.ctx?.reply(messages.errors.generic).catch(() => undefined);
   });
 

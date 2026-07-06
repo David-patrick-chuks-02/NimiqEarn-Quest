@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import { captureException, initSentry } from "@nimiqearn/observability";
 import { loadEnv } from "./config.js";
 import { safeCompare } from "./security.js";
 import prismaPlugin from "./plugins/prisma.js";
@@ -13,6 +14,13 @@ import { adminRoutes } from "./routes/admin.js";
 
 export async function buildServer() {
   const env = loadEnv();
+
+  // Error monitoring — no-op unless SENTRY_DSN is set (dev, tests, and CI stay clean).
+  initSentry({
+    dsn: env.SENTRY_DSN,
+    environment: env.APP_ENV,
+    serverName: "nimiqearn-api",
+  });
 
   const app = Fastify({
     logger: {
@@ -35,6 +43,7 @@ export async function buildServer() {
     const statusCode = typeof raw === "number" && raw >= 400 && raw < 600 ? raw : 500;
     if (statusCode >= 500) {
       request.log.error({ err: error }, "unhandled request error");
+      captureException(error, { url: request.url, method: request.method });
       return reply.code(500).send({ error: "Internal Server Error" });
     }
     return reply.code(statusCode).send({ error: (error as Error).message });

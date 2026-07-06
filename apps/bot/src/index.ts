@@ -1,5 +1,6 @@
 import "./env.js";
 import { APP_NAME } from "@nimiqearn/shared";
+import { captureException, flushSentry, initSentry } from "@nimiqearn/observability";
 import { createBot } from "./bot.js";
 import { isWebhookMode, loadBotEnv } from "./config.js";
 import { createLogger } from "./logger.js";
@@ -16,6 +17,13 @@ async function main() {
     );
     process.exit(0);
   }
+
+  // Error monitoring — no-op unless SENTRY_DSN is set (dev, tests, and CI stay clean).
+  initSentry({
+    dsn: env.SENTRY_DSN,
+    environment: env.NODE_ENV,
+    serverName: "nimiqearn-bot",
+  });
 
   const logger = createLogger(env);
   const { bot } = createBot(env, logger);
@@ -36,7 +44,9 @@ async function main() {
   await bot.start();
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error("Failed to start bot:", error);
+  captureException(error, { phase: "startup" });
+  await flushSentry();
   process.exit(1);
 });

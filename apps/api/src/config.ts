@@ -15,6 +15,8 @@ const envSchema = z.object({
   API_SHARED_SECRET: z.string().optional(),
   // Nimiq Albatross JSON-RPC node. When set, wallet verification adds an on-chain balance check.
   NIMIQ_RPC_URL: z.string().optional(),
+  // Sentry error monitoring. When empty, monitoring is disabled (local dev, tests, CI).
+  SENTRY_DSN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

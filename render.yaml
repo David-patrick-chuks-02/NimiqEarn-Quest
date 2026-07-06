@@ -47,6 +47,8 @@ services:
         sync: false # optional: a reachable Albatross RPC node for on-chain checks
       - key: ADMIN_API_KEY
         sync: false # optional: enables /api/admin/* endpoints
+      - key: SENTRY_DSN
+        sync: false # optional: enables Sentry error monitoring for the API
 
   # ------------------------------------------------------------------------------- Bot (grammY, poll)
   - type: worker
@@ -71,6 +73,8 @@ services:
       - key: WEB_PUBLIC_URL
         value: https://nimiqearn-web.onrender.com
       - fromGroup: nimiqearn-secrets # provides API_SHARED_SECRET (must match the API)
+      - key: SENTRY_DSN
+        sync: false # optional: enables Sentry error monitoring for the bot
       # WEBHOOK_URL intentionally unset → the bot uses long polling (no public URL needed).
 
   # ------------------------------------------------------------------------------- Web (Next.js)
@@ -92,6 +96,10 @@ services:
         value: https://hub.nimiq.com # use https://hub.nimiq-testnet.com for testnet
       - key: NEXT_PUBLIC_CONTACT_EMAIL
         sync: false # optional
+      - key: SENTRY_DSN
+        sync: false # optional: server-side Sentry error monitoring for the web app
+      - key: NEXT_PUBLIC_SENTRY_DSN
+        sync: false # optional: browser-side Sentry error monitoring for the web app
 
 envVarGroups:
   - name: nimiqearn-secrets

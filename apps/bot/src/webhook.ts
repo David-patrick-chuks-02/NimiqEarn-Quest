@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { webhookCallback } from "grammy";
+import { captureException } from "@nimiqearn/observability";
 import type { WebhookBotEnv } from "./config.js";
 import type { BotContext } from "./context.js";
 import type { Bot } from "grammy";
@@ -25,6 +26,7 @@ export async function startWebhookServer(bot: Bot<BotContext>, env: WebhookBotEn
       // Never let a handler rejection become an unhandled rejection (would crash the process).
       Promise.resolve(handler(req, res)).catch((err) => {
         logger.error({ err }, "webhook handler error");
+        captureException(err, { source: "webhook" });
         if (!res.headersSent) {
           res.writeHead(500);
           res.end();

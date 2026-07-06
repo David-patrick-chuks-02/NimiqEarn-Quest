@@ -9,7 +9,7 @@
     "test:watch": "vitest",
     "dev": "pnpm build:packages && pnpm --parallel --filter @nimiqearn/api --filter @nimiqearn/web dev",
     "dev:all": "pnpm build:packages && pnpm --parallel --filter @nimiqearn/api --filter @nimiqearn/web --filter @nimiqearn/bot dev",
-    "build:packages": "pnpm --filter @nimiqearn/shared --filter @nimiqearn/nimiq --filter @nimiqearn/database build",
+    "build:packages": "pnpm --filter @nimiqearn/shared --filter @nimiqearn/nimiq --filter @nimiqearn/database --filter @nimiqearn/observability build",
     "dev:api": "pnpm --filter @nimiqearn/api dev",
     "dev:bot": "pnpm --filter @nimiqearn/bot dev",
     "dev:web": "pnpm --filter @nimiqearn/web dev",

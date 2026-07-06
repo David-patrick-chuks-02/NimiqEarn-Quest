@@ -14,6 +14,8 @@ const baseEnvSchema = z.object({
   WEBHOOK_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
   BOT_WEBHOOK_PORT: z.coerce.number().default(3002),
+  // Sentry error monitoring. When empty, monitoring is disabled (local dev, tests, CI).
+  SENTRY_DSN: z.preprocess(emptyToUndefined, z.string().optional()),
 });
 
 const envSchema = baseEnvSchema.superRefine((data, ctx) => {
