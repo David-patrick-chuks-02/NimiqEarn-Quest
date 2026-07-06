@@ -218,6 +218,23 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       });
     },
 
+    /**
+     * Public, unauthenticated view of a single PUBLISHED quest (for shareable links).
+     * Counts the view. Returns null for drafts/closed/missing quests.
+     */
+    async getPublicQuest(questId: string) {
+      const quest = await db.quest.findFirst({
+        where: { id: questId, status: "PUBLISHED" },
+        include: { creator: { select: { displayName: true } } },
+      });
+      if (!quest) return null;
+      // Best-effort view count — never block or fail the read on it.
+      await db.quest
+        .update({ where: { id: quest.id }, data: { viewCount: { increment: 1 } } })
+        .catch(() => undefined);
+      return quest;
+    },
+
     /** Live escrow funding status for a single quest the caller owns. */
     async getQuestFunding(telegramId: string, questId: string): Promise<QuestFunding | null> {
       const user = await db.user.findUnique({ where: { telegramId } });
@@ -262,5 +279,25 @@ export function toQuestResponse(quest: Quest) {
     escrowAddress: quest.escrowAddress ?? null,
     fundedAt: quest.fundedAt?.toISOString() ?? null,
     viewCount: quest.viewCount,
+  };
+}
+
+/** Public, share-safe quest shape — excludes escrow/ownership internals. */
+export function toPublicQuestResponse(quest: Quest & { creator?: { displayName: string | null } }) {
+  return {
+    id: quest.id,
+    title: quest.title,
+    description: quest.description,
+    category: quest.category,
+    rewardAmount: quest.rewardAmount.toString(),
+    totalSlots: quest.totalSlots,
+    filledSlots: quest.filledSlots,
+    slotsLeft: Math.max(0, quest.totalSlots - quest.filledSlots),
+    deadline: quest.deadline.toISOString(),
+    proofType: quest.proofType,
+    proofInstructions: quest.proofInstructions,
+    viewCount: quest.viewCount,
+    publishedAt: quest.publishedAt?.toISOString() ?? null,
+    creatorName: quest.creator?.displayName ?? null,
   };
 }

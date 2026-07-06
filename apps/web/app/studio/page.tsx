@@ -80,6 +80,7 @@ export default function StudioPage() {
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [funding, setFunding] = useState<Record<string, Funding>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sharedId, setSharedId] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
   const initDataRef = useRef<string>("");
 
@@ -145,6 +146,24 @@ export default function StudioPage() {
       setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
     } catch {
       // Clipboard unavailable — the address is still shown for manual copy.
+    }
+  }, []);
+
+  // Shareable public quest link (a web page that deep-links into the bot).
+  const shareQuest = useCallback(async (id: string) => {
+    const url = `${window.location.origin}/q/${id}`;
+    const shareApi = (navigator as Navigator & { share?: (d: { url: string }) => Promise<void> })
+      .share;
+    try {
+      if (shareApi) {
+        await shareApi.call(navigator, { url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setSharedId(id);
+        setTimeout(() => setSharedId((s) => (s === id ? null : s)), 1500);
+      }
+    } catch {
+      // User dismissed the share sheet, or clipboard was unavailable — no-op.
     }
   }, []);
 
@@ -455,9 +474,11 @@ export default function StudioPage() {
               publishingId={publishingId}
               checkingId={checkingId}
               copiedId={copiedId}
+              sharedId={sharedId}
               onPublish={publish}
               onCheckFunding={checkFunding}
               onCopy={copyAddress}
+              onShare={shareQuest}
             />
           </div>
         )}
@@ -525,18 +546,22 @@ function QuestList({
   publishingId,
   checkingId,
   copiedId,
+  sharedId,
   onPublish,
   onCheckFunding,
   onCopy,
+  onShare,
 }: {
   quests: Quest[];
   funding: Record<string, Funding>;
   publishingId: string | null;
   checkingId: string | null;
   copiedId: string | null;
+  sharedId: string | null;
   onPublish: (id: string) => void;
   onCheckFunding: (id: string) => void;
   onCopy: (id: string, address: string) => void;
+  onShare: (id: string) => void;
 }) {
   if (quests.length === 0) {
     return (
@@ -589,6 +614,15 @@ function QuestList({
                   : escrowSupported && !canPublish
                     ? "Fund escrow to publish"
                     : "Publish"}
+              </button>
+            )}
+
+            {q.status === "PUBLISHED" && (
+              <button
+                onClick={() => onShare(q.id)}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10"
+              >
+                {sharedId === q.id ? "Link copied ✓" : "🔗 Share quest link"}
               </button>
             )}
           </div>

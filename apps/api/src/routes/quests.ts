@@ -3,6 +3,7 @@ import { createQuestSchema, updateQuestSchema } from "@nimiqearn/shared";
 import {
   createQuestService,
   QuestServiceError,
+  toPublicQuestResponse,
   toQuestResponse,
 } from "../services/quest.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
@@ -29,6 +30,15 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
 
 export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
   const quests = createQuestService(app.db, opts.escrow);
+
+  // Public, unauthenticated: a single published quest for shareable links (t.me + web).
+  app.get<{ Params: { id: string } }>("/api/quests/:id", async (request, reply) => {
+    const quest = await quests.getPublicQuest(request.params.id);
+    if (!quest) {
+      return reply.code(404).send({ error: "This quest isn't available." });
+    }
+    return { quest: toPublicQuestResponse(quest) };
+  });
 
   app.post<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/quests",

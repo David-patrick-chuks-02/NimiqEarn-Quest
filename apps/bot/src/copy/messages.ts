@@ -223,6 +223,8 @@ export const messages = {
         "As a creator, open *My Quests* from the Creator Hub to manage your own drafts and published quests.",
       ].join("\n"),
     ),
+    sharedUnavailable:
+      "That quest link is no longer available — it may be a draft, closed, or removed. Use the menu below to get started.",
   },
 
   walletMenu: {

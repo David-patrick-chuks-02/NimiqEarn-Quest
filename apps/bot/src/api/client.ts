@@ -24,6 +24,23 @@ export interface WalletChallenge {
   expiresAt: string;
 }
 
+export interface PublicQuest {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  rewardAmount: string;
+  totalSlots: number;
+  filledSlots: number;
+  slotsLeft: number;
+  deadline: string;
+  proofType: string;
+  proofInstructions: string;
+  viewCount: number;
+  publishedAt: string | null;
+  creatorName: string | null;
+}
+
 export interface ApiUser {
   id: string;
   telegramId: string;
@@ -96,6 +113,17 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       }
 
       return data.challenge!;
+    },
+
+    /** Public: fetch a shared (published) quest by id, or null if unavailable. */
+    async getPublicQuest(questId: string): Promise<PublicQuest | null> {
+      const response = await fetch(
+        `${normalizedBase}/api/quests/${encodeURIComponent(questId)}`,
+        { headers: authHeaders },
+      );
+      if (!response.ok) return null;
+      const data = (await response.json().catch(() => ({}))) as { quest?: PublicQuest };
+      return data.quest ?? null;
     },
 
     /** Link a wallet by pasted address (validated server-side; no signing). */

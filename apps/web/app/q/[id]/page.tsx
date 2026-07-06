@@ -1,0 +1,155 @@
+import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { cache } from "react";
+
+// Server-side base (not the browser proxy) so metadata + render share one fetch.
+const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
+const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL ?? "https://t.me/Nimbottybot";
+
+interface PublicQuest {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  rewardAmount: string;
+  totalSlots: number;
+  slotsLeft: number;
+  deadline: string;
+  proofType: string;
+  proofInstructions: string;
+  creatorName: string | null;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  PRODUCT_TESTING: "Product testing",
+  SOCIAL_CAMPAIGN: "Social campaign",
+  COMMUNITY_ENGAGEMENT: "Community engagement",
+  REFERRAL: "Referral",
+  CONTENT: "Content",
+  FEEDBACK: "Feedback",
+  BUG_BOUNTY: "Bug bounty",
+  OTHER: "Quest",
+};
+const PROOF_LABELS: Record<string, string> = {
+  TEXT: "Text response",
+  LINK: "A link / URL",
+  SCREENSHOT: "A screenshot",
+  TRANSACTION_HASH: "A transaction hash",
+  REFERRAL_EVENT: "A referral",
+};
+
+// cache() dedupes the fetch across generateMetadata + the page in one request,
+// so a page load only counts one view.
+const getQuest = cache(async (id: string): Promise<PublicQuest | null> => {
+  try {
+    const res = await fetch(`${API_INTERNAL_URL}/api/quests/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { quest?: PublicQuest };
+    return data.quest ?? null;
+  } catch {
+    return null;
+  }
+});
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const quest = await getQuest(id);
+  if (!quest) return { title: "Quest not found — NimiqEarn Quest" };
+
+  const reward = `${Number(quest.rewardAmount).toLocaleString()} NIM`;
+  const title = `${quest.title} — Earn ${reward}`;
+  const description = quest.description.slice(0, 180);
+  return {
+    title,
+    description,
+    openGraph: { title, description, images: ["/logo.png"], type: "website" },
+    twitter: { card: "summary", title, description, images: ["/logo.png"] },
+  };
+}
+
+export default async function QuestPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const quest = await getQuest(id);
+  if (!quest) notFound();
+
+  const deepLink = `${BOT_URL.replace(/\/$/, "")}?start=q_${id}`;
+  const reward = Number(quest.rewardAmount).toLocaleString();
+  const category = CATEGORY_LABELS[quest.category] ?? "Quest";
+  const proof = PROOF_LABELS[quest.proofType] ?? quest.proofType;
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col px-5 py-8">
+      <div className="mb-6 flex items-center gap-2.5">
+        <Image src="/logo.png" alt="NimiqEarn Quest" width={28} height={30} className="rounded-md" />
+        <span className="text-sm font-bold tracking-tight">
+          Nimiq<span className="text-[var(--brand-gold)]">Earn</span> Quest
+        </span>
+      </div>
+
+      <div className="glass rounded-3xl p-6">
+        <p className="eyebrow">{category}</p>
+        <h1 className="mt-1 text-2xl font-bold text-white">{quest.title}</h1>
+        {quest.creatorName && (
+          <p className="mt-1 text-sm text-[var(--brand-muted)]">
+            by <span className="text-white">{quest.creatorName}</span>
+          </p>
+        )}
+
+        <div className="mt-5 grid grid-cols-3 gap-2.5">
+          <Stat label="Reward" value={`${reward} NIM`} highlight />
+          <Stat label="Slots left" value={`${quest.slotsLeft}/${quest.totalSlots}`} />
+          <Stat label="Deadline" value={quest.deadline.slice(0, 10)} />
+        </div>
+
+        <div className="mt-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+            What to do
+          </p>
+          <p className="mt-1.5 whitespace-pre-line text-sm text-[var(--brand-text)]">
+            {quest.description}
+          </p>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+            Proof required
+          </p>
+          <p className="mt-1 text-sm text-white">
+            {proof} — {quest.proofInstructions}
+          </p>
+        </div>
+
+        <Link
+          href={deepLink}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--brand-gold)] px-6 py-3.5 text-sm font-semibold text-[var(--brand-ink)] transition hover:bg-[var(--brand-gold-600)]"
+        >
+          Do this quest in Telegram →
+        </Link>
+        <p className="mt-3 text-center text-xs text-[var(--brand-muted)]">
+          Opens the NimiqEarn Quest bot. New here? You&apos;ll get set up in under a minute.
+        </p>
+      </div>
+    </main>
+  );
+}
+
+function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="rounded-xl bg-white/[0.03] px-3 py-2.5 text-center">
+      <p className={`text-sm font-bold ${highlight ? "text-[var(--brand-gold)]" : "text-white"}`}>
+        {value}
+      </p>
+      <p className="mt-0.5 text-[0.62rem] uppercase tracking-wide text-[var(--brand-muted)]">
+        {label}
+      </p>
+    </div>
+  );
+}

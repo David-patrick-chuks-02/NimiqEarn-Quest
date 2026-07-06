@@ -62,6 +62,8 @@ export async function buildServer() {
       if (request.url.startsWith("/api/wallet/verify/")) return;
       // Creator Studio authenticates with verified Telegram Mini App initData instead.
       if (request.url.startsWith("/api/studio/")) return;
+      // Public shareable quest pages (GET /api/quests/:id) — no secret needed.
+      if (request.url.startsWith("/api/quests/")) return;
       if (!safeCompare(request.headers["x-internal-key"], secret)) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
