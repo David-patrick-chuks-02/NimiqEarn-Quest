@@ -36,6 +36,7 @@ export function createWalletService(
   db: PrismaClient,
   now: () => Date = () => new Date(),
   onWalletLinked?: (telegramId: string, wallet: WalletProfile) => void,
+  onWalletAlreadyLinked?: (telegramId: string, wallet: WalletProfile) => void,
 ) {
   return {
     async getWalletsByTelegramId(telegramId: string): Promise<WalletProfile[] | null> {
@@ -121,6 +122,9 @@ export function createWalletService(
       const existing = await db.walletProfile.findUnique({ where: { nimiqAddress: normalized } });
       if (existing) {
         if (existing.userId === userId) {
+          // Not a failure — the user re-proved a wallet they already own. Nudge them in
+          // Telegram so they get the same "you're all set" feedback as a fresh link.
+          onWalletAlreadyLinked?.(challenge.user.telegramId, existing);
           throw new WalletServiceError(
             "This wallet is already linked to your account.",
             "ALREADY_LINKED",

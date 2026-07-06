@@ -57,7 +57,19 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
       }
     : undefined;
 
-  const wallets = createWalletService(app.db, undefined, onWalletLinked);
+  // When a user re-signs a wallet they've already linked, confirm it in Telegram too
+  // (mirrors the "already linked" screen on the web) instead of staying silent.
+  const onWalletAlreadyLinked = botToken
+    ? (telegramId: string, wallet: { nimiqAddress: string }) => {
+        void sendTelegramMessage(
+          botToken,
+          telegramId,
+          `ℹ️ *Wallet already linked*\n\n\`${wallet.nimiqAddress}\` is already linked to your account — you're all set.`,
+        ).catch((err) => app.log.error({ err }, "wallet-already-linked notification failed"));
+      }
+    : undefined;
+
+  const wallets = createWalletService(app.db, undefined, onWalletLinked, onWalletAlreadyLinked);
 
   // List all wallets for a user (primary first).
   app.get<{ Params: { telegramId: string } }>(

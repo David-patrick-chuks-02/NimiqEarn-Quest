@@ -18,7 +18,7 @@ function challengeRow(message: string) {
     token: "tok",
     message,
     expiresAt: new Date(FIXED_NOW.getTime() + 60_000),
-    user: { id: "user-1", status: "PENDING" },
+    user: { id: "user-1", status: "PENDING", telegramId: "tg-1" },
   };
 }
 
@@ -112,19 +112,26 @@ describe("wallet verification service", () => {
     ).rejects.toMatchObject({ code: "ADDRESS_IN_USE" } satisfies Partial<WalletServiceError>);
   });
 
-  it("rejects re-linking an address the same user already owns", async () => {
+  it("notifies and rejects when re-linking an address the same user already owns", async () => {
     const signed = buildSignedChallenge();
+    const existingWallet = { id: "w-1", userId: "user-1", nimiqAddress: signed.address };
+    const onAlreadyLinked = vi.fn();
     const service = createWalletService(
       {
         walletVerificationChallenge: { findUnique: vi.fn().mockResolvedValue(challengeRow(signed.message)) },
-        walletProfile: { findUnique: vi.fn().mockResolvedValue({ id: "w-1", userId: "user-1" }) },
+        walletProfile: { findUnique: vi.fn().mockResolvedValue(existingWallet) },
       } as never,
       () => FIXED_NOW,
+      undefined,
+      onAlreadyLinked,
     );
 
     await expect(
       service.confirmVerification("tok", { publicKey: signed.publicKey, signature: signed.signature }),
     ).rejects.toMatchObject({ code: "ALREADY_LINKED" } satisfies Partial<WalletServiceError>);
+
+    // The user still gets a Telegram confirmation even though it's a re-link.
+    expect(onAlreadyLinked).toHaveBeenCalledWith("tg-1", existingWallet);
   });
 
   it("rejects a signature that does not match the challenge message", async () => {
