@@ -88,14 +88,14 @@ export default function StudioPage() {
   })();
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
-    const res = await fetch(path, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "x-telegram-init-data": initDataRef.current,
-        ...(init?.headers ?? {}),
-      },
-    });
+    const headers: Record<string, string> = {
+      "x-telegram-init-data": initDataRef.current,
+      ...((init?.headers as Record<string, string>) ?? {}),
+    };
+    // Only declare a JSON content-type when we actually send a body — Fastify rejects an
+    // empty body with content-type application/json (bodyless POSTs: publish, register).
+    if (init?.body != null) headers["Content-Type"] = "application/json";
+    const res = await fetch(path, { ...init, headers });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
       throw new Error((body.error as string) ?? `Request failed (${res.status})`);
