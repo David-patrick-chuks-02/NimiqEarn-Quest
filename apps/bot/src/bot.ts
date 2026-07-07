@@ -11,6 +11,7 @@ import { createQuestConversation } from "./conversations/create-quest.js";
 import { createEditQuestConversation } from "./conversations/edit-quest.js";
 import { createWithdrawConversation } from "./conversations/withdraw.js";
 import { createSecurityPasswordConversation } from "./conversations/security-password.js";
+import { createBackupKeyConversation } from "./conversations/backup-key.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
@@ -42,6 +43,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
   bot.use(createConversation(createWithdrawConversation(api), "withdraw"));
   bot.use(createConversation(createSecurityPasswordConversation(api), "securityPassword"));
+  bot.use(createConversation(createBackupKeyConversation(api), "backupKey"));
 
   // Human-verification gate — until a user solves the image CAPTCHA, everything they send is
   // consumed here (anti-spam). Placed after conversations() so ctx.conversation is available.

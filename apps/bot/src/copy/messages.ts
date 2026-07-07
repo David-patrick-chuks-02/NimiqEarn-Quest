@@ -39,9 +39,10 @@ export const messages = {
         [
           "/start — Create your profile or open the main menu",
           "/menu — Open the main menu",
-          "/wallet — Link or update your Nimiq payout address",
-          "/quests — Browse quests (worker discovery in Milestone 2)",
+          "/wallet — Your wallet: balance, deposit & withdraw NIM",
+          "/quests — Browse quests (opening soon)",
           "/creator — Open the Creator Hub",
+          "/settings — Language and security settings",
           "/help — View this guide",
         ].join("\n"),
       ),
@@ -49,9 +50,10 @@ export const messages = {
       section(
         "Main menu",
         [
-          "• *Start Earning* — View your worker profile and verification status",
-          "• *My Wallet* — Link or update your Nimiq address",
+          "• *Start Earning* — Your worker profile and progress",
+          "• *My Wallet* — Balance, deposit & withdraw NIM",
           "• *Creator Hub* — Create and manage paid quests",
+          "• *Settings* — Language and security",
           "• *Help* — Commands and community guidelines",
         ].join("\n"),
       ),
@@ -70,9 +72,13 @@ export const messages = {
       .join("\n"),
 
   captcha: {
-    prompt: "🟢 Enter the characters shown above to verify you're human:",
-    incorrect: "❌ Incorrect CAPTCHA. Please try again.",
-    success: "✅ Verification complete. You can now access the bot!",
+    prompt: [
+      `👋 *Welcome to ${APP_NAME}*`,
+      "",
+      "A quick check to keep bots out — type the characters shown above:",
+    ].join("\n"),
+    incorrect: "❌ That didn't match. Please try the new image above.",
+    success: "✅ Verified — welcome aboard!",
   },
 
   securityNotice: (botUsername?: string) =>
@@ -119,9 +125,23 @@ export const messages = {
             : "";
         lines.push("", `*Balance:* ${balanceNim.toLocaleString()} NIM${usd}`);
       }
-      lines.push("", "Tap *💸 Withdraw* to move your funds to another Nimiq address.");
+      lines.push(
+        "",
+        "Tap *⬇️ Deposit* to add NIM, or *💸 Withdraw* to send it to another Nimiq address.",
+      );
       return lines.join("\n");
     },
+    deposit: (address: string) =>
+      [
+        section("Deposit NIM", "Add funds to your NimiqEarn wallet using the address or QR code below."),
+        "",
+        "*Your address*",
+        `\`${address}\``,
+        "",
+        "Scan the QR in any Nimiq wallet (or Nimiq Pay), or copy the address above. Funds show up here once the network confirms — tap *🔄 Refresh* in *My Wallet* to update your balance.",
+      ].join("\n"),
+    depositFailed:
+      "We couldn't open the deposit panel right now. Please try again in a moment.",
     createFailed:
       "We couldn't set up your wallet right now. Please try again in a moment from /wallet.",
   },
@@ -180,6 +200,7 @@ export const messages = {
     passwordRemoved: "✅ Secure-action password removed.",
     cancelled: "No changes made.",
     enterToWithdraw: "🔐 Enter your secure-action password to confirm this withdrawal:",
+    enterToBackup: "🔐 Enter your secure-action password to reveal your private key:",
   },
 
   onboarding: {
@@ -216,9 +237,11 @@ export const messages = {
       [
         section("You're all set", `Welcome aboard, *${escapeMarkdown(displayName)}*.`),
         "",
-        "Your worker profile and NimiqEarn wallet are ready — rewards are paid straight to your wallet.",
+        "Your NimiqEarn wallet is ready — rewards are paid straight to it.",
         "",
-        "Use the menu below to explore quests and manage your wallet.",
+        "💡 You can back up your wallet's private key anytime in *⚙️ Settings*.",
+        "",
+        "Use the menu below to get started.",
       ].join("\n"),
     alreadyInProgress:
       "Profile setup is already in progress. Please complete the steps above, or wait a moment and send /start again.",
@@ -228,11 +251,11 @@ export const messages = {
     comingSoon: section(
       "Quests",
       [
-        "Quest discovery for workers is coming in Milestone 2.",
+        "Quest discovery for workers is opening soon.",
         "",
-        "Soon you'll browse open quests, join them, and submit proof to earn NIM.",
+        "You'll browse open quests, join them, and submit proof to earn NIM — paid straight to your wallet.",
         "",
-        "For now, link your wallet with /wallet so you're ready when quests go live.",
+        "Your wallet is already set up, so you'll be ready the moment quests go live.",
       ].join("\n"),
     ),
     creatorHint: section(
@@ -275,11 +298,11 @@ export const messages = {
     registerFailed:
       "Creator registration could not be completed. Please try again from /creator.",
     notVerified: section(
-      "Verification required",
+      "Finish setting up first",
       [
-        "Creator access requires a verified profile.",
+        "Creator access needs your wallet ready.",
         "",
-        "Please link your Nimiq wallet with /wallet, then return to the Creator Hub.",
+        "Open *My Wallet* to finish setting it up, then return to the Creator Hub.",
       ].join("\n"),
     ),
     walletRequired: section(

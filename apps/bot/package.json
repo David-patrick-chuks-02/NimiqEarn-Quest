@@ -19,11 +19,13 @@
     "grammy": "^1.36.3",
     "ioredis": "^5.11.1",
     "pino": "^9.7.0",
+    "qrcode": "^1.5.4",
     "svg-captcha": "^1.4.0",
     "zod": "^3.25.36"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
+    "@types/qrcode": "^1.5.6",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }

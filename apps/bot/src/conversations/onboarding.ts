@@ -5,7 +5,6 @@ import { welcomeBannerFile } from "../assets/welcome-banner.js";
 import { messages } from "../copy/messages.js";
 import type { BotContext } from "../context.js";
 import { mainMenuKeyboard } from "../menus/main.js";
-import { sendWalletReveal } from "../menus/wallet-reveal.js";
 import { StepChat } from "../utils/chat-cleanup.js";
 
 const TERMS_WAIT_MS = 5 * 60 * 1000;
@@ -92,11 +91,10 @@ export function createOnboardingConversation(api: ApiClient) {
 
     await stepChat.clearPrompts();
 
-    // Create the user's custodial wallet and show the private key once (spoiler + delete).
-    // If it fails, stop here — don't claim the wallet is ready.
+    // Silently create the user's custodial wallet — no scary private-key dump on first run.
+    // They can back it up on demand from Settings. If it fails, don't claim it's ready.
     try {
-      const wallet = await conversation.external(() => api.createCustodialWallet(String(from.id)));
-      await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
+      await conversation.external(() => api.createCustodialWallet(String(from.id)));
     } catch (error) {
       console.error("Custodial wallet creation failed during onboarding:", error);
       await termsUpdate.reply(messages.wallet.createFailed, { reply_markup: mainMenuKeyboard() });

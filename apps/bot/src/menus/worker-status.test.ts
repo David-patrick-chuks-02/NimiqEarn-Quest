@@ -17,9 +17,8 @@ describe("formatWorkerStatus", () => {
       wallets: [],
     });
 
-    expect(text).toContain("Worker profile");
-    expect(text).toContain("Verification required");
-    expect(text).toContain("/wallet");
+    expect(text).toContain("Your profile");
+    expect(text).toContain("Not set up");
   });
 
   it("formats a verified worker with a linked wallet", () => {
@@ -51,7 +50,7 @@ describe("formatWorkerStatus", () => {
       ],
     });
 
-    expect(text).toContain("Verified");
-    expect(text).toContain("Wallet · Linked (Verified)");
+    expect(text).toContain("Your profile");
+    expect(text).toContain("Wallet · Ready");
   });
 });

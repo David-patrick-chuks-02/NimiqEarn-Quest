@@ -11,6 +11,7 @@ export const SETTINGS_CALLBACKS = {
   setPassword: "settings:set-pw",
   changePassword: "settings:change-pw",
   removePassword: "settings:remove-pw",
+  backupKey: "settings:backup-key",
 } as const;
 
 export async function renderSettings(ctx: BotContext, api: ApiClient) {
@@ -31,6 +32,7 @@ export async function renderSettings(ctx: BotContext, api: ApiClient) {
   } else {
     keyboard.text("🔐 Set action password", SETTINGS_CALLBACKS.setPassword).row();
   }
+  keyboard.text("🔐 Back up private key", SETTINGS_CALLBACKS.backupKey).row();
   keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 
   await editOrReply(ctx, messages.settings.menu(passwordSet), {
@@ -63,4 +65,13 @@ export function registerSettingsHandlers(bot: Bot<BotContext>, api: ApiClient) {
   bot.callbackQuery(SETTINGS_CALLBACKS.setPassword, enterPasswordFlow("set"));
   bot.callbackQuery(SETTINGS_CALLBACKS.changePassword, enterPasswordFlow("change"));
   bot.callbackQuery(SETTINGS_CALLBACKS.removePassword, enterPasswordFlow("remove"));
+
+  bot.callbackQuery(SETTINGS_CALLBACKS.backupKey, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (hasActiveConversation(ctx)) {
+      await ctx.reply(messages.errors.rateLimited);
+      return;
+    }
+    await ctx.conversation.enter("backupKey");
+  });
 }

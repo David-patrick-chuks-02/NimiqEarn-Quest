@@ -122,6 +122,16 @@ export function createCustodialWalletService(db: PrismaClient, config: Custodial
       return { address, privateKeyHex, created: true };
     },
 
+    /** Decrypt and return the user's custodial key (for an on-demand backup in Settings). */
+    async exportKey(telegramId: string): Promise<{ address: string; privateKeyHex: string }> {
+      const user = await requireUser(telegramId);
+      const wallet = user.walletProfiles.find((w) => w.keyCiphertext);
+      if (!wallet?.keyCiphertext) {
+        throw new CustodialWalletError("No custodial wallet to back up.", "NO_WALLET");
+      }
+      return { address: wallet.nimiqAddress, privateKeyHex: box.decrypt(wallet.keyCiphertext) };
+    },
+
     /** On-chain balance of the user's custodial wallet (best-effort), in NIM and USD. */
     async getBalance(telegramId: string): Promise<{
       nimiqAddress: string;

@@ -60,6 +60,24 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
     },
   );
 
+  // Reveal (back up) the custodial private key. Gated by the secure-action password when set.
+  app.post<{ Params: { telegramId: string }; Body: { password?: string } }>(
+    "/api/users/:telegramId/wallet/export",
+    async (request, reply) => {
+      if (!(await security.verify(request.params.telegramId, request.body?.password))) {
+        return reply
+          .code(403)
+          .send({ error: "Incorrect security password.", code: "WRONG_PASSWORD" });
+      }
+      try {
+        const w = await custodial.exportKey(request.params.telegramId);
+        return { nimiqAddress: w.address, privateKey: w.privateKeyHex };
+      } catch (error) {
+        return sendCustodialError(reply, error);
+      }
+    },
+  );
+
   // On-chain balance of the user's wallet.
   app.get<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/wallet/balance",

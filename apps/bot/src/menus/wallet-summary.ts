@@ -14,7 +14,7 @@ export async function walletHeader(api: ApiClient, telegramId: string): Promise<
   }
   if (!summary) return "";
 
-  let balance = "—";
+  let balance = "tap 🔄 Refresh";
   if (summary.reachable && summary.balanceNim !== null) {
     const usd =
       summary.balanceUsd !== null

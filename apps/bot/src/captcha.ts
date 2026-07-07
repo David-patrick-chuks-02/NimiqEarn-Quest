@@ -31,6 +31,7 @@ export async function sendCaptcha(ctx: BotContext, startPayload?: string) {
   const { text, png } = generateCaptcha();
   const message = await ctx.replyWithPhoto(new InputFile(png, "captcha.png"), {
     caption: messages.captcha.prompt,
+    parse_mode: "Markdown",
   });
   ctx.session.captcha = { answer: text, messageId: message.message_id, startPayload };
 }

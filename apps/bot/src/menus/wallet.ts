@@ -1,4 +1,5 @@
-import { InlineKeyboard, type Bot } from "grammy";
+import { InlineKeyboard, InputFile, type Bot } from "grammy";
+import QRCode from "qrcode";
 import type { ApiClient } from "../api/client.js";
 import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
@@ -6,11 +7,12 @@ import { editOrReply } from "../utils/edit-or-reply.js";
 import { deleteMessageSafe } from "../utils/chat-cleanup.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 import { CREATOR_CALLBACKS } from "./creator.js";
-import { sendWalletReveal, WALLET_REVEAL_DISMISS } from "./wallet-reveal.js";
+import { WALLET_REVEAL_DISMISS } from "./wallet-reveal.js";
 
 export const WALLET_CALLBACKS = {
   open: "wallet:open",
   create: "wallet:create",
+  deposit: "wallet:deposit",
   withdraw: "wallet:withdraw",
   refresh: "wallet:refresh",
   dismiss: WALLET_REVEAL_DISMISS,
@@ -27,9 +29,11 @@ export function walletSetupKeyboard() {
 function custodialWalletKeyboard(address: string) {
   return new InlineKeyboard()
     .copyText("📋 Copy address", address)
+    .row()
+    .text("⬇️ Deposit", WALLET_CALLBACKS.deposit)
     .text("💸 Withdraw", WALLET_CALLBACKS.withdraw)
     .row()
-    .text("↻ Refresh", WALLET_CALLBACKS.refresh)
+    .text("🔄 Refresh", WALLET_CALLBACKS.refresh)
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
@@ -98,12 +102,41 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
       return;
     }
     try {
-      const wallet = await api.createCustodialWallet(String(from.id));
-      await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
+      await api.createCustodialWallet(String(from.id));
       await renderWalletMenu(ctx, api);
     } catch (error) {
       console.error("Custodial wallet create failed:", error);
       await ctx.reply(messages.wallet.createFailed);
+    }
+  });
+
+  // Deposit panel: show the wallet address + a scannable QR so funds can be sent in.
+  bot.callbackQuery(WALLET_CALLBACKS.deposit, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const from = ctx.from;
+    if (!from) {
+      await ctx.reply(messages.errors.noTelegramProfile);
+      return;
+    }
+    try {
+      const user = await api.getUserByTelegramId(String(from.id));
+      const wallet = user?.wallet ?? user?.wallets?.[0] ?? null;
+      if (!wallet) {
+        await renderWalletMenu(ctx, api);
+        return;
+      }
+      const png = await QRCode.toBuffer(wallet.nimiqAddress, { margin: 1, width: 512 });
+      await ctx.replyWithPhoto(new InputFile(png, "deposit-qr.png"), {
+        caption: messages.wallet.deposit(wallet.nimiqAddress),
+        parse_mode: "Markdown",
+        reply_markup: new InlineKeyboard()
+          .copyText("📋 Copy address", wallet.nimiqAddress)
+          .row()
+          .text("‹ Back to wallet", WALLET_CALLBACKS.open),
+      });
+    } catch (error) {
+      console.error("Deposit panel failed:", error);
+      await ctx.reply(messages.wallet.depositFailed);
     }
   });
 

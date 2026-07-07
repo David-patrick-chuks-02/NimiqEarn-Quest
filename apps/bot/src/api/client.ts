@@ -172,6 +172,25 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       }
     },
 
+    /** Reveal (back up) the custodial private key. Requires the SAP when one is set. */
+    async exportWalletKey(
+      telegramId: string,
+      password?: string,
+    ): Promise<{ nimiqAddress: string; privateKey: string }> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/export`,
+        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ password }) },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        nimiqAddress?: string;
+        privateKey?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok) throw parseApiError(data, `Failed to reveal key (${response.status})`);
+      return { nimiqAddress: data.nimiqAddress!, privateKey: data.privateKey! };
+    },
+
     /** Update the user's preferred bot language. */
     async setLanguage(telegramId: string, code: string): Promise<void> {
       await fetch(`${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/language`, {
