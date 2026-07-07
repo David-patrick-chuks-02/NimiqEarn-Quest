@@ -8,9 +8,10 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Show a custodial wallet's address + private key ONCE. The key is spoiler-blurred (tap to
- * reveal) and the message carries a delete button — the user taps it after saving, and the
- * secret is removed from the chat. Uses HTML so the key sits in a copyable <code> block.
+ * Show a custodial wallet's address + private key ONCE. The key is a plain-text spoiler so it
+ * stays blurred until tapped (a <code> block renders as an always-visible copy bubble and
+ * defeats the blur), with a dedicated Copy button for accurate copying. The message carries a
+ * delete button — the user taps it after saving, and the secret is removed from the chat.
  */
 export async function sendWalletReveal(ctx: BotContext, address: string, privateKey: string) {
   const body = [
@@ -19,8 +20,8 @@ export async function sendWalletReveal(ctx: BotContext, address: string, private
     "<b>Address</b>",
     `<code>${escapeHtml(address)}</code>`,
     "",
-    "<b>Private key</b> — tap to reveal, then copy",
-    `<tg-spoiler><code>${escapeHtml(privateKey)}</code></tg-spoiler>`,
+    "<b>Private key</b> — tap to reveal, then use the Copy button below",
+    `<tg-spoiler>${escapeHtml(privateKey)}</tg-spoiler>`,
     "",
     "⚠️ <b>Save this key somewhere safe right now.</b> It is the ONLY way to control this wallet — we cannot recover it for you. Never share it: anyone who has it can take your funds.",
     "",
@@ -29,6 +30,9 @@ export async function sendWalletReveal(ctx: BotContext, address: string, private
 
   await ctx.reply(body, {
     parse_mode: "HTML",
-    reply_markup: new InlineKeyboard().text("✅ I've saved it — delete this", WALLET_REVEAL_DISMISS),
+    reply_markup: new InlineKeyboard()
+      .copyText("📋 Copy private key", privateKey)
+      .row()
+      .text("✅ I've saved it — delete this", WALLET_REVEAL_DISMISS),
   });
 }
