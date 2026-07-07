@@ -9,6 +9,7 @@ import {
   validateNimiqAddress,
 } from "@nimiqearn/nimiq";
 import { createSecretBox } from "../crypto.js";
+import { getNimUsdPrice } from "./price.js";
 
 export class CustodialWalletError extends Error {
   constructor(
@@ -131,10 +132,13 @@ export function createCustodialWalletService(db: PrismaClient, config: Custodial
       return { address: wallet.nimiqAddress, privateKeyHex: box.decrypt(wallet.keyCiphertext) };
     },
 
-    /** On-chain balance of the user's custodial wallet (best-effort). */
-    async getBalance(
-      telegramId: string,
-    ): Promise<{ nimiqAddress: string; balanceNim: number | null; reachable: boolean } | null> {
+    /** On-chain balance of the user's custodial wallet (best-effort), in NIM and USD. */
+    async getBalance(telegramId: string): Promise<{
+      nimiqAddress: string;
+      balanceNim: number | null;
+      balanceUsd: number | null;
+      reachable: boolean;
+    } | null> {
       const user = await db.user.findUnique({
         where: { telegramId },
         include: { walletProfiles: true },
@@ -151,12 +155,18 @@ export function createCustodialWalletService(db: PrismaClient, config: Custodial
         null;
       if (!wallet) return null;
       if (!rpcUrl) {
-        return { nimiqAddress: wallet.nimiqAddress, balanceNim: null, reachable: false };
+        return { nimiqAddress: wallet.nimiqAddress, balanceNim: null, balanceUsd: null, reachable: false };
       }
-      const info = await fetchNimiqAccount(rpcUrl, wallet.nimiqAddress);
+
+      const [info, usdPrice] = await Promise.all([
+        fetchNimiqAccount(rpcUrl, wallet.nimiqAddress),
+        getNimUsdPrice(),
+      ]);
+      const balanceNim = info.balanceLuna === null ? null : info.balanceLuna / LUNA_PER_NIM;
       return {
         nimiqAddress: wallet.nimiqAddress,
-        balanceNim: info.balanceLuna === null ? null : info.balanceLuna / LUNA_PER_NIM,
+        balanceNim,
+        balanceUsd: balanceNim !== null && usdPrice !== null ? balanceNim * usdPrice : null,
         reachable: info.reachable,
       };
     },

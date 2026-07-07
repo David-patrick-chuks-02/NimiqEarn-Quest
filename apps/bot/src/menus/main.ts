@@ -12,6 +12,7 @@ export const MAIN_MENU_CALLBACKS = {
   startEarning: "menu:start-earning",
   wallet: "menu:wallet",
   creator: "menu:creator",
+  refresh: "menu:refresh",
   help: "menu:help",
 } as const;
 
@@ -22,6 +23,7 @@ export function mainMenuKeyboard() {
     .text("My Wallet", MAIN_MENU_CALLBACKS.wallet)
     .text("Creator Hub", MAIN_MENU_CALLBACKS.creator)
     .row()
+    .text("🔄 Refresh", MAIN_MENU_CALLBACKS.refresh)
     .text("Help", MAIN_MENU_CALLBACKS.help);
 }
 
@@ -83,6 +85,17 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
     } catch (error) {
       console.error("Creator hub from menu failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
+    }
+  });
+
+  // Refresh the main menu (re-fetches the wallet balance).
+  bot.callbackQuery(MAIN_MENU_CALLBACKS.refresh, async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Refreshing balance…" });
+    const name = ctx.from?.first_name ?? "there";
+    try {
+      await sendMainMenu(ctx, api, messages.menu.greeting(name));
+    } catch (error) {
+      console.error("Main menu refresh failed:", error);
     }
   });
 

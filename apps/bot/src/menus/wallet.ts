@@ -59,16 +59,20 @@ export async function renderWalletMenu(ctx: BotContext, api: ApiClient) {
     return;
   }
 
-  // Best-effort on-chain balance.
+  // Best-effort on-chain balance (NIM + USD).
   let balanceNim: number | null = null;
+  let balanceUsd: number | null = null;
   try {
     const balance = await api.getWalletBalance(String(from.id));
-    if (balance?.reachable) balanceNim = balance.balanceNim;
+    if (balance?.reachable) {
+      balanceNim = balance.balanceNim;
+      balanceUsd = balance.balanceUsd;
+    }
   } catch (error) {
     console.error("Wallet balance lookup failed:", error);
   }
 
-  await editOrReply(ctx, messages.wallet.custodialView(wallet.nimiqAddress, balanceNim), {
+  await editOrReply(ctx, messages.wallet.custodialView(wallet.nimiqAddress, balanceNim, balanceUsd), {
     parse_mode: "Markdown",
     reply_markup: custodialWalletKeyboard(wallet.nimiqAddress),
   });

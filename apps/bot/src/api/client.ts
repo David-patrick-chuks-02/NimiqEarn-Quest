@@ -131,10 +131,13 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return { nimiqAddress: data.nimiqAddress!, privateKey: data.privateKey! };
     },
 
-    /** On-chain balance of the user's wallet, or null if they have none. */
-    async getWalletBalance(
-      telegramId: string,
-    ): Promise<{ nimiqAddress: string; balanceNim: number | null; reachable: boolean } | null> {
+    /** On-chain balance of the user's wallet (NIM + USD), or null if they have none. */
+    async getWalletBalance(telegramId: string): Promise<{
+      nimiqAddress: string;
+      balanceNim: number | null;
+      balanceUsd: number | null;
+      reachable: boolean;
+    } | null> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/balance`,
         { headers: authHeaders },
@@ -143,6 +146,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return (await response.json().catch(() => null)) as {
         nimiqAddress: string;
         balanceNim: number | null;
+        balanceUsd: number | null;
         reachable: boolean;
       } | null;
     },

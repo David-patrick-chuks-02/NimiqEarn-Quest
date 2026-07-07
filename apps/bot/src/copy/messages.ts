@@ -105,7 +105,7 @@ export const messages = {
       "My Wallet",
       "You don't have a wallet yet. Create one now to receive NIM payouts.",
     ),
-    custodialView: (address: string, balanceNim: number | null) => {
+    custodialView: (address: string, balanceNim: number | null, balanceUsd: number | null) => {
       const lines = [
         section("My Wallet", "This is your NimiqEarn wallet — rewards are paid to this address."),
         "",
@@ -113,7 +113,11 @@ export const messages = {
         `\`${address}\``,
       ];
       if (balanceNim !== null) {
-        lines.push("", `*Balance:* ${balanceNim.toLocaleString()} NIM`);
+        const usd =
+          balanceUsd !== null
+            ? ` (~$${balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })})`
+            : "";
+        lines.push("", `*Balance:* ${balanceNim.toLocaleString()} NIM${usd}`);
       }
       lines.push(
         "",
