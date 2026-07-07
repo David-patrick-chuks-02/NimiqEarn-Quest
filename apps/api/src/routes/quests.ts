@@ -21,8 +21,10 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
     case "SUSPENDED":
     case "NOT_VERIFIED":
       return 403;
-    case "NOT_FUNDED":
+    case "INSUFFICIENT_BALANCE":
       return 402;
+    case "RPC_UNAVAILABLE":
+      return 503;
     default:
       return 400;
   }

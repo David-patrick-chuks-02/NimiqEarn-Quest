@@ -233,8 +233,14 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
         await ctx.reply(messages.quest.publishDeadlinePassed);
         return;
       }
-      if (code === "NOT_FUNDED") {
-        await ctx.reply(messages.quest.publishNotFunded, { parse_mode: "Markdown" });
+      // Custodial funding errors carry a descriptive message (insufficient balance, no wallet, …).
+      if (
+        code === "INSUFFICIENT_BALANCE" ||
+        code === "NO_WALLET" ||
+        code === "RPC_UNAVAILABLE" ||
+        code === "FUNDING_FAILED"
+      ) {
+        await ctx.reply(`❌ ${(error as Error).message}`);
         return;
       }
       console.error("Quest publish failed:", error);

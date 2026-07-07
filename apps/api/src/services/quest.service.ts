@@ -15,7 +15,10 @@ export class QuestServiceError extends Error {
       | "QUEST_NOT_FOUND"
       | "INVALID_STATUS"
       | "NOT_VERIFIED"
-      | "NOT_FUNDED",
+      | "NO_WALLET"
+      | "INSUFFICIENT_BALANCE"
+      | "RPC_UNAVAILABLE"
+      | "FUNDING_FAILED",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -193,16 +196,40 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
       }
 
-      // A quest with an escrow wallet must be funded with the full reward pool before it
-      // goes live — this is where the creator "pays" for the quest.
+      // Fund the quest from the creator's custodial wallet: transfer the full reward pool
+      // to the quest's escrow wallet on-chain. This is where the creator "pays" for the quest.
       let fundedAt: Date | null = null;
       if (escrow?.enabled && quest.escrowAddress) {
+        const creatorWallet = user.walletProfiles.find((w) => w.keyCiphertext);
+        if (!creatorWallet?.keyCiphertext) {
+          throw new QuestServiceError("Set up your wallet before publishing.", "NO_WALLET");
+        }
+
         const requiredLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
-        const funding = await escrow.getFunding(quest.escrowAddress, requiredLuna);
-        if (!funding.funded) {
+        const balance = await escrow.getFunding(creatorWallet.nimiqAddress, requiredLuna);
+        if (!balance.reachable) {
           throw new QuestServiceError(
-            "This quest's escrow wallet isn't fully funded yet.",
-            "NOT_FUNDED",
+            "Couldn't reach the Nimiq network. Please try again shortly.",
+            "RPC_UNAVAILABLE",
+          );
+        }
+        if (!balance.funded) {
+          const have = balance.balanceNim ?? 0;
+          throw new QuestServiceError(
+            `Insufficient balance — you need ${balance.requiredNim.toLocaleString()} NIM but have ${have.toLocaleString()}. Top up your wallet and try again.`,
+            "INSUFFICIENT_BALANCE",
+          );
+        }
+
+        const result = await escrow.transfer({
+          fromKeyCiphertext: creatorWallet.keyCiphertext,
+          toAddress: quest.escrowAddress,
+          valueLuna: BigInt(requiredLuna),
+        });
+        if (!result.hash) {
+          throw new QuestServiceError(
+            result.error ?? "Funding the quest failed. Please try again.",
+            "FUNDING_FAILED",
           );
         }
         fundedAt = new Date();

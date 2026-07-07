@@ -1,4 +1,11 @@
-import { fetchNimiqAccount, generateNimiqKeypair } from "@nimiqearn/nimiq";
+import {
+  buildBasicTransaction,
+  fetchNimiqAccount,
+  generateNimiqKeypair,
+  getRpcBlockNumber,
+  networkIdFor,
+  sendRawTransaction,
+} from "@nimiqearn/nimiq";
 import { createSecretBox } from "../crypto.js";
 
 const LUNA_PER_NIM = 100_000;
@@ -8,6 +15,8 @@ export interface EscrowConfig {
   encryptionKey?: string;
   /** Albatross JSON-RPC node for reading escrow balances. */
   rpcUrl?: string;
+  /** "testnet" | "mainnet" — selects the transaction network id. */
+  network?: string;
 }
 
 export interface QuestFunding {
@@ -29,11 +38,35 @@ export interface QuestFunding {
 export function createEscrowService(config: EscrowConfig) {
   const box = createSecretBox(config.encryptionKey);
   const rpcUrl = config.rpcUrl;
+  const networkId = networkIdFor(config.network);
 
   return {
     /** Escrow provisioning requires an encryption key; funding checks also need an RPC node. */
     enabled: box.enabled,
     canCheckFunding: box.enabled && Boolean(rpcUrl),
+
+    /**
+     * Move `valueLuna` from a wallet we hold (its encrypted key) to `toAddress`, on-chain.
+     * Used to fund a quest's escrow from the creator's custodial wallet at publish time.
+     */
+    async transfer(params: {
+      fromKeyCiphertext: string;
+      toAddress: string;
+      valueLuna: bigint;
+    }): Promise<{ hash?: string; error?: string }> {
+      if (!box.enabled || !rpcUrl) return { error: "Payments are not configured." };
+      const validityStartHeight = await getRpcBlockNumber(rpcUrl);
+      if (validityStartHeight === null) return { error: "The Nimiq network was unreachable." };
+      const { hex } = buildBasicTransaction({
+        privateKeyHex: box.decrypt(params.fromKeyCiphertext),
+        recipient: params.toAddress,
+        valueLuna: params.valueLuna,
+        feeLuna: 0n,
+        validityStartHeight,
+        networkId,
+      });
+      return sendRawTransaction(rpcUrl, hex);
+    },
 
     /** Provision a fresh escrow wallet; returns the public address + encrypted private key. */
     createWallet(): { address: string; keyCiphertext: string } {

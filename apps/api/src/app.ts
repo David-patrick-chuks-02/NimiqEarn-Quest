@@ -82,6 +82,7 @@ export async function buildServer() {
   const escrow = createEscrowService({
     encryptionKey: env.ESCROW_ENCRYPTION_KEY,
     rpcUrl: env.NIMIQ_RPC_URL,
+    network: env.NIMIQ_NETWORK,
   });
 
   await app.register(creatorRoutes);
