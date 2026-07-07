@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { APP_NAME } from "@nimiqearn/shared";
 import { BOT_URL, Button, IconArrow, SiteFooter, SiteHeader } from "./_components/chrome";
 
@@ -97,71 +96,6 @@ const CREATOR_POINTS = [
   "Reach a community of motivated contributors",
 ];
 
-/* ------------------------------ chat mockup ------------------------------- */
-
-function Bubble({ side, children }: { side: "bot" | "user"; children: React.ReactNode }) {
-  if (side === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl rounded-br-sm border border-[var(--brand-blue)]/25 bg-[var(--brand-blue)]/15 px-3.5 py-2 text-[13px] text-white">
-          {children}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[82%] rounded-2xl rounded-bl-sm border border-white/8 bg-[var(--brand-navy-700)] px-3.5 py-2 text-[13px] text-[var(--brand-text)]">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ChatMock() {
-  return (
-    <div className="glass rounded-3xl p-4 shadow-2xl shadow-black/50 sm:p-5">
-      <div className="flex items-center gap-3 border-b border-white/8 pb-3">
-        <Image
-          src="/logo.png"
-          alt=""
-          width={36}
-          height={39}
-          sizes="36px"
-          className="rounded-lg"
-          priority
-        />
-        <div className="leading-tight">
-          <div className="text-sm font-semibold text-white">NimiqEarn Quest</div>
-          <div className="text-[11px] text-[var(--brand-muted)]">
-            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand-blue)]" />
-            bot · online
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2.5">
-        <Bubble side="bot">Welcome 👋 Complete quests and earn NIM.</Bubble>
-        <Bubble side="bot">
-          <div className="rounded-xl border border-white/8 bg-black/20 p-2.5">
-            <div className="eyebrow !text-[10px]">New quest · Product testing</div>
-            <div className="mt-1 text-[13px] font-medium text-white">
-              Test the new onboarding flow
-            </div>
-            <div className="mt-1.5 text-[13px] font-semibold text-[var(--brand-gold)]">
-              + 50 NIM
-            </div>
-          </div>
-        </Bubble>
-        <Bubble side="user">Proof submitted ✓</Bubble>
-        <Bubble side="bot">
-          Verified. <span className="font-semibold text-white">50 NIM</span> sent to your wallet 🎉
-        </Bubble>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------- page ---------------------------------- */
 
 export default function HomePage() {
@@ -170,7 +104,7 @@ export default function HomePage() {
       <SiteHeader />
 
       {/* Hero */}
-      <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-6 pb-16 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:pt-20">
+      <section className="mx-auto max-w-3xl px-6 pb-16 pt-14 lg:pt-20">
         <div>
           <p className="eyebrow">Telegram-native · powered by Nimiq</p>
           <h1 className="mt-5 text-4xl font-bold leading-[1.05] tracking-tight text-white md:text-5xl lg:text-6xl">
@@ -201,8 +135,6 @@ export default function HomePage() {
             ))}
           </div>
         </div>
-
-        <ChatMock />
       </section>
 
       {/* Feature strip */}
