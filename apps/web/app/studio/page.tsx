@@ -80,6 +80,13 @@ export default function StudioPage() {
       ? reward * slots
       : null;
 
+  // The server requires a future deadline; block past dates in the picker itself (tomorrow+).
+  const minDeadline = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(path, {
       ...init,
@@ -185,9 +192,23 @@ export default function StudioPage() {
   const submitQuest = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      setSubmitting(true);
       setError("");
       setNotice("");
+
+      // Guard the numeric fields client-side so a stray letter gives a friendly message
+      // instead of a raw "expected number" from the API.
+      const rewardNum = Number(form.rewardAmount);
+      const slotsNum = Number(form.totalSlots);
+      if (!Number.isFinite(rewardNum) || rewardNum <= 0) {
+        setError("Reward: enter a positive number of NIM.");
+        return;
+      }
+      if (!Number.isInteger(slotsNum) || slotsNum <= 0) {
+        setError("Slots: enter a whole number greater than zero.");
+        return;
+      }
+
+      setSubmitting(true);
       try {
         await api("/api/studio/quests", {
           method: "POST",
@@ -195,8 +216,8 @@ export default function StudioPage() {
             title: form.title.trim(),
             category: form.category,
             description: form.description.trim(),
-            rewardAmount: Number(form.rewardAmount),
-            totalSlots: Number(form.totalSlots),
+            rewardAmount: rewardNum,
+            totalSlots: slotsNum,
             deadline: form.deadline, // YYYY-MM-DD — coerced to a date server-side
             proofType: form.proofType,
             proofInstructions: form.proofInstructions.trim(),
@@ -242,7 +263,7 @@ export default function StudioPage() {
       <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-6">
         <Header />
 
-        {phase === "loading" && <Info>Loading Creator Studio…</Info>}
+        {phase === "loading" && <StudioSkeleton />}
 
         {phase === "no-telegram" && (
           <Info>
@@ -346,6 +367,7 @@ export default function StudioPage() {
                     className={`${inputClass} min-h-[84px] resize-y`}
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    minLength={10}
                     maxLength={2000}
                     placeholder="What should the worker do, step by step?"
                     required
@@ -381,8 +403,11 @@ export default function StudioPage() {
                   <label className={labelClass}>Deadline</label>
                   <input
                     type="date"
-                    className={inputClass}
+                    // appearance-none strips WebKit's oversized native date widget, which
+                    // otherwise ignores width and overflows the form on mobile Safari.
+                    className={`${inputClass} appearance-none`}
                     value={form.deadline}
+                    min={minDeadline}
                     onChange={(e) => setForm({ ...form, deadline: e.target.value })}
                     required
                   />
@@ -394,6 +419,7 @@ export default function StudioPage() {
                     className={`${inputClass} min-h-[64px] resize-y`}
                     value={form.proofInstructions}
                     onChange={(e) => setForm({ ...form, proofInstructions: e.target.value })}
+                    minLength={5}
                     maxLength={1000}
                     placeholder="Paste the link to your repost."
                     required
@@ -452,6 +478,47 @@ function Header() {
       </div>
     </div>
   );
+}
+
+/** Loading placeholder that mirrors the ready layout (stat row + form) to avoid a content jump. */
+function StudioSkeleton() {
+  return (
+    <div className="mt-4 space-y-5" aria-busy="true" aria-label="Loading Creator Studio">
+      <div>
+        <Shimmer className="h-4 w-40" />
+        <div className="mt-2.5 grid grid-cols-3 gap-2.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="glass rounded-xl px-3 py-2.5">
+              <Shimmer className="mx-auto h-6 w-8" />
+              <Shimmer className="mx-auto mt-2 h-2.5 w-12" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="glass rounded-2xl p-5">
+        <Shimmer className="h-5 w-32" />
+        <Shimmer className="mt-2 h-3 w-48" />
+        <div className="mt-4 space-y-3.5">
+          <Shimmer className="h-11 w-full" />
+          <div className="grid grid-cols-2 gap-3">
+            <Shimmer className="h-11 w-full" />
+            <Shimmer className="h-11 w-full" />
+          </div>
+          <Shimmer className="h-20 w-full" />
+          <div className="grid grid-cols-2 gap-3">
+            <Shimmer className="h-11 w-full" />
+            <Shimmer className="h-11 w-full" />
+          </div>
+          <Shimmer className="h-11 w-full" />
+          <Shimmer className="mt-1 h-11 w-full rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Shimmer({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-lg bg-white/6 ${className}`} />;
 }
 
 function Info({ children, tone }: { children: React.ReactNode; tone?: "error" }) {

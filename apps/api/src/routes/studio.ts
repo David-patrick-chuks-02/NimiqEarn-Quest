@@ -1,5 +1,27 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import { createQuestSchema } from "@nimiqearn/shared";
+
+/** Human-readable form-field labels for the quest create/edit validation errors. */
+const QUEST_FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  category: "Category",
+  description: "Description",
+  rewardAmount: "Reward",
+  totalSlots: "Slots",
+  deadline: "Deadline",
+  proofType: "Proof type",
+  proofInstructions: "Proof instructions",
+};
+
+/** Turn a Zod validation error into a single actionable message naming the offending field. */
+function firstQuestValidationMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "Please check the quest details and try again.";
+  const key = issue.path[0];
+  const label = typeof key === "string" ? (QUEST_FIELD_LABELS[key] ?? key) : "Form";
+  return `${label}: ${issue.message}`;
+}
 import { verifyInitData, type TelegramInitDataUser } from "../telegram-auth.js";
 import {
   createQuestService,
@@ -105,7 +127,9 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
   app.post("/api/studio/quests", async (request, reply) => {
     const parsed = createQuestSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "Invalid quest data", details: parsed.error.flatten() });
+      return reply
+        .code(400)
+        .send({ error: firstQuestValidationMessage(parsed.error), details: parsed.error.flatten() });
     }
     try {
       const quest = await quests.createDraftQuest(telegramId(request), parsed.data);
