@@ -113,24 +113,6 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       };
     },
 
-    /** Re-reveal (export) the user's custodial private key. */
-    async exportWalletKey(
-      telegramId: string,
-    ): Promise<{ nimiqAddress: string; privateKey: string }> {
-      const response = await fetch(
-        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/export`,
-        { method: "POST", headers: authHeaders },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        nimiqAddress?: string;
-        privateKey?: string;
-        error?: string;
-        code?: string;
-      };
-      if (!response.ok) throw parseApiError(data, `Failed to export key (${response.status})`);
-      return { nimiqAddress: data.nimiqAddress!, privateKey: data.privateKey! };
-    },
-
     /** On-chain balance of the user's wallet (NIM + USD), or null if they have none. */
     async getWalletBalance(telegramId: string): Promise<{
       nimiqAddress: string;
@@ -151,15 +133,68 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       } | null;
     },
 
+    /** Whether the user has a secure-action password set. */
+    async getSecurityStatus(telegramId: string): Promise<{ passwordSet: boolean }> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security`,
+        { headers: authHeaders },
+      );
+      if (!response.ok) return { passwordSet: false };
+      const data = (await response.json().catch(() => ({}))) as { passwordSet?: boolean };
+      return { passwordSet: Boolean(data.passwordSet) };
+    },
+
+    /** Set or change the secure-action password (changing requires currentPassword). */
+    async setSecurityPassword(
+      telegramId: string,
+      password: string,
+      currentPassword?: string,
+    ): Promise<void> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security/password`,
+        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ password, currentPassword }) },
+      );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+        throw parseApiError(data, "Could not save password.");
+      }
+    },
+
+    /** Remove the secure-action password (requires the current one). */
+    async clearSecurityPassword(telegramId: string, password: string): Promise<void> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security/password`,
+        { method: "DELETE", headers: jsonHeaders, body: JSON.stringify({ password }) },
+      );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
+        throw parseApiError(data, "Could not remove password.");
+      }
+    },
+
+    /** Update the user's preferred bot language. */
+    async setLanguage(telegramId: string, code: string): Promise<void> {
+      await fetch(`${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/language`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ code }),
+      });
+    },
+
     /** Withdraw NIM from the custodial wallet to an external address (amount NIM or "all"). */
     async withdraw(
       telegramId: string,
       toAddress: string,
       amount: number | "all",
+      password?: string,
     ): Promise<{ hash: string; sentNim: number; recipient: string }> {
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/withdraw`,
-        { method: "POST", headers: jsonHeaders, body: JSON.stringify({ toAddress, amount }) },
+        {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({ toAddress, amount, password }),
+        },
       );
       const data = (await response.json().catch(() => ({}))) as {
         hash?: string;

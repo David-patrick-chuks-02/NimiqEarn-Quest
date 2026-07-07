@@ -119,10 +119,7 @@ export const messages = {
             : "";
         lines.push("", `*Balance:* ${balanceNim.toLocaleString()} NIM${usd}`);
       }
-      lines.push(
-        "",
-        "Tap *Export private key* to back up or move your funds. Keep it secret — anyone with it controls this wallet.",
-      );
+      lines.push("", "Tap *💸 Withdraw* to move your funds to another Nimiq address.");
       return lines.join("\n");
     },
     createFailed:
@@ -161,6 +158,28 @@ export const messages = {
       ].join("\n"),
     timeout: "Withdrawal timed out. Send /wallet when you're ready.",
     cancelled: "Withdrawal cancelled.",
+  },
+
+  settings: {
+    menu: (passwordSet: boolean) =>
+      section(
+        "Settings",
+        passwordSet
+          ? "🔐 A secure-action password is set — it's required to confirm withdrawals."
+          : "Set a *secure-action password* to protect your funds. Once set, it's required to confirm any withdrawal.",
+      ),
+    enterNew: section(
+      "Set action password",
+      "Send a new password (at least 4 characters).\n\nOr tap *Cancel*.",
+    ),
+    confirmNew: "Send the password again to confirm.",
+    enterCurrent: "Send your *current* password.",
+    enterCurrentToRemove: "Send your current password to remove it.",
+    mismatch: "The passwords didn't match — nothing changed. Open /settings to try again.",
+    passwordSet: "✅ Secure-action password saved. It's now required to confirm withdrawals.",
+    passwordRemoved: "✅ Secure-action password removed.",
+    cancelled: "No changes made.",
+    enterToWithdraw: "🔐 Enter your secure-action password to confirm this withdrawal:",
   },
 
   onboarding: {

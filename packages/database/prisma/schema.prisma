@@ -59,6 +59,10 @@ model User {
   role             UserRole   @default(WORKER)
   status           UserStatus @default(PENDING)
   reputationScore  Int        @default(0) @map("reputation_score")
+  // Optional secure-action password (scrypt "salt:hash"), required to confirm withdrawals.
+  securityPasswordHash String? @map("security_password_hash")
+  // Preferred bot language (ISO code); defaults to English.
+  languageCode     String     @default("en") @map("language_code")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 

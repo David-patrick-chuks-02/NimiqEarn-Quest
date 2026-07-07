@@ -100,10 +100,32 @@ export function createWithdrawConversation(api: ApiClient) {
       return;
     }
 
+    // 3b. Secure-action password, if the user has one set.
+    let password: string | undefined;
+    const { passwordSet } = await conversation.external(() =>
+      api.getSecurityStatus(String(from.id)),
+    );
+    if (passwordSet) {
+      await stepChat.prompt(messages.settings.enterToWithdraw, {
+        reply_markup: cancelStepKeyboard(),
+      });
+      const entered = await waitForTextOrCancel(conversation, ctx, {
+        timeoutMs: WAIT_MS,
+        timeoutMessage: messages.withdraw.timeout,
+        stepChat,
+        inputHint: messages.settings.enterToWithdraw,
+      });
+      if (entered === null) {
+        await ctx.reply(messages.withdraw.cancelled);
+        return;
+      }
+      password = entered;
+    }
+
     // 4. Send.
     try {
       const result = await conversation.external(() =>
-        api.withdraw(String(from.id), recipient, amount),
+        api.withdraw(String(from.id), recipient, amount, password),
       );
       await ctx.reply(messages.withdraw.success(result.sentNim, result.recipient, result.hash), {
         parse_mode: "Markdown",

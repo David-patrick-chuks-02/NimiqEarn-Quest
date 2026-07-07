@@ -10,6 +10,7 @@ import { createOnboardingConversation } from "./conversations/onboarding.js";
 import { createQuestConversation } from "./conversations/create-quest.js";
 import { createEditQuestConversation } from "./conversations/edit-quest.js";
 import { createWithdrawConversation } from "./conversations/withdraw.js";
+import { createSecurityPasswordConversation } from "./conversations/security-password.js";
 import type { Logger } from "./logger.js";
 import { fallbackMiddleware } from "./middleware/fallback.js";
 import { loggingMiddleware } from "./middleware/logging.js";
@@ -17,6 +18,7 @@ import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { createRateLimiter } from "./utils/rate-limit.js";
 import { registerCreatorHandlers } from "./menus/creator.js";
 import { registerMainMenuHandlers } from "./menus/main.js";
+import { registerSettingsHandlers } from "./menus/settings.js";
 import { registerWalletHandlers } from "./menus/wallet.js";
 import { messages } from "./copy/messages.js";
 import { createRedisSessionStorage } from "./session.js";
@@ -39,6 +41,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   bot.use(createConversation(createQuestConversation(api), "createQuest"));
   bot.use(createConversation(createEditQuestConversation(api), "editQuest"));
   bot.use(createConversation(createWithdrawConversation(api), "withdraw"));
+  bot.use(createConversation(createSecurityPasswordConversation(api), "securityPassword"));
 
   // Human-verification gate — until a user solves the image CAPTCHA, everything they send is
   // consumed here (anti-spam). Placed after conversations() so ctx.conversation is available.
@@ -51,6 +54,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
   registerWalletHandlers(bot, api);
+  registerSettingsHandlers(bot, api);
   registerCreatorHandlers(bot, api);
   bot.use(fallbackMiddleware(logger));
 

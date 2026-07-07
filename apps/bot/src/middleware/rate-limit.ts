@@ -21,7 +21,6 @@ function isSensitive(ctx: BotContext): boolean {
   if (!data) return false;
   return (
     data === WALLET_CALLBACKS.create ||
-    data === WALLET_CALLBACKS.export ||
     data === WALLET_CALLBACKS.withdraw ||
     data === CREATOR_CALLBACKS.createQuest ||
     data.startsWith(QUEST_EDIT_CALLBACK_PREFIX)

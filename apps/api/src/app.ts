@@ -12,6 +12,7 @@ import { creatorRoutes } from "./routes/creators.js";
 import { walletRoutes } from "./routes/wallets.js";
 import { adminRoutes } from "./routes/admin.js";
 import { studioRoutes } from "./routes/studio.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { createEscrowService } from "./services/escrow.service.js";
 
 export async function buildServer() {
@@ -86,6 +87,7 @@ export async function buildServer() {
   await app.register(creatorRoutes);
   await app.register(questRoutes, { escrow });
   await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow });
+  await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 
   app.get("/", async () => ({

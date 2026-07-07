@@ -9,4 +9,6 @@ export interface SessionData {
   captchaVerified?: boolean;
   /** The pending CAPTCHA challenge: expected answer, its message id, and any /start payload. */
   captcha?: { answer: string; messageId: number; startPayload?: string };
+  /** Which secure-action-password flow to run when the securityPassword conversation starts. */
+  securityIntent?: "set" | "change" | "remove";
 }

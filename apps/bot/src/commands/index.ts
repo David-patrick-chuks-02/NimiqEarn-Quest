@@ -6,10 +6,19 @@ import { helpCommand } from "./help.js";
 import { createCreatorCommand } from "./creator.js";
 import { createMenuCommand } from "./menu.js";
 import { createQuestsCommand } from "./quests.js";
+import { createSettingsCommand } from "./settings.js";
 import { createStartCommand } from "./start.js";
 import { createWalletCommand } from "./wallet.js";
 
-const KNOWN_COMMANDS = new Set(["start", "help", "menu", "wallet", "creator", "quests"]);
+const KNOWN_COMMANDS = new Set([
+  "start",
+  "help",
+  "menu",
+  "wallet",
+  "creator",
+  "quests",
+  "settings",
+]);
 
 export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
   bot.command("help", helpCommand);
@@ -17,6 +26,7 @@ export function registerCommands(bot: Bot<BotContext>, api: ApiClient) {
   bot.command("wallet", createWalletCommand(api));
   bot.command("creator", createCreatorCommand(api));
   bot.command("quests", createQuestsCommand(api));
+  bot.command("settings", createSettingsCommand(api));
   bot.command("start", createStartCommand(api));
 
   bot.on("message:text").filter((ctx) => {

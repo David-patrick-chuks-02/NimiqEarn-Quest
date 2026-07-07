@@ -11,7 +11,6 @@ import { sendWalletReveal, WALLET_REVEAL_DISMISS } from "./wallet-reveal.js";
 export const WALLET_CALLBACKS = {
   open: "wallet:open",
   create: "wallet:create",
-  export: "wallet:export",
   withdraw: "wallet:withdraw",
   refresh: "wallet:refresh",
   dismiss: WALLET_REVEAL_DISMISS,
@@ -30,9 +29,7 @@ function custodialWalletKeyboard(address: string) {
     .copyText("📋 Copy address", address)
     .text("💸 Withdraw", WALLET_CALLBACKS.withdraw)
     .row()
-    .text("🔑 Export private key", WALLET_CALLBACKS.export)
     .text("↻ Refresh", WALLET_CALLBACKS.refresh)
-    .row()
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
@@ -118,23 +115,6 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
       return;
     }
     await ctx.conversation.enter("withdraw");
-  });
-
-  // Re-reveal the private key (export). Same spoiler + delete-after-saved treatment.
-  bot.callbackQuery(WALLET_CALLBACKS.export, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const from = ctx.from;
-    if (!from) {
-      await ctx.reply(messages.errors.noTelegramProfile);
-      return;
-    }
-    try {
-      const wallet = await api.exportWalletKey(String(from.id));
-      await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
-    } catch (error) {
-      console.error("Wallet export failed:", error);
-      await ctx.reply(messages.wallet.createFailed);
-    }
   });
 
   // "I've saved it" — remove the key message from the chat.

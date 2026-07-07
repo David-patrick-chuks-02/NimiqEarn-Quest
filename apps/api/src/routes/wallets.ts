@@ -3,6 +3,7 @@ import {
   createCustodialWalletService,
   CustodialWalletError,
 } from "../services/custodial-wallet.service.js";
+import { createSecurityService } from "../services/security.service.js";
 
 interface WalletRouteOptions {
   nimiqRpcUrl?: string;
@@ -35,6 +36,7 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
     rpcUrl: opts.nimiqRpcUrl,
     network: opts.network,
   });
+  const security = createSecurityService(app.db);
 
   const sendCustodialError = (reply: FastifyReply, error: unknown) => {
     if (error instanceof CustodialWalletError) {
@@ -58,19 +60,6 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
     },
   );
 
-  // Re-reveal (export) the custodial private key.
-  app.post<{ Params: { telegramId: string } }>(
-    "/api/users/:telegramId/wallet/export",
-    async (request, reply) => {
-      try {
-        const w = await custodial.exportKey(request.params.telegramId);
-        return { nimiqAddress: w.address, privateKey: w.privateKeyHex };
-      } catch (error) {
-        return sendCustodialError(reply, error);
-      }
-    },
-  );
-
   // On-chain balance of the user's wallet.
   app.get<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/wallet/balance",
@@ -86,20 +75,24 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
   );
 
   // Withdraw NIM to an external address. amount is a NIM number, or "all".
-  app.post<{ Params: { telegramId: string }; Body: { toAddress?: string; amount?: number | "all" } }>(
-    "/api/users/:telegramId/wallet/withdraw",
-    async (request, reply) => {
-      const toAddress = request.body?.toAddress;
-      const amount = request.body?.amount;
-      if (typeof toAddress !== "string" || (amount !== "all" && typeof amount !== "number")) {
-        return reply.code(400).send({ error: "toAddress and amount are required" });
-      }
-      try {
-        const result = await custodial.withdraw(request.params.telegramId, toAddress, amount);
-        return result;
-      } catch (error) {
-        return sendCustodialError(reply, error);
-      }
-    },
-  );
+  // Gated by the secure-action password when one is set.
+  app.post<{
+    Params: { telegramId: string };
+    Body: { toAddress?: string; amount?: number | "all"; password?: string };
+  }>("/api/users/:telegramId/wallet/withdraw", async (request, reply) => {
+    const toAddress = request.body?.toAddress;
+    const amount = request.body?.amount;
+    if (typeof toAddress !== "string" || (amount !== "all" && typeof amount !== "number")) {
+      return reply.code(400).send({ error: "toAddress and amount are required" });
+    }
+    if (!(await security.verify(request.params.telegramId, request.body?.password))) {
+      return reply.code(403).send({ error: "Incorrect security password.", code: "WRONG_PASSWORD" });
+    }
+    try {
+      const result = await custodial.withdraw(request.params.telegramId, toAddress, amount);
+      return result;
+    } catch (error) {
+      return sendCustodialError(reply, error);
+    }
+  });
 };
