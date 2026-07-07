@@ -104,36 +104,34 @@ export default function HomePage() {
       <SiteHeader />
 
       {/* Hero */}
-      <section className="mx-auto max-w-3xl px-6 pb-16 pt-14 lg:pt-20">
-        <div>
-          <p className="eyebrow">Telegram-native · powered by Nimiq</p>
-          <h1 className="mt-5 text-4xl font-bold leading-[1.05] tracking-tight text-white md:text-5xl lg:text-6xl">
-            Complete tasks.
-            <br />
-            Earn <span className="text-gradient-gold">NIM</span>.
-          </h1>
-          <p className="mt-6 max-w-md text-lg leading-relaxed text-[var(--brand-muted)]">
-            A task and bounty marketplace that lives entirely inside Telegram. Workers complete
-            quests and get paid in NIM; creators run structured, paid campaigns.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button href={BOT_URL} icon>
-              Start earning
-            </Button>
-            <Button href="#creators" variant="ghost">
-              Publish a quest
-            </Button>
-          </div>
+      <section className="mx-auto flex max-w-3xl flex-col items-center px-6 pb-16 pt-20 text-center lg:pt-28">
+        <p className="eyebrow">Telegram-native · powered by Nimiq</p>
+        <h1 className="mt-5 text-4xl font-bold leading-[1.05] tracking-tight text-white md:text-5xl lg:text-6xl">
+          Complete tasks.
+          <br />
+          Earn <span className="text-gradient-gold">NIM</span>.
+        </h1>
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--brand-muted)]">
+          A task and bounty marketplace that lives entirely inside Telegram. Workers complete quests
+          and get paid in NIM; creators run structured, paid campaigns.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Button href={BOT_URL} icon>
+            Start earning
+          </Button>
+          <Button href="#creators" variant="ghost">
+            Publish a quest
+          </Button>
+        </div>
 
-          {/* Reward loop — slim mono stepper */}
-          <div className="mt-10 flex flex-wrap items-center gap-x-2 gap-y-2 text-[var(--brand-muted)]">
-            {LOOP.map((step, i) => (
-              <span key={step} className="flex items-center gap-2">
-                <span className="eyebrow !text-[11px] text-[var(--brand-text)]">{step}</span>
-                {i < LOOP.length - 1 && <IconArrow className="h-3.5 w-3.5 text-white/25" />}
-              </span>
-            ))}
-          </div>
+        {/* Reward loop — slim mono stepper */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-[var(--brand-muted)]">
+          {LOOP.map((step, i) => (
+            <span key={step} className="flex items-center gap-2">
+              <span className="eyebrow !text-[11px] text-[var(--brand-text)]">{step}</span>
+              {i < LOOP.length - 1 && <IconArrow className="h-3.5 w-3.5 text-white/25" />}
+            </span>
+          ))}
         </div>
       </section>
 

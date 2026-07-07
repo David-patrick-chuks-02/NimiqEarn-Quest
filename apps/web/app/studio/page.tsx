@@ -253,6 +253,16 @@ export default function StudioPage() {
     [api, loadQuests, refreshDashboard],
   );
 
+  // Any in-flight write blocks the whole studio behind an overlay so the user can't
+  // double-submit or navigate mid-action.
+  const busyLabel = submitting
+    ? "Saving draft…"
+    : publishingId
+      ? "Publishing quest…"
+      : registering
+        ? "Activating creator account…"
+        : null;
+
   return (
     <>
       <Script
@@ -260,6 +270,7 @@ export default function StudioPage() {
         strategy="afterInteractive"
         onLoad={() => void boot()}
       />
+      {busyLabel && <LoadingOverlay label={busyLabel} />}
       <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-6">
         <Header />
 
@@ -519,6 +530,31 @@ function StudioSkeleton() {
 
 function Shimmer({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-white/6 ${className}`} />;
+}
+
+function Spinner() {
+  return (
+    <span
+      className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-white/25 border-t-[var(--brand-gold)]"
+      aria-hidden
+    />
+  );
+}
+
+/** Full-screen blocking overlay shown while a studio write (save / publish / register) runs. */
+function LoadingOverlay({ label }: { label: string }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="glass flex items-center gap-3 rounded-2xl px-5 py-4">
+        <Spinner />
+        <span className="text-sm font-medium text-white">{label}</span>
+      </div>
+    </div>
+  );
 }
 
 function Info({ children, tone }: { children: React.ReactNode; tone?: "error" }) {
