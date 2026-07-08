@@ -124,6 +124,34 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     }
   });
 
+  // Creator's custodial wallet balance — used by the studio to pre-check funding before a
+  // publish. reachable:false means we couldn't read the chain (the server still enforces
+  // funding at publish time, so this is advisory only).
+  app.get("/api/studio/balance", async (request, reply) => {
+    try {
+      const user = await app.db.user.findUnique({
+        where: { telegramId: telegramId(request) },
+        include: { walletProfiles: true },
+      });
+      const wallet = user?.walletProfiles.find((w) => w.keyCiphertext) ?? null;
+      if (!wallet) {
+        return { hasWallet: false, address: null, balanceNim: null, reachable: false };
+      }
+      if (!opts.escrow?.canCheckFunding) {
+        return { hasWallet: true, address: wallet.nimiqAddress, balanceNim: null, reachable: false };
+      }
+      const funding = await opts.escrow.getFunding(wallet.nimiqAddress, 0);
+      return {
+        hasWallet: true,
+        address: wallet.nimiqAddress,
+        balanceNim: funding.balanceNim,
+        reachable: funding.reachable,
+      };
+    } catch (error) {
+      return sendStudioError(reply, error);
+    }
+  });
+
   app.post("/api/studio/quests", async (request, reply) => {
     const parsed = createQuestSchema.safeParse(request.body);
     if (!parsed.success) {

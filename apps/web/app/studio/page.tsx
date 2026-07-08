@@ -70,6 +70,12 @@ export default function StudioPage() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [sharedId, setSharedId] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [balance, setBalance] = useState<{ nim: number | null; reachable: boolean }>({
+    nim: null,
+    reachable: false,
+  });
+  const [confirmQuest, setConfirmQuest] = useState<Quest | null>(null);
   const initDataRef = useRef<string>("");
 
   // Total reward pool the creator funds = reward per completion × number of taskers.
@@ -131,6 +137,32 @@ export default function StudioPage() {
     if (me.dashboard) setDashboard(me.dashboard);
   }, [api]);
 
+  // Creator's on-chain wallet balance — advisory, used to pre-check funding before publishing.
+  const loadBalance = useCallback(async () => {
+    try {
+      const b = (await api("/api/studio/balance")) as {
+        balanceNim?: number | null;
+        reachable?: boolean;
+      };
+      setBalance({ nim: b.balanceNim ?? null, reachable: Boolean(b.reachable) });
+    } catch {
+      setBalance({ nim: null, reachable: false });
+    }
+  }, [api]);
+
+  // Manual refresh from the studio header — reloads quests, stats, and wallet balance.
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true);
+    setError("");
+    try {
+      await Promise.all([loadQuests(), refreshDashboard(), loadBalance()]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadQuests, refreshDashboard, loadBalance]);
+
   const boot = useCallback(async () => {
     const tg = window.Telegram?.WebApp;
     const initData = tg?.initData ?? "";
@@ -158,13 +190,13 @@ export default function StudioPage() {
         return;
       }
       setDashboard(me.dashboard);
-      await loadQuests();
+      await Promise.all([loadQuests(), loadBalance()]);
       setPhase("ready");
     } catch (e) {
       setError((e as Error).message);
       setPhase("error");
     }
-  }, [api, loadQuests]);
+  }, [api, loadQuests, loadBalance]);
 
   // If Telegram injected the SDK before hydration, boot immediately; otherwise the
   // Script onLoad handler below triggers it.
@@ -253,6 +285,24 @@ export default function StudioPage() {
     [api, loadQuests, refreshDashboard],
   );
 
+  // Open the publish confirmation modal; refresh the balance so its pre-check is current.
+  const requestPublish = useCallback(
+    (quest: Quest) => {
+      setError("");
+      setNotice("");
+      setConfirmQuest(quest);
+      void loadBalance();
+    },
+    [loadBalance],
+  );
+
+  const confirmPublish = useCallback(async () => {
+    const quest = confirmQuest;
+    if (!quest) return;
+    setConfirmQuest(null);
+    await publish(quest.id);
+  }, [confirmQuest, publish]);
+
   // Any in-flight write blocks the whole studio behind an overlay so the user can't
   // double-submit or navigate mid-action.
   const busyLabel = submitting
@@ -271,8 +321,16 @@ export default function StudioPage() {
         onLoad={() => void boot()}
       />
       {busyLabel && <LoadingOverlay label={busyLabel} />}
+      {confirmQuest && (
+        <PublishConfirmModal
+          quest={confirmQuest}
+          balance={balance}
+          onCancel={() => setConfirmQuest(null)}
+          onConfirm={() => void confirmPublish()}
+        />
+      )}
       <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-6">
-        <Header />
+        <Header onRefresh={phase === "ready" ? refreshAll : undefined} refreshing={refreshing} />
 
         {phase === "loading" && <StudioSkeleton />}
 
@@ -464,7 +522,7 @@ export default function StudioPage() {
               quests={quests}
               publishingId={publishingId}
               sharedId={sharedId}
-              onPublish={publish}
+              onPublish={requestPublish}
               onShare={shareQuest}
             />
           </div>
@@ -477,7 +535,7 @@ export default function StudioPage() {
 const primaryBtn =
   "inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-5 py-2.5 text-sm font-semibold text-[var(--brand-ink)] transition hover:bg-[var(--brand-gold-600)] disabled:opacity-60";
 
-function Header() {
+function Header({ onRefresh, refreshing }: { onRefresh?: () => void; refreshing?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
       <Image src="/logo.png" alt="NimiqEarn Quest" width={28} height={30} className="rounded-md" />
@@ -487,7 +545,35 @@ function Header() {
         </p>
         <p className="eyebrow leading-tight">Creator Studio</p>
       </div>
+      {onRefresh && (
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          aria-label="Refresh"
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-[var(--brand-muted)] transition hover:bg-white/5 disabled:opacity-50"
+        >
+          <IconRefresh className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      )}
     </div>
+  );
+}
+
+function IconRefresh({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
   );
 }
 
@@ -557,6 +643,79 @@ function LoadingOverlay({ label }: { label: string }) {
   );
 }
 
+/**
+ * Publish confirmation. Pre-checks the creator's on-chain balance against the quest's reward
+ * pool and blocks the Publish button when it's short — before any request is made. When the
+ * balance can't be read (RPC down), it lets the user proceed and the server enforces funding.
+ */
+function PublishConfirmModal({
+  quest,
+  balance,
+  onCancel,
+  onConfirm,
+}: {
+  quest: Quest;
+  balance: { nim: number | null; reachable: boolean };
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const cost = Number(quest.rewardAmount) * quest.totalSlots;
+  const known = balance.reachable && balance.nim !== null;
+  const bal = balance.nim ?? 0;
+  const insufficient = known && bal < cost;
+  const shortfall = Math.max(0, cost - bal);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-5 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="glass w-full max-w-sm rounded-2xl p-5">
+        <h3 className="text-base font-bold text-white">Publish this quest?</h3>
+        <p className="mt-1 truncate text-sm text-[var(--brand-muted)]">{quest.title}</p>
+
+        <dl className="mt-4 space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <dt className="text-[var(--brand-muted)]">Reward pool</dt>
+            <dd className="font-semibold text-white">{cost.toLocaleString()} NIM</dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-[var(--brand-muted)]">Your balance</dt>
+            <dd className={`font-semibold ${insufficient ? "text-red-400" : "text-white"}`}>
+              {known ? `${bal.toLocaleString()} NIM` : "—"}
+            </dd>
+          </div>
+        </dl>
+
+        {insufficient ? (
+          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+            Insufficient balance — you need {shortfall.toLocaleString()} more NIM. Deposit to your
+            wallet in the bot, then try again.
+          </p>
+        ) : (
+          <p className="mt-4 text-xs leading-relaxed text-[var(--brand-muted)]">
+            {cost.toLocaleString()} NIM will be moved from your wallet to fund this quest.
+            {!known && " We couldn't confirm your balance — publishing will fail if it's too low."}
+          </p>
+        )}
+
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-full border border-white/12 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/5"
+          >
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={insufficient} className={`${primaryBtn} flex-1`}>
+            Publish
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Info({ children, tone }: { children: React.ReactNode; tone?: "error" }) {
   return (
     <div className="glass mt-4 rounded-2xl p-6 text-center">
@@ -603,7 +762,7 @@ function QuestList({
   quests: Quest[];
   publishingId: string | null;
   sharedId: string | null;
-  onPublish: (id: string) => void;
+  onPublish: (quest: Quest) => void;
   onShare: (id: string) => void;
 }) {
   if (quests.length === 0) {
@@ -633,7 +792,7 @@ function QuestList({
 
             {q.status === "DRAFT" && (
               <button
-                onClick={() => onPublish(q.id)}
+                onClick={() => onPublish(q)}
                 disabled={publishingId === q.id}
                 className={`${primaryBtn} mt-3 w-full`}
               >
