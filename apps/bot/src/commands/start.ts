@@ -73,6 +73,8 @@ export function createStartCommand(api: ApiClient) {
   // By the time /start reaches here the CAPTCHA guard has already let it through.
   return async function startCommand(ctx: CommandContext<BotContext>) {
     const payload = typeof ctx.match === "string" ? ctx.match.trim() : "";
+    // The /start command itself is chat noise once the menu renders — tidy it away.
+    await deleteMessageSafe(ctx, ctx.chat?.id, ctx.message?.message_id);
     await runStart(ctx, api, payload);
   };
 }
@@ -97,26 +99,38 @@ export function createCaptchaGuard(api: ApiClient) {
 
     const pending = ctx.session.captcha;
     const text = ctx.message?.text?.trim();
+    const incomingId = ctx.message?.message_id;
 
     if (pending && text && !text.startsWith("/")) {
+      // The typed answer is verification noise either way — remove it from the chat.
+      await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
+
       if (text.toUpperCase() === pending.answer) {
         ctx.session.captchaVerified = true;
         ctx.session.captcha = undefined;
+        // Clear the challenge image and any lingering "incorrect" notice so nothing from
+        // the verification step is left above the welcome flow.
         await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
-        await ctx.reply(messages.captcha.success);
+        await deleteMessageSafe(ctx, ctx.chat?.id, ctx.session.captchaNoticeId);
+        ctx.session.captchaNoticeId = undefined;
         await runStart(ctx, api, pending.startPayload ?? "");
         return;
       }
-      // Wrong: remove the old challenge and send a fresh one.
+
+      // Wrong: drop the old challenge + previous notice, then reissue a single fresh pair.
       await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
-      await ctx.reply(messages.captcha.incorrect);
+      await deleteMessageSafe(ctx, ctx.chat?.id, ctx.session.captchaNoticeId);
+      const notice = await ctx.reply(messages.captcha.incorrect);
+      ctx.session.captchaNoticeId = notice.message_id;
       await sendCaptcha(ctx, pending.startPayload);
       return;
     }
 
     // First contact (or a command / non-text while unverified) → issue a challenge.
-    // Clear any existing one first so there's only ever a single live CAPTCHA.
+    // Remove whatever the user sent (e.g. /start) so the chat starts clean, and clear any
+    // existing challenge first so there's only ever a single live CAPTCHA.
     if (ctx.callbackQuery) await ctx.answerCallbackQuery().catch(() => undefined);
+    await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
     if (pending) await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
     await sendCaptcha(ctx, startPayloadFromText(text) ?? pending?.startPayload);
   };
