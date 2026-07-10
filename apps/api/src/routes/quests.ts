@@ -37,6 +37,7 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
     case "INSUFFICIENT_BALANCE":
       return 402;
     case "RPC_UNAVAILABLE":
+    case "PAYOUT_FAILED":
       return 503;
     case "QUEST_NOT_PUBLISHED":
     case "QUEST_FULL":
@@ -96,8 +97,8 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
         return reply.code(400).send({ error: "proof is required" });
       }
       try {
-        await quests.submitQuest(telegramId, request.params.id, proof);
-        return { ok: true };
+        const { txHash } = await quests.submitQuest(telegramId, request.params.id, proof);
+        return { ok: true, txHash };
       } catch (error) {
         return sendQuestError(reply, error);
       }

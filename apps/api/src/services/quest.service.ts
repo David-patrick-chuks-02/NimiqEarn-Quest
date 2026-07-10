@@ -24,7 +24,8 @@ export class QuestServiceError extends Error {
       | "QUEST_FULL"
       | "QUEST_EXPIRED"
       | "ALREADY_SUBMITTED"
-      | "INVALID_PROOF",
+      | "INVALID_PROOF"
+      | "PAYOUT_FAILED",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -426,10 +427,17 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
     },
 
     /**
-     * Record a worker's proof for a quest and fill a slot (auto-accept). Guards against the
-     * creator doing their own quest, duplicates, a full quest, and an expired deadline.
+     * Record a worker's proof for a quest, fill a slot, and pay the reward to their wallet.
+     * Proof is auto-accepted (no creator review in this milestone) — our system is the
+     * verifier. Guards against the creator doing their own quest, duplicates, a full quest,
+     * and an expired deadline. When payments are configured the reward is disbursed on-chain
+     * from the quest's escrow to the worker's custodial wallet immediately.
      */
-    async submitQuest(telegramId: string, questId: string, proof: string): Promise<void> {
+    async submitQuest(
+      telegramId: string,
+      questId: string,
+      proof: string,
+    ): Promise<{ txHash: string | null }> {
       const trimmed = proof.trim();
       if (trimmed.length === 0 || trimmed.length > 2000) {
         throw new QuestServiceError(
@@ -438,7 +446,10 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         );
       }
 
-      const user = await db.user.findUnique({ where: { telegramId } });
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfiles: true },
+      });
       if (!user) {
         throw new QuestServiceError("Send /start to register before doing quests.", "USER_NOT_FOUND");
       }
@@ -451,22 +462,27 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         throw new QuestServiceError("This quest isn't open for submissions.", "QUEST_NOT_PUBLISHED");
       }
       if (quest.creatorId === user.id) {
-        throw new QuestServiceError(
-          "You can't complete your own quest.",
-          "CREATOR_CANNOT_SUBMIT",
-        );
+        throw new QuestServiceError("You can't complete your own quest.", "CREATOR_CANNOT_SUBMIT");
       }
       if (quest.deadline.getTime() <= Date.now()) {
         throw new QuestServiceError("This quest's deadline has passed.", "QUEST_EXPIRED");
       }
 
+      // Pay the reward on accept when escrow is configured and the quest holds its own key.
+      const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
+      const workerWallet = user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
+      if (willPay && !workerWallet) {
+        throw new QuestServiceError("Set up your wallet with /start before doing quests.", "NO_WALLET");
+      }
+
+      // Reserve a slot and record the submission atomically. The unique (quest,user) index
+      // rejects a double-submit; the conditional increment prevents overselling slots.
+      let submissionId: string;
       try {
-        await db.$transaction(async (tx) => {
-          // Claim the (quest, user) pair first — the unique index rejects a double-submit.
-          await tx.questSubmission.create({
+        submissionId = await db.$transaction(async (tx) => {
+          const submission = await tx.questSubmission.create({
             data: { questId, userId: user.id, proof: trimmed, status: "ACCEPTED" },
           });
-          // Reserve a slot only if one is still free (conditional update = no oversell race).
           const reserved = await tx.quest.updateMany({
             where: { id: questId, filledSlots: { lt: quest.totalSlots } },
             data: { filledSlots: { increment: 1 } },
@@ -474,7 +490,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
           if (reserved.count === 0) {
             throw new QuestServiceError("This quest is already full.", "QUEST_FULL");
           }
-          await tx.questEvent.create({ data: { questId, type: "FILL" } });
+          return submission.id;
         });
       } catch (error) {
         if (error instanceof QuestServiceError) throw error;
@@ -483,6 +499,41 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         }
         throw error;
       }
+
+      let txHash: string | null = null;
+      if (willPay && workerWallet) {
+        const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+        const result = await escrow!.transfer({
+          fromKeyCiphertext: quest.escrowKeyCiphertext!,
+          toAddress: workerWallet.nimiqAddress,
+          valueLuna: BigInt(rewardLuna),
+        });
+        if (!result.hash) {
+          // Payout failed — undo the slot + submission so the worker can retry cleanly.
+          await db
+            .$transaction(async (tx) => {
+              await tx.questSubmission.delete({ where: { id: submissionId } });
+              await tx.quest.updateMany({
+                where: { id: questId, filledSlots: { gt: 0 } },
+                data: { filledSlots: { decrement: 1 } },
+              });
+            })
+            .catch(() => undefined);
+          throw new QuestServiceError(
+            result.error ?? "We couldn't pay your reward. Please try again.",
+            "PAYOUT_FAILED",
+          );
+        }
+        txHash = result.hash;
+        await db.questSubmission
+          .update({ where: { id: submissionId }, data: { payoutTxHash: txHash, paidAt: new Date() } })
+          .catch(() => undefined);
+      }
+
+      // FILL marks a completed+paid slot — logged after payout so analytics stay honest.
+      await db.questEvent.create({ data: { questId, type: "FILL" } }).catch(() => undefined);
+
+      return { txHash };
     },
   };
 }

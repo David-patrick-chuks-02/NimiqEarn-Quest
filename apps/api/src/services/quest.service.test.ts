@@ -146,14 +146,19 @@ describe("createQuestService", () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it("records a submission and fills a slot for a worker", async () => {
-    const findUnique = vi.fn().mockResolvedValue({ id: "worker-9", telegramId: "999" });
+  it("records a submission and fills a slot for a worker (no payout when escrow off)", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "worker-9",
+      telegramId: "999",
+      walletProfiles: [],
+    });
     const findFirst = vi.fn().mockResolvedValue({
       id: "quest-1",
       creatorId: "user-1",
       status: "PUBLISHED",
       totalSlots: 5,
       filledSlots: 1,
+      escrowKeyCiphertext: null,
       deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const submissionCreate = vi.fn().mockResolvedValue({ id: "sub-1" });
@@ -163,18 +168,19 @@ describe("createQuestService", () => {
       fn({
         questSubmission: { create: submissionCreate },
         quest: { updateMany: questUpdateMany },
-        questEvent: { create: eventCreate },
       }),
     );
 
     const service = createQuestService({
       user: { findUnique },
       quest: { findFirst },
+      questEvent: { create: eventCreate },
       $transaction: transaction,
     } as never);
 
-    await service.submitQuest("999", "quest-1", "  here is my proof  ");
+    const result = await service.submitQuest("999", "quest-1", "  here is my proof  ");
 
+    expect(result).toEqual({ txHash: null });
     expect(submissionCreate).toHaveBeenCalledWith({
       data: { questId: "quest-1", userId: "worker-9", proof: "here is my proof", status: "ACCEPTED" },
     });
@@ -183,6 +189,60 @@ describe("createQuestService", () => {
       data: { filledSlots: { increment: 1 } },
     });
     expect(eventCreate).toHaveBeenCalledWith({ data: { questId: "quest-1", type: "FILL" } });
+  });
+
+  it("pays the reward to the worker's wallet on accept", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "worker-9",
+      telegramId: "999",
+      walletProfiles: [{ nimiqAddress: "NQ_WORKER", keyCiphertext: "enc" }],
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "PUBLISHED",
+      totalSlots: 5,
+      filledSlots: 0,
+      rewardAmount: "10",
+      escrowKeyCiphertext: "escrow-enc",
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    const transaction = vi.fn(async (fn) =>
+      fn({
+        questSubmission: { create: vi.fn().mockResolvedValue({ id: "sub-1" }) },
+        quest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      }),
+    );
+    const submissionUpdate = vi.fn().mockResolvedValue({});
+    const transfer = vi.fn().mockResolvedValue({ hash: "0xdeadbeef" });
+
+    const service = createQuestService(
+      {
+        user: { findUnique },
+        quest: { findFirst },
+        questSubmission: { update: submissionUpdate },
+        questEvent: { create: vi.fn().mockResolvedValue({}) },
+        $transaction: transaction,
+      } as never,
+      {
+        enabled: true,
+        requiredLuna: (nim: number, slots: number) => nim * slots * 100_000,
+        transfer,
+      } as never,
+    );
+
+    const result = await service.submitQuest("999", "quest-1", "my proof");
+
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "escrow-enc",
+      toAddress: "NQ_WORKER",
+      valueLuna: BigInt(10 * 100_000),
+    });
+    expect(result).toEqual({ txHash: "0xdeadbeef" });
+    expect(submissionUpdate).toHaveBeenCalledWith({
+      where: { id: "sub-1" },
+      data: expect.objectContaining({ payoutTxHash: "0xdeadbeef" }),
+    });
   });
 
   it("rejects an empty proof", async () => {
