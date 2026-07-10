@@ -255,10 +255,14 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         include: { creator: { select: { displayName: true } } },
       });
       if (!quest) return null;
-      // Best-effort view count — never block or fail the read on it.
-      await db.quest
-        .update({ where: { id: quest.id }, data: { viewCount: { increment: 1 } } })
-        .catch(() => undefined);
+      // Best-effort view tracking — never block or fail the read on it. We keep the
+      // running counter (cheap reads) AND append a timestamped event (time-series charts).
+      await Promise.all([
+        db.quest
+          .update({ where: { id: quest.id }, data: { viewCount: { increment: 1 } } })
+          .catch(() => undefined),
+        db.questEvent.create({ data: { questId: quest.id, type: "VIEW" } }).catch(() => undefined),
+      ]);
       return quest;
     },
 
@@ -283,7 +287,108 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       const requiredLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
       return escrow.getFunding(quest.escrowAddress, requiredLuna);
     },
+
+    /**
+     * Per-quest analytics for the creator "Manage Quests" view: a snapshot of the
+     * headline numbers plus a daily time-series of views and fills over a trailing
+     * window, so the studio can render trend charts. Caller must own the quest.
+     */
+    async getQuestAnalytics(
+      telegramId: string,
+      questId: string,
+      windowDays = 30,
+    ): Promise<QuestAnalytics> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const quest = await db.quest.findFirst({ where: { id: questId, creatorId: user.id } });
+      if (!quest) {
+        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      }
+
+      // Trailing window of whole UTC days, ending today. Start at midnight so day
+      // buckets line up with the date keys we group on.
+      const days = Math.max(1, Math.min(90, windowDays));
+      const start = new Date();
+      start.setUTCHours(0, 0, 0, 0);
+      start.setUTCDate(start.getUTCDate() - (days - 1));
+
+      const events = await db.questEvent.findMany({
+        where: { questId, createdAt: { gte: start } },
+        select: { type: true, createdAt: true },
+      });
+
+      // Pre-seed every day in the window with zeros so the chart has no gaps.
+      const buckets = new Map<string, { views: number; fills: number }>();
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start);
+        d.setUTCDate(start.getUTCDate() + i);
+        buckets.set(d.toISOString().slice(0, 10), { views: 0, fills: 0 });
+      }
+      for (const ev of events) {
+        const key = ev.createdAt.toISOString().slice(0, 10);
+        const bucket = buckets.get(key);
+        if (!bucket) continue;
+        if (ev.type === "VIEW") bucket.views += 1;
+        else if (ev.type === "FILL") bucket.fills += 1;
+      }
+      const series = [...buckets.entries()].map(([date, v]) => ({ date, ...v }));
+
+      const reward = Number(quest.rewardAmount);
+      const pool = reward * quest.totalSlots;
+      const committed = reward * quest.filledSlots;
+      const conversionRate = quest.viewCount > 0 ? quest.filledSlots / quest.viewCount : 0;
+      const msLeft = quest.deadline.getTime() - Date.now();
+      const daysLeft = Math.max(0, Math.ceil(msLeft / 86_400_000));
+
+      return {
+        id: quest.id,
+        title: quest.title,
+        status: quest.status,
+        rewardAmount: reward,
+        totalSlots: quest.totalSlots,
+        filledSlots: quest.filledSlots,
+        slotsLeft: Math.max(0, quest.totalSlots - quest.filledSlots),
+        viewCount: quest.viewCount,
+        pool,
+        committed,
+        remainingPool: Math.max(0, pool - committed),
+        conversionRate,
+        deadline: quest.deadline.toISOString(),
+        daysLeft,
+        publishedAt: quest.publishedAt?.toISOString() ?? null,
+        createdAt: quest.createdAt.toISOString(),
+        windowDays: days,
+        series,
+      };
+    },
   };
+}
+
+export interface QuestAnalytics {
+  id: string;
+  title: string;
+  status: string;
+  rewardAmount: number;
+  totalSlots: number;
+  filledSlots: number;
+  slotsLeft: number;
+  viewCount: number;
+  pool: number;
+  committed: number;
+  remainingPool: number;
+  conversionRate: number;
+  deadline: string;
+  daysLeft: number;
+  publishedAt: string | null;
+  createdAt: string;
+  windowDays: number;
+  series: { date: string; views: number; fills: number }[];
 }
 
 export type QuestService = ReturnType<typeof createQuestService>;

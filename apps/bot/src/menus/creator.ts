@@ -22,19 +22,21 @@ export const CREATOR_CALLBACKS = {
   backToMenu: "creator:back-menu",
 } as const;
 
-/** Studio Mini App URL — only usable over HTTPS (a Telegram requirement for web_app buttons). */
-function creatorStudioUrl(): string | null {
+/** Mini App base URL — web_app buttons require HTTPS (a Telegram requirement). */
+function studioBaseUrl(): string | null {
   const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
-  return base.startsWith("https://") ? `${base}/studio` : null;
+  return base.startsWith("https://") ? base : null;
 }
 
 export function creatorHubKeyboard() {
-  // The Studio Mini App is the single surface for creating quests AND reviewing all of
-  // them with analytics — so when it's available we don't duplicate those as chat buttons.
-  const studioUrl = creatorStudioUrl();
-  if (studioUrl) {
+  // The Studio Mini App handles creating/drafting/publishing; the Manage Quests app is the
+  // deeper analytics surface (per-quest charts). Both open only over HTTPS.
+  const base = studioBaseUrl();
+  if (base) {
     return new InlineKeyboard()
-      .webApp("🎨 Open Creator Studio", studioUrl)
+      .webApp("🎨 Open Creator Studio", `${base}/studio`)
+      .row()
+      .webApp("📊 Manage Quests", `${base}/studio/manage`)
       .row()
       .text("🔄 Refresh", CREATOR_CALLBACKS.refresh)
       .text("Main Menu", CREATOR_CALLBACKS.backToMenu);

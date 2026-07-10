@@ -200,4 +200,18 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       }
     },
   );
+
+  // Per-quest analytics for the "Manage Quests" view — snapshot metrics + a daily
+  // views/fills time-series. Only the owning creator can read it.
+  app.get<{ Params: { questId: string } }>(
+    "/api/studio/quests/:questId/analytics",
+    async (request, reply) => {
+      try {
+        const analytics = await quests.getQuestAnalytics(telegramId(request), request.params.questId);
+        return { analytics };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
 };

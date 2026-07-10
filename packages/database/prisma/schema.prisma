@@ -51,6 +51,13 @@ enum QuestStatus {
   ARCHIVED
 }
 
+// Time-series event log powering the creator "Manage Quests" analytics view.
+// VIEW = a public quest page was opened; FILL = a slot was claimed/completed.
+enum QuestEventType {
+  VIEW
+  FILL
+}
+
 model User {
   id               String     @id @default(uuid()) @db.Uuid
   telegramId       String     @unique @map("telegram_id")
@@ -129,9 +136,24 @@ model Quest {
   escrowKeyCiphertext String?  @map("escrow_key_ciphertext") @db.Text
   fundedAt            DateTime? @map("funded_at")
 
-  creator User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creator User         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  events  QuestEvent[]
 
   @@index([creatorId])
   @@index([status])
   @@map("quests")
+}
+
+// Append-only analytics events. One row per view/fill so the studio can chart
+// activity over time (aggregated per day server-side).
+model QuestEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  questId   String         @map("quest_id") @db.Uuid
+  type      QuestEventType
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@index([questId, type, createdAt])
+  @@map("quest_events")
 }
