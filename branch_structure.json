@@ -1,0 +1,24 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "main",
+    "milestone-1-core-mvp",
+    "milestone-2-marketplace-payments",
+    "milestone-3-verification-launch",
+    "origin"
+  ],
+  "parent": {
+    "main": null,
+    "milestone-1-core-mvp": "main",
+    "milestone-2-marketplace-payments": "main",
+    "milestone-3-verification-launch": "main",
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "milestone-1-core-mvp",
+    "milestone-2-marketplace-payments",
+    "milestone-3-verification-launch",
+    "origin"
+  ]
+}
