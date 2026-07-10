@@ -4,7 +4,7 @@ import { messages } from "../copy/messages.js";
 import type { BotContext } from "../context.js";
 import { sendCaptcha } from "../captcha.js";
 import { sendMainMenu } from "../menus/main.js";
-import { formatSharedQuest } from "../menus/shared-quest.js";
+import { formatSharedQuest, sharedQuestKeyboard } from "../menus/shared-quest.js";
 import { deleteMessageSafe } from "../utils/chat-cleanup.js";
 import { hasActiveConversation } from "../utils/conversation.js";
 
@@ -36,12 +36,15 @@ async function runStart(ctx: BotContext, api: ApiClient, payload: string) {
     }
   }
 
-  // Shared-quest deep link (t.me/<bot>?start=q_<id>): show the quest, then continue.
+  // Shared-quest deep link (t.me/<bot>?start=q_<id>): show the quest with a "Do this quest"
+  // Mini App button, then continue.
   if (payload.startsWith("q_")) {
     try {
-      const quest = await api.getPublicQuest(payload.slice(2));
+      const questId = payload.slice(2);
+      const quest = await api.getPublicQuest(questId);
       await ctx.reply(quest ? formatSharedQuest(quest) : messages.quests.sharedUnavailable, {
         parse_mode: "Markdown",
+        reply_markup: quest ? (sharedQuestKeyboard(questId) ?? undefined) : undefined,
       });
     } catch (error) {
       console.error("Shared quest lookup failed:", error);

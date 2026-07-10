@@ -58,6 +58,14 @@ enum QuestEventType {
   FILL
 }
 
+// Outcome of a worker's quest submission. Submissions currently auto-accept on submit;
+// PENDING/REJECTED exist for a future creator-review flow.
+enum SubmissionStatus {
+  ACCEPTED
+  PENDING
+  REJECTED
+}
+
 model User {
   id               String     @id @default(uuid()) @db.Uuid
   telegramId       String     @unique @map("telegram_id")
@@ -76,6 +84,7 @@ model User {
   walletProfiles WalletProfile[]
   walletAudits  WalletAddressAudit[]
   quests        Quest[]
+  submissions   QuestSubmission[]
 
   @@map("users")
 }
@@ -136,8 +145,9 @@ model Quest {
   escrowKeyCiphertext String?  @map("escrow_key_ciphertext") @db.Text
   fundedAt            DateTime? @map("funded_at")
 
-  creator User         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  events  QuestEvent[]
+  creator     User              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  events      QuestEvent[]
+  submissions QuestSubmission[]
 
   @@index([creatorId])
   @@index([status])
@@ -156,4 +166,22 @@ model QuestEvent {
 
   @@index([questId, type, createdAt])
   @@map("quest_events")
+}
+
+// A worker's attempt at a quest. One per (quest, user) — the unique constraint also
+// prevents a double-submit race. `proof` holds the worker's response (text/link/hash/etc).
+model QuestSubmission {
+  id        String           @id @default(uuid()) @db.Uuid
+  questId   String           @map("quest_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  proof     String           @db.Text
+  status    SubmissionStatus @default(ACCEPTED)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questId, userId])
+  @@index([questId])
+  @@map("quest_submissions")
 }

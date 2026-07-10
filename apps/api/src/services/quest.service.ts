@@ -18,7 +18,13 @@ export class QuestServiceError extends Error {
       | "NO_WALLET"
       | "INSUFFICIENT_BALANCE"
       | "RPC_UNAVAILABLE"
-      | "FUNDING_FAILED",
+      | "FUNDING_FAILED"
+      | "QUEST_NOT_PUBLISHED"
+      | "CREATOR_CANNOT_SUBMIT"
+      | "QUEST_FULL"
+      | "QUEST_EXPIRED"
+      | "ALREADY_SUBMITTED"
+      | "INVALID_PROOF",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -367,7 +373,126 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         series,
       };
     },
+
+    /**
+     * Worker-facing view of a published quest: the public quest plus this worker's context
+     * (whether they own it, already submitted, and whether they can still submit + why not).
+     * Returns null if the quest isn't available (missing / not published).
+     */
+    async getWorkerQuestView(telegramId: string, questId: string): Promise<WorkerQuestView | null> {
+      const quest = await db.quest.findFirst({
+        where: { id: questId, status: "PUBLISHED" },
+        include: { creator: { select: { displayName: true } } },
+      });
+      if (!quest) return null;
+
+      const user = await db.user.findUnique({ where: { telegramId } });
+      const existing = user
+        ? await db.questSubmission.findUnique({
+            where: { questId_userId: { questId, userId: user.id } },
+          })
+        : null;
+
+      const isCreator = Boolean(user) && quest.creatorId === user!.id;
+      const slotsLeft = Math.max(0, quest.totalSlots - quest.filledSlots);
+      const expired = quest.deadline.getTime() <= Date.now();
+
+      let canSubmit = true;
+      let reason: WorkerQuestView["reason"] = null;
+      if (!user) {
+        canSubmit = false;
+        reason = "NOT_REGISTERED";
+      } else if (isCreator) {
+        canSubmit = false;
+        reason = "CREATOR";
+      } else if (existing) {
+        canSubmit = false;
+        reason = "ALREADY_SUBMITTED";
+      } else if (slotsLeft <= 0) {
+        canSubmit = false;
+        reason = "FULL";
+      } else if (expired) {
+        canSubmit = false;
+        reason = "EXPIRED";
+      }
+
+      return {
+        quest: toPublicQuestResponse(quest),
+        isCreator,
+        submitted: Boolean(existing),
+        canSubmit,
+        reason,
+      };
+    },
+
+    /**
+     * Record a worker's proof for a quest and fill a slot (auto-accept). Guards against the
+     * creator doing their own quest, duplicates, a full quest, and an expired deadline.
+     */
+    async submitQuest(telegramId: string, questId: string, proof: string): Promise<void> {
+      const trimmed = proof.trim();
+      if (trimmed.length === 0 || trimmed.length > 2000) {
+        throw new QuestServiceError(
+          "Your submission must be between 1 and 2000 characters.",
+          "INVALID_PROOF",
+        );
+      }
+
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new QuestServiceError("Send /start to register before doing quests.", "USER_NOT_FOUND");
+      }
+
+      const quest = await db.quest.findFirst({ where: { id: questId } });
+      if (!quest) {
+        throw new QuestServiceError("This quest isn't available.", "QUEST_NOT_FOUND");
+      }
+      if (quest.status !== "PUBLISHED") {
+        throw new QuestServiceError("This quest isn't open for submissions.", "QUEST_NOT_PUBLISHED");
+      }
+      if (quest.creatorId === user.id) {
+        throw new QuestServiceError(
+          "You can't complete your own quest.",
+          "CREATOR_CANNOT_SUBMIT",
+        );
+      }
+      if (quest.deadline.getTime() <= Date.now()) {
+        throw new QuestServiceError("This quest's deadline has passed.", "QUEST_EXPIRED");
+      }
+
+      try {
+        await db.$transaction(async (tx) => {
+          // Claim the (quest, user) pair first — the unique index rejects a double-submit.
+          await tx.questSubmission.create({
+            data: { questId, userId: user.id, proof: trimmed, status: "ACCEPTED" },
+          });
+          // Reserve a slot only if one is still free (conditional update = no oversell race).
+          const reserved = await tx.quest.updateMany({
+            where: { id: questId, filledSlots: { lt: quest.totalSlots } },
+            data: { filledSlots: { increment: 1 } },
+          });
+          if (reserved.count === 0) {
+            throw new QuestServiceError("This quest is already full.", "QUEST_FULL");
+          }
+          await tx.questEvent.create({ data: { questId, type: "FILL" } });
+        });
+      } catch (error) {
+        if (error instanceof QuestServiceError) throw error;
+        if ((error as { code?: string }).code === "P2002") {
+          throw new QuestServiceError("You've already done this quest.", "ALREADY_SUBMITTED");
+        }
+        throw error;
+      }
+    },
   };
+}
+
+export interface WorkerQuestView {
+  quest: ReturnType<typeof toPublicQuestResponse>;
+  isCreator: boolean;
+  submitted: boolean;
+  canSubmit: boolean;
+  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "EXPIRED" | null;
 }
 
 export interface QuestAnalytics {

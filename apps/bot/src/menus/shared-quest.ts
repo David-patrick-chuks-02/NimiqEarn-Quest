@@ -1,5 +1,16 @@
+import { InlineKeyboard } from "grammy";
 import type { PublicQuest } from "../api/client.js";
 import { escapeMarkdown } from "../utils/markdown.js";
+
+/**
+ * Inline keyboard for a shared quest: a web_app button that opens the "do this quest" Mini
+ * App. web_app buttons require HTTPS, so returns null in local/non-HTTPS dev (message only).
+ */
+export function sharedQuestKeyboard(questId: string): InlineKeyboard | null {
+  const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
+  if (!base.startsWith("https://")) return null;
+  return new InlineKeyboard().webApp("✅ Do this quest", `${base}/quest/${questId}`);
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   PRODUCT_TESTING: "Product testing",
@@ -42,6 +53,6 @@ export function formatSharedQuest(quest: PublicQuest): string {
     "",
     escapeMarkdown(quest.description),
     "",
-    "_Complete quests to earn NIM. Getting set up takes a minute — finish onboarding below and link your wallet so you're ready to submit when this quest opens for completion._",
+    "_Tap *Do this quest* below to complete it and earn NIM, paid to your wallet._",
   ].join("\n");
 }

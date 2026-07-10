@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { createQuestSchema, updateQuestSchema } from "@nimiqearn/shared";
 import {
   createQuestService,
@@ -7,9 +7,21 @@ import {
   toQuestResponse,
 } from "../services/quest.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
+import { verifyInitData } from "../telegram-auth.js";
 
 interface QuestRouteOptions {
   escrow?: EscrowService;
+  /** Bot token used to verify worker Mini App initData on the do-a-quest routes. */
+  botToken?: string;
+}
+
+/** Verify Telegram Mini App initData on a request and return the telegram id, or null. */
+function workerTelegramId(request: FastifyRequest, botToken?: string): string | null {
+  if (!botToken) return null;
+  const header = request.headers["x-telegram-init-data"];
+  const initData = typeof header === "string" ? header : null;
+  const verified = initData ? verifyInitData(initData, botToken) : null;
+  return verified?.telegramId ?? null;
 }
 
 export function questErrorStatus(code: QuestServiceError["code"]) {
@@ -20,11 +32,17 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
     case "NOT_CREATOR":
     case "SUSPENDED":
     case "NOT_VERIFIED":
+    case "CREATOR_CANNOT_SUBMIT":
       return 403;
     case "INSUFFICIENT_BALANCE":
       return 402;
     case "RPC_UNAVAILABLE":
       return 503;
+    case "QUEST_NOT_PUBLISHED":
+    case "QUEST_FULL":
+    case "QUEST_EXPIRED":
+    case "ALREADY_SUBMITTED":
+      return 409;
     default:
       return 400;
   }
@@ -32,6 +50,13 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
 
 export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
   const quests = createQuestService(app.db, opts.escrow);
+
+  const sendQuestError = (reply: FastifyReply, error: unknown) => {
+    if (error instanceof QuestServiceError) {
+      return reply.code(questErrorStatus(error.code)).send({ error: error.message, code: error.code });
+    }
+    throw error;
+  };
 
   // Public, unauthenticated: a single published quest for shareable links (t.me + web).
   app.get<{ Params: { id: string } }>("/api/quests/:id", async (request, reply) => {
@@ -41,6 +66,43 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
     }
     return { quest: toPublicQuestResponse(quest) };
   });
+
+  // Worker Mini App: the quest plus this worker's context (own it? already done? can submit?).
+  // Authenticated with verified Telegram initData, so it's exempt from the shared-secret gate.
+  app.get<{ Params: { id: string } }>("/api/quests/:id/worker", async (request, reply) => {
+    const telegramId = workerTelegramId(request, opts.botToken);
+    if (!telegramId) {
+      return reply.code(401).send({ error: "Invalid or missing Telegram authentication." });
+    }
+    try {
+      const view = await quests.getWorkerQuestView(telegramId, request.params.id);
+      if (!view) return reply.code(404).send({ error: "This quest isn't available." });
+      return view;
+    } catch (error) {
+      return sendQuestError(reply, error);
+    }
+  });
+
+  // Worker Mini App: submit proof for a quest (auto-accepts and fills a slot).
+  app.post<{ Params: { id: string }; Body: { proof?: string } }>(
+    "/api/quests/:id/submit",
+    async (request, reply) => {
+      const telegramId = workerTelegramId(request, opts.botToken);
+      if (!telegramId) {
+        return reply.code(401).send({ error: "Invalid or missing Telegram authentication." });
+      }
+      const proof = request.body?.proof;
+      if (typeof proof !== "string") {
+        return reply.code(400).send({ error: "proof is required" });
+      }
+      try {
+        await quests.submitQuest(telegramId, request.params.id, proof);
+        return { ok: true };
+      } catch (error) {
+        return sendQuestError(reply, error);
+      }
+    },
+  );
 
   app.post<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/quests",
