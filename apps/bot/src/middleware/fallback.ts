@@ -8,6 +8,18 @@ export function fallbackMiddleware(logger: Logger) {
   return async (ctx: BotContext, next: NextFunction) => {
     await next();
 
+    // An unmatched callback query means a stale/expired inline button (tapped on an old
+    // message, or after the flow that owned it ended). No handler answered it, so answer it
+    // here — otherwise Telegram's loading spinner hangs and the button appears to do nothing.
+    if (ctx.callbackQuery) {
+      logger.info(
+        { userId: ctx.from?.id, data: ctx.callbackQuery.data },
+        "unhandled callback query",
+      );
+      await ctx.answerCallbackQuery({ text: messages.errors.buttonExpired }).catch(() => undefined);
+      return;
+    }
+
     if (!ctx.message?.text || ctx.message.text.startsWith("/")) return;
     if (hasActiveConversation(ctx)) return;
 

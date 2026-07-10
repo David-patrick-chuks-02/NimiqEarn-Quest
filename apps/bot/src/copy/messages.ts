@@ -28,6 +28,7 @@ export const messages = {
     rateLimited:
       "You're doing that a bit too fast. Please wait a moment and try again.",
     useButtons: "Please use the buttons above to continue, or tap Cancel.",
+    buttonExpired: "This button is no longer active. Send /menu to open a fresh menu.",
   },
 
   help: (botUsername?: string) =>
