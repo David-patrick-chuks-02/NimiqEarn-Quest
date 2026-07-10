@@ -22,7 +22,10 @@ services:
     name: nimiqearn-api
     runtime: node
     plan: free # free web services spin down when idle (cold starts)
-    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm db:generate && pnpm build:packages && pnpm --filter @nimiqearn/api build
+    # db:push syncs the Postgres schema with prisma/schema.prisma on every deploy (additive
+    # changes only — new tables/columns/enums). Without it, new models exist in the generated
+    # client but not the DB, causing runtime 500s. DATABASE_URL is injected at build time.
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm db:generate && pnpm build:packages && pnpm --filter @nimiqearn/api build && pnpm db:push
     startCommand: node apps/api/dist/index.js
     healthCheckPath: /health
     autoDeploy: true
