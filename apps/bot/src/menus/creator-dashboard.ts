@@ -5,19 +5,19 @@ export function formatCreatorDashboard(dashboard: CreatorDashboard): string {
   const name = escapeMarkdown(dashboard.user.displayName ?? "Creator");
 
   return [
-    "*Creator Hub*",
-    `_${name}_`,
+    "🎨 *Creator Hub*",
+    `Welcome back, *${name}*`,
     "",
-    "*Account*",
-    `Role · ${formatRole(dashboard.user.role)}`,
-    `Status · ${formatStatus(dashboard.user.status)}`,
+    "👤 *Account*",
+    `• Role · ${formatRole(dashboard.user.role)}`,
+    `• Status · ${formatStatus(dashboard.user.status)}`,
     "",
-    "*Quest summary*",
-    `Draft · ${dashboard.quests.DRAFT}`,
-    `Published · ${dashboard.quests.PUBLISHED}`,
-    `Closed · ${dashboard.quests.CLOSED}`,
+    "📊 *Your quests*",
+    `• Draft · ${dashboard.quests.DRAFT}`,
+    `• Published · ${dashboard.quests.PUBLISHED}`,
+    `• Closed · ${dashboard.quests.CLOSED}`,
     "",
-    "Use *Create Quest* to draft a new bounty, or *My Quests* to review and publish existing drafts.",
+    "Open *Creator Studio* to create quests, publish drafts, and track performance.",
   ].join("\n");
 }
 

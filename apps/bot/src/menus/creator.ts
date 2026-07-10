@@ -18,6 +18,7 @@ export const CREATOR_CALLBACKS = {
   register: "creator:register",
   createQuest: "creator:create-quest",
   myQuests: "creator:my-quests",
+  refresh: "creator:refresh",
   backToMenu: "creator:back-menu",
 } as const;
 
@@ -35,6 +36,7 @@ export function creatorHubKeyboard() {
     return new InlineKeyboard()
       .webApp("🎨 Open Creator Studio", studioUrl)
       .row()
+      .text("🔄 Refresh", CREATOR_CALLBACKS.refresh)
       .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
   }
 
@@ -45,6 +47,7 @@ export function creatorHubKeyboard() {
     .row()
     .text("My Quests", CREATOR_CALLBACKS.myQuests)
     .row()
+    .text("🔄 Refresh", CREATOR_CALLBACKS.refresh)
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
@@ -195,6 +198,17 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
       await openCreatorEntry(ctx, api);
     } catch (error) {
       console.error("Creator hub navigation failed:", error);
+      await ctx.reply(messages.errors.apiUnavailable);
+    }
+  });
+
+  // Re-fetch the dashboard + wallet balance and re-render the hub in place.
+  bot.callbackQuery(CREATOR_CALLBACKS.refresh, async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Refreshing…" });
+    try {
+      await openCreatorEntry(ctx, api);
+    } catch (error) {
+      console.error("Creator hub refresh failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
     }
   });
