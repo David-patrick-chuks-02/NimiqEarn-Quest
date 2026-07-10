@@ -10,8 +10,6 @@ build/
 *.tsbuildinfo
 
 # Environment
-.env
-.env.local
 .env.*.local
 
 # Logs
@@ -26,7 +24,6 @@ Thumbs.db
 
 # IDE / agent tooling
 .idea/
-.vscode/
 *.swp
 .agents/
 .claude/
@@ -49,3 +46,4 @@ coverage/
 MILESTONE-1.md
 STACK.md
 docs/day-3-4-plan.md
+config.bat
