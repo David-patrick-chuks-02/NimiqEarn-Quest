@@ -239,6 +239,12 @@ export default function StudioPage() {
         setError("Slots: enter a whole number greater than zero.");
         return;
       }
+      // The `min` attribute is only advisory — a typed/pasted past date still reaches
+      // here, so re-check against the same floor before hitting the server.
+      if (!form.deadline || form.deadline < minDeadline) {
+        setError("Deadline: pick a future date (tomorrow or later).");
+        return;
+      }
 
       setSubmitting(true);
       try {
@@ -264,7 +270,7 @@ export default function StudioPage() {
         setSubmitting(false);
       }
     },
-    [api, form, loadQuests, refreshDashboard],
+    [api, form, minDeadline, loadQuests, refreshDashboard],
   );
 
   const publish = useCallback(
@@ -368,6 +374,7 @@ export default function StudioPage() {
         {phase === "ready" && dashboard && (
           <div className="mt-4 space-y-5">
             <StatRow dashboard={dashboard} />
+            <WalletCard balance={balance} />
 
             {notice && (
               <p className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5 text-sm text-[var(--brand-gold)]">
@@ -748,6 +755,32 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Creator's on-chain wallet balance, surfaced up front so they know their funding
+// headroom before drafting — the publish modal re-checks it against the reward.
+function WalletCard({ balance }: { balance: { nim: number | null; reachable: boolean } }) {
+  const known = balance.reachable && balance.nim !== null;
+  return (
+    <div className="glass flex items-center justify-between rounded-2xl px-4 py-3.5">
+      <div>
+        <p className="text-[0.7rem] uppercase tracking-wide text-[var(--brand-muted)]">
+          Wallet balance
+        </p>
+        {known ? (
+          <p className="mt-0.5 text-xl font-bold text-white">
+            {balance.nim!.toLocaleString()}{" "}
+            <span className="text-sm font-semibold text-[var(--brand-gold)]">NIM</span>
+          </p>
+        ) : (
+          <p className="mt-0.5 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
+        )}
+      </div>
+      <span className="text-2xl" aria-hidden>
+        👛
+      </span>
     </div>
   );
 }
