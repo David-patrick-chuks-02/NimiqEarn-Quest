@@ -43,8 +43,13 @@ export default function ManagePage() {
   const [error, setError] = useState("");
   const [quests, setQuests] = useState<Quest[]>([]);
   const [selected, setSelected] = useState<Analytics | null>(null);
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+  // The quest currently being opened — lets us show its title in the analytics skeleton
+  // the instant it's tapped, so navigation feels immediate while the data loads.
+  const [opening, setOpening] = useState<{ id: string; title: string } | null>(null);
   const initDataRef = useRef<string>("");
+  // The quest whose analytics we're currently waiting on — so a response that arrives after
+  // the user backed out (or opened a different quest) is ignored instead of snapping the view.
+  const pendingIdRef = useRef<string | null>(null);
 
   const api = useCallback(async (path: string) => {
     const res = await fetch(path, {
@@ -62,16 +67,23 @@ export default function ManagePage() {
   }, [api]);
 
   const openQuest = useCallback(
-    async (id: string) => {
-      setLoadingId(id);
+    async (quest: Quest) => {
+      // Swap to the detail view immediately (skeleton with the real title), then load.
+      pendingIdRef.current = quest.id;
+      setOpening({ id: quest.id, title: quest.title });
+      setSelected(null);
       setError("");
       try {
-        const body = (await api(`/api/studio/quests/${id}/analytics`)) as { analytics?: Analytics };
+        const body = (await api(`/api/studio/quests/${quest.id}/analytics`)) as {
+          analytics?: Analytics;
+        };
+        if (pendingIdRef.current !== quest.id) return; // user backed out or opened another
+        setOpening(null);
         if (body.analytics) setSelected(body.analytics);
       } catch (e) {
+        if (pendingIdRef.current !== quest.id) return;
         setError((e as Error).message);
-      } finally {
-        setLoadingId(null);
+        setOpening(null); // back to the list, where the error shows
       }
     },
     [api],
@@ -149,12 +161,17 @@ export default function ManagePage() {
           </Info>
         )}
 
-        {phase === "ready" && !selected && (
-          <QuestPicker
-            quests={quests}
-            loadingId={loadingId}
-            error={error}
-            onOpen={(id) => void openQuest(id)}
+        {phase === "ready" && !selected && !opening && (
+          <QuestPicker quests={quests} error={error} onOpen={(q) => void openQuest(q)} />
+        )}
+
+        {phase === "ready" && opening && !selected && (
+          <AnalyticsSkeleton
+            title={opening.title}
+            onBack={() => {
+              pendingIdRef.current = null;
+              setOpening(null);
+            }}
           />
         )}
 
@@ -168,14 +185,12 @@ export default function ManagePage() {
 
 function QuestPicker({
   quests,
-  loadingId,
   error,
   onOpen,
 }: {
   quests: Quest[];
-  loadingId: string | null;
   error: string;
-  onOpen: (id: string) => void;
+  onOpen: (quest: Quest) => void;
 }) {
   if (quests.length === 0) {
     return (
@@ -198,15 +213,12 @@ function QuestPicker({
         return (
           <button
             key={q.id}
-            onClick={() => onOpen(q.id)}
-            disabled={loadingId === q.id}
-            className="glass block w-full rounded-xl p-4 text-left transition hover:border-[var(--brand-gold)]/40 disabled:opacity-60"
+            onClick={() => onOpen(q)}
+            className="glass block w-full rounded-xl p-4 text-left transition hover:border-[var(--brand-gold)]/40 active:scale-[0.99]"
           >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 truncate text-sm font-semibold text-white">{q.title}</p>
-              <span className="shrink-0 text-xs text-[var(--brand-muted)]">
-                {loadingId === q.id ? "Loading…" : "View →"}
-              </span>
+              <span className="shrink-0 text-[var(--brand-muted)]">›</span>
             </div>
             <div className="mt-2 flex items-center gap-3 text-xs text-[var(--brand-muted)]">
               <span>{q.viewCount.toLocaleString()} views</span>
@@ -392,12 +404,67 @@ function Info({ children, tone }: { children: React.ReactNode; tone?: "error" })
   );
 }
 
+function Shimmer({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-white/10 ${className}`} />;
+}
+
+// Initial list load — mirrors the quest-picker rows so the layout doesn't jump.
 function ManageSkeleton() {
   return (
     <div className="space-y-2.5">
+      <Shimmer className="h-4 w-48" />
       {[0, 1, 2].map((i) => (
-        <div key={i} className="glass h-[68px] animate-pulse rounded-xl" />
+        <div key={i} className="glass rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <Shimmer className="h-4 w-40" />
+            <Shimmer className="h-4 w-3" />
+          </div>
+          <Shimmer className="mt-3 h-3 w-32" />
+        </div>
       ))}
+    </div>
+  );
+}
+
+// Shown the instant a quest is tapped — real title + back button, placeholder charts —
+// so opening a quest feels instant while its analytics load.
+function AnalyticsSkeleton({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="space-y-5">
+      <button
+        onClick={onBack}
+        className="text-sm text-[var(--brand-muted)] transition hover:text-white"
+      >
+        ← All quests
+      </button>
+
+      <div>
+        <h1 className="text-lg font-bold text-white">{title}</h1>
+        <Shimmer className="mt-1.5 h-3 w-28" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="glass rounded-xl px-3 py-2.5">
+            <Shimmer className="h-5 w-16" />
+            <Shimmer className="mt-2 h-2.5 w-12" />
+          </div>
+        ))}
+      </div>
+
+      <div className="glass rounded-2xl p-4">
+        <Shimmer className="h-4 w-24" />
+        <Shimmer className="mt-3 h-2.5 w-full rounded-full" />
+        <Shimmer className="mt-2 h-3 w-40" />
+      </div>
+
+      <div className="glass rounded-2xl p-4">
+        <div className="flex items-center justify-between">
+          <Shimmer className="h-4 w-16" />
+          <Shimmer className="h-3 w-20" />
+        </div>
+        <Shimmer className="mt-3 h-[110px] w-full rounded-xl" />
+      </div>
     </div>
   );
 }
