@@ -20,8 +20,13 @@ export function createSecurityPasswordConversation(api: ApiClient) {
       await ctx.reply(messages.errors.noTelegramProfile);
       return;
     }
-    const intent = ctx.session.securityIntent ?? "set";
-    ctx.session.securityIntent = undefined;
+    // Session lives on the OUTER context — inside a conversation it must be read/written via
+    // conversation.external, otherwise `ctx.session` is undefined and this throws on entry.
+    const intent = await conversation.external((outerCtx) => {
+      const value = outerCtx.session.securityIntent ?? "set";
+      outerCtx.session.securityIntent = undefined;
+      return value;
+    });
 
     const stepChat = new StepChat(ctx);
     const ask = async (prompt: string) => {
