@@ -129,7 +129,7 @@ export default function ManagePage() {
         {phase === "no-telegram" && (
           <Info>
             Open <span className="text-white">Manage Quests</span> from the NimiqEarn Quest bot —
-            tap <span className="text-white">📊 Manage Quests</span> in the Creator Hub.
+            tap <span className="text-white">Manage Quests</span> in the Creator Hub.
           </Info>
         )}
 

@@ -8,9 +8,9 @@ export function formatWorkerStatus(user: ApiUser): string {
     "*Your profile*",
     `_${name}_`,
     "",
-    `💰 Wallet · ${user.wallet ? "Ready" : "Not set up yet"}`,
-    `⭐ Reputation · ${user.reputationScore} pts`,
-    "🎯 Quests completed · 0",
+    `Wallet · ${user.wallet ? "Ready" : "Not set up yet"}`,
+    `Reputation · ${user.reputationScore} pts`,
+    "Quests completed · 0",
     "",
     "Quest discovery is opening soon — you'll browse quests and earn NIM right here. Your wallet is already set up for payouts.",
   ].join("\n");

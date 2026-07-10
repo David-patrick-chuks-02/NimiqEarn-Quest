@@ -23,8 +23,8 @@ export function mainMenuKeyboard() {
     .text("My Wallet", MAIN_MENU_CALLBACKS.wallet)
     .text("Creator Hub", MAIN_MENU_CALLBACKS.creator)
     .row()
-    .text("🔄 Refresh", MAIN_MENU_CALLBACKS.refresh)
-    .text("⚙️ Settings", "settings:open")
+    .text("Refresh", MAIN_MENU_CALLBACKS.refresh)
+    .text("Settings", "settings:open")
     .row()
     .text("Help", MAIN_MENU_CALLBACKS.help);
 }

@@ -343,7 +343,7 @@ export default function StudioPage() {
         {phase === "no-telegram" && (
           <Info>
             Open <span className="text-white">Creator Studio</span> from the NimiqEarn Quest bot in
-            Telegram — tap <span className="text-white">🎨 Open Creator Studio</span> in the Creator
+            Telegram — tap <span className="text-white">Open Creator Studio</span> in the Creator
             Hub.
           </Info>
         )}
@@ -778,9 +778,6 @@ function WalletCard({ balance }: { balance: { nim: number | null; reachable: boo
           <p className="mt-0.5 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
         )}
       </div>
-      <span className="text-2xl" aria-hidden>
-        👛
-      </span>
     </div>
   );
 }
@@ -838,7 +835,7 @@ function QuestList({
                 onClick={() => onShare(q.id)}
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10"
               >
-                {sharedId === q.id ? "Link copied ✓" : "🔗 Share quest link"}
+                {sharedId === q.id ? "Link copied" : "Share quest link"}
               </button>
             )}
           </div>

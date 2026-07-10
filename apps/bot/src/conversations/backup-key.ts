@@ -49,7 +49,7 @@ export function createBackupKeyConversation(api: ApiClient) {
       await sendWalletReveal(ctx, wallet.nimiqAddress, wallet.privateKey);
     } catch (error) {
       const detail = (error as Error).message || "Something went wrong.";
-      await ctx.reply(`❌ ${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
+      await ctx.reply(`${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
     }
   };
 }

@@ -34,11 +34,11 @@ export function creatorHubKeyboard() {
   const base = studioBaseUrl();
   if (base) {
     return new InlineKeyboard()
-      .webApp("🎨 Open Creator Studio", `${base}/studio`)
+      .webApp("Open Creator Studio", `${base}/studio`)
       .row()
-      .webApp("📊 Manage Quests", `${base}/studio/manage`)
+      .webApp("Manage Quests", `${base}/studio/manage`)
       .row()
-      .text("🔄 Refresh", CREATOR_CALLBACKS.refresh)
+      .text("Refresh", CREATOR_CALLBACKS.refresh)
       .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
   }
 
@@ -49,7 +49,7 @@ export function creatorHubKeyboard() {
     .row()
     .text("My Quests", CREATOR_CALLBACKS.myQuests)
     .row()
-    .text("🔄 Refresh", CREATOR_CALLBACKS.refresh)
+    .text("Refresh", CREATOR_CALLBACKS.refresh)
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
@@ -256,7 +256,7 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
         code === "RPC_UNAVAILABLE" ||
         code === "FUNDING_FAILED"
       ) {
-        await ctx.reply(`❌ ${(error as Error).message}`);
+        await ctx.reply(`${(error as Error).message}`);
         return;
       }
       console.error("Quest publish failed:", error);

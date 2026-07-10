@@ -51,7 +51,7 @@ const PROOF_META: Record<string, { label: string; placeholder: string; multiline
 const BLOCKED_COPY: Record<NonNullable<WorkerView["reason"]>, string> = {
   NOT_REGISTERED: "Send /start to the bot first to create your worker profile, then reopen this quest.",
   CREATOR: "You created this quest — you can't complete your own quest.",
-  ALREADY_SUBMITTED: "You've already done this quest. ✓",
+  ALREADY_SUBMITTED: "You've already done this quest.",
   FULL: "All slots for this quest are taken.",
   EXPIRED: "This quest's deadline has passed.",
 };
@@ -169,8 +169,7 @@ export default function DoQuestPage() {
 
         {phase === "done" && view && (
           <div className="glass rounded-2xl p-6 text-center">
-            <p className="text-4xl">🎉</p>
-            <h1 className="mt-3 text-lg font-bold text-white">Submitted!</h1>
+            <h1 className="text-lg font-bold text-white">Submitted!</h1>
             <p className="mt-2 text-sm text-[var(--brand-muted)]">
               Your proof for <span className="text-white">{view.quest.title}</span> was accepted.
               Your {Number(view.quest.rewardAmount).toLocaleString()} NIM reward is on its way to

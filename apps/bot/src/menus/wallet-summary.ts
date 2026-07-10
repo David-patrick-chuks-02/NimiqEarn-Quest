@@ -14,7 +14,7 @@ export async function walletHeader(api: ApiClient, telegramId: string): Promise<
   }
   if (!summary) return "";
 
-  let balance = "tap 🔄 Refresh";
+  let balance = "tap Refresh";
   if (summary.reachable && summary.balanceNim !== null) {
     const usd =
       summary.balanceUsd !== null
@@ -22,5 +22,5 @@ export async function walletHeader(api: ApiClient, telegramId: string): Promise<
         : "";
     balance = `${summary.balanceNim.toLocaleString()} NIM${usd}`;
   }
-  return `💰 *Balance:* ${balance}\n\`${summary.nimiqAddress}\`\n\n`;
+  return `*Balance:* ${balance}\n\`${summary.nimiqAddress}\`\n\n`;
 }

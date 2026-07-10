@@ -41,7 +41,7 @@ export function createSecurityPasswordConversation(api: ApiClient) {
     };
     const fail = async (error: unknown) => {
       const detail = (error as Error).message || "Something went wrong.";
-      await ctx.reply(`❌ ${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
+      await ctx.reply(`${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
     };
 
     if (intent === "remove") {

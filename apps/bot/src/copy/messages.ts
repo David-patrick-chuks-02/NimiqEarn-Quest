@@ -73,16 +73,16 @@ export const messages = {
 
   captcha: {
     prompt: [
-      `👋 *Welcome to ${APP_NAME}*`,
+      `*Welcome to ${APP_NAME}*`,
       "",
       "A quick check to keep bots out — type the characters shown above:",
     ].join("\n"),
-    incorrect: "❌ That didn't match. Please try the new image above.",
+    incorrect: "That didn't match. Please try the new image above.",
   },
 
   securityNotice: (botUsername?: string) =>
     [
-      "⚠️ *SECURITY NOTICE — please read*",
+      "*SECURITY NOTICE — please read*",
       "",
       "*DO NOT CLICK any ads at the top of Telegram.* They are NOT from us and are most likely SCAMS.",
       "",
@@ -126,7 +126,7 @@ export const messages = {
       }
       lines.push(
         "",
-        "Tap *⬇️ Deposit* to add NIM, or *💸 Withdraw* to send it to another Nimiq address.",
+        "Tap *Deposit* to add NIM, or *Withdraw* to send it to another Nimiq address.",
       );
       return lines.join("\n");
     },
@@ -137,7 +137,7 @@ export const messages = {
         "*Your address*",
         `\`${address}\``,
         "",
-        "Scan the QR in any Nimiq wallet (or Nimiq Pay), or copy the address above. Funds show up here once the network confirms — tap *🔄 Refresh* in *My Wallet* to update your balance.",
+        "Scan the QR in any Nimiq wallet (or Nimiq Pay), or copy the address above. Funds show up here once the network confirms — tap *Refresh* in *My Wallet* to update your balance.",
       ].join("\n"),
     depositFailed:
       "We couldn't open the deposit panel right now. Please try again in a moment.",
@@ -164,11 +164,11 @@ export const messages = {
         `*Amount:* ${amount === "all" ? "your full balance" : `${amount.toLocaleString()} NIM`}`,
         `*To:* \`${address}\``,
         "",
-        "This sends NIM on-chain and *cannot be reversed*. Tap *✅ Confirm* to send.",
+        "This sends NIM on-chain and *cannot be reversed*. Tap *Confirm* to send.",
       ].join("\n"),
     success: (sentNim: number, address: string, hash: string) =>
       [
-        section("Withdrawal sent ✓", `Sent *${sentNim.toLocaleString()} NIM* to:`),
+        section("Withdrawal sent", `Sent *${sentNim.toLocaleString()} NIM* to:`),
         `\`${address}\``,
         "",
         `*Transaction*\n\`${hash}\``,
@@ -184,7 +184,7 @@ export const messages = {
       section(
         "Settings",
         passwordSet
-          ? "🔐 A secure-action password is set — it's required to confirm withdrawals."
+          ? "A secure-action password is set — it's required to confirm withdrawals."
           : "Set a *secure-action password* to protect your funds. Once set, it's required to confirm any withdrawal.",
       ),
     enterNew: section(
@@ -195,11 +195,11 @@ export const messages = {
     enterCurrent: "Send your *current* password.",
     enterCurrentToRemove: "Send your current password to remove it.",
     mismatch: "The passwords didn't match — nothing changed. Open /settings to try again.",
-    passwordSet: "✅ Secure-action password saved. It's now required to confirm withdrawals.",
-    passwordRemoved: "✅ Secure-action password removed.",
+    passwordSet: "Secure-action password saved. It's now required to confirm withdrawals.",
+    passwordRemoved: "Secure-action password removed.",
     cancelled: "No changes made.",
-    enterToWithdraw: "🔐 Enter your secure-action password to confirm this withdrawal:",
-    enterToBackup: "🔐 Enter your secure-action password to reveal your private key:",
+    enterToWithdraw: "Enter your secure-action password to confirm this withdrawal:",
+    enterToBackup: "Enter your secure-action password to reveal your private key:",
   },
 
   onboarding: {
@@ -238,7 +238,7 @@ export const messages = {
         "",
         "Your NimiqEarn wallet is ready — rewards are paid straight to it.",
         "",
-        "💡 You can back up your wallet's private key anytime in *⚙️ Settings*.",
+        "You can back up your wallet's private key anytime in *Settings*.",
         "",
         "Use the menu below to get started.",
       ].join("\n"),
@@ -395,7 +395,7 @@ export const messages = {
     publishDeadlinePassed:
       "This quest deadline has passed. Please create a new draft with a future date.",
     publishNotFunded:
-      "This quest isn't funded yet. Open *🎨 Creator Studio* from the Creator Hub to fund its escrow wallet with the reward pool, then publish from there.",
+      "This quest isn't funded yet. Open *Creator Studio* from the Creator Hub to fund its escrow wallet with the reward pool, then publish from there.",
     saveFailed:
       "The quest draft could not be saved. Please try again from the Creator Hub.",
     invalidQuest:

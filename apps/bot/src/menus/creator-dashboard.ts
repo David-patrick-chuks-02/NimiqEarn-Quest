@@ -5,14 +5,14 @@ export function formatCreatorDashboard(dashboard: CreatorDashboard): string {
   const name = escapeMarkdown(dashboard.user.displayName ?? "Creator");
 
   return [
-    "🎨 *Creator Hub*",
+    "*Creator Hub*",
     `Welcome back, *${name}*`,
     "",
-    "👤 *Account*",
+    "*Account*",
     `• Role · ${formatRole(dashboard.user.role)}`,
     `• Status · ${formatStatus(dashboard.user.status)}`,
     "",
-    "📊 *Your quests*",
+    "*Your quests*",
     `• Draft · ${dashboard.quests.DRAFT}`,
     `• Published · ${dashboard.quests.PUBLISHED}`,
     `• Closed · ${dashboard.quests.CLOSED}`,

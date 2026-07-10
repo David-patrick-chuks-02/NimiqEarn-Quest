@@ -86,7 +86,7 @@ export function createWithdrawConversation(api: ApiClient) {
     await stepChat.prompt(messages.withdraw.confirm(recipient, amount), {
       parse_mode: "Markdown",
       reply_markup: new InlineKeyboard()
-        .text("✅ Confirm", WITHDRAW_CONFIRM)
+        .text("Confirm", WITHDRAW_CONFIRM)
         .text("Cancel", NAV_CANCEL),
     });
     const decision = await conversation.waitFor("callback_query:data", {
@@ -133,7 +133,7 @@ export function createWithdrawConversation(api: ApiClient) {
       });
     } catch (error) {
       const detail = (error as Error).message || "The withdrawal could not be completed.";
-      await ctx.reply(`❌ ${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
+      await ctx.reply(`${escapeMarkdown(detail)}`, { reply_markup: mainMenuKeyboard() });
     }
   };
 }

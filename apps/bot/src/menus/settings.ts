@@ -25,14 +25,14 @@ export async function renderSettings(ctx: BotContext, api: ApiClient) {
   const keyboard = new InlineKeyboard();
   if (passwordSet) {
     keyboard
-      .text("🔑 Change action password", SETTINGS_CALLBACKS.changePassword)
+      .text("Change action password", SETTINGS_CALLBACKS.changePassword)
       .row()
-      .text("🗑 Remove action password", SETTINGS_CALLBACKS.removePassword)
+      .text("Remove action password", SETTINGS_CALLBACKS.removePassword)
       .row();
   } else {
-    keyboard.text("🔐 Set action password", SETTINGS_CALLBACKS.setPassword).row();
+    keyboard.text("Set action password", SETTINGS_CALLBACKS.setPassword).row();
   }
-  keyboard.text("🔐 Back up private key", SETTINGS_CALLBACKS.backupKey).row();
+  keyboard.text("Back up private key", SETTINGS_CALLBACKS.backupKey).row();
   keyboard.text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 
   await editOrReply(ctx, messages.settings.menu(passwordSet), {

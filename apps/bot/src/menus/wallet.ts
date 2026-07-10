@@ -21,19 +21,19 @@ export const WALLET_CALLBACKS = {
 /** Prompt shown when a user needs a wallet (e.g. the Creator Hub gate). */
 export function walletSetupKeyboard() {
   return new InlineKeyboard()
-    .text("🔐 Create my wallet", WALLET_CALLBACKS.create)
+    .text("Create my wallet", WALLET_CALLBACKS.create)
     .row()
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
 function custodialWalletKeyboard(address: string) {
   return new InlineKeyboard()
-    .copyText("📋 Copy address", address)
+    .copyText("Copy address", address)
     .row()
-    .text("⬇️ Deposit", WALLET_CALLBACKS.deposit)
-    .text("💸 Withdraw", WALLET_CALLBACKS.withdraw)
+    .text("Deposit", WALLET_CALLBACKS.deposit)
+    .text("Withdraw", WALLET_CALLBACKS.withdraw)
     .row()
-    .text("🔄 Refresh", WALLET_CALLBACKS.refresh)
+    .text("Refresh", WALLET_CALLBACKS.refresh)
     .text("Main Menu", CREATOR_CALLBACKS.backToMenu);
 }
 
@@ -130,7 +130,7 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
         caption: messages.wallet.deposit(wallet.nimiqAddress),
         parse_mode: "Markdown",
         reply_markup: new InlineKeyboard()
-          .copyText("📋 Copy address", wallet.nimiqAddress)
+          .copyText("Copy address", wallet.nimiqAddress)
           .row()
           .text("‹ Back to wallet", WALLET_CALLBACKS.open),
       });

@@ -15,7 +15,7 @@ function escapeHtml(value: string): string {
  */
 export async function sendWalletReveal(ctx: BotContext, address: string, privateKey: string) {
   const body = [
-    "🔐 <b>Your NimiqEarn wallet</b>",
+    "<b>Your NimiqEarn wallet</b>",
     "",
     "<b>Address</b>",
     `<code>${escapeHtml(address)}</code>`,
@@ -23,7 +23,7 @@ export async function sendWalletReveal(ctx: BotContext, address: string, private
     "<b>Private key</b> — tap to reveal, then use the Copy button below",
     `<tg-spoiler>${escapeHtml(privateKey)}</tg-spoiler>`,
     "",
-    "⚠️ <b>Save this key somewhere safe right now.</b> It is the ONLY way to control this wallet — we cannot recover it for you. Never share it: anyone who has it can take your funds.",
+    "<b>Save this key somewhere safe right now.</b> It is the ONLY way to control this wallet — we cannot recover it for you. Never share it: anyone who has it can take your funds.",
     "",
     "When you've saved it, tap the button below to remove it from this chat.",
   ].join("\n");
@@ -31,8 +31,8 @@ export async function sendWalletReveal(ctx: BotContext, address: string, private
   await ctx.reply(body, {
     parse_mode: "HTML",
     reply_markup: new InlineKeyboard()
-      .copyText("📋 Copy private key", privateKey)
+      .copyText("Copy private key", privateKey)
       .row()
-      .text("✅ I've saved it — delete this", WALLET_REVEAL_DISMISS),
+      .text("I've saved it — delete this", WALLET_REVEAL_DISMISS),
   });
 }

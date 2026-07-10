@@ -9,7 +9,7 @@ import { escapeMarkdown } from "../utils/markdown.js";
 export function sharedQuestKeyboard(questId: string): InlineKeyboard | null {
   const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
   if (!base.startsWith("https://")) return null;
-  return new InlineKeyboard().webApp("✅ Do this quest", `${base}/quest/${questId}`);
+  return new InlineKeyboard().webApp("Do this quest", `${base}/quest/${questId}`);
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -46,10 +46,10 @@ export function formatSharedQuest(quest: PublicQuest): string {
     `*${escapeMarkdown(quest.title)}*`,
     `_${category}_${by}`,
     "",
-    `💰 *Reward:* ${escapeMarkdown(Number(quest.rewardAmount).toLocaleString())} NIM`,
-    `🎟 *Slots:* ${quest.slotsLeft} of ${quest.totalSlots} left`,
-    `⏰ *Deadline:* ${formatDeadline(quest.deadline)}`,
-    `📎 *Proof:* ${escapeMarkdown(proof)} — ${escapeMarkdown(quest.proofInstructions)}`,
+    `*Reward:* ${escapeMarkdown(Number(quest.rewardAmount).toLocaleString())} NIM`,
+    `*Slots:* ${quest.slotsLeft} of ${quest.totalSlots} left`,
+    `*Deadline:* ${formatDeadline(quest.deadline)}`,
+    `*Proof:* ${escapeMarkdown(proof)} — ${escapeMarkdown(quest.proofInstructions)}`,
     "",
     escapeMarkdown(quest.description),
     "",
