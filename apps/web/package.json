@@ -11,7 +11,6 @@
   "dependencies": {
     "@nimiqearn/shared": "workspace:*",
     "@sentry/nextjs": "^10.63.0",
-    "@vercel/analytics": "^2.0.1",
     "next": "^15.3.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

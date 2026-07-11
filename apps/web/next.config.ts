@@ -21,6 +21,13 @@ const baseSecurityHeaders = [
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@nimiqearn/shared"],
+  // Trim response weight and speed up image delivery.
+  poweredByHeader: false,
+  compress: true,
+  images: {
+    // Serve modern formats — much smaller than PNG/JPEG for the same quality.
+    formats: ["image/avif", "image/webp"],
+  },
   async headers() {
     return [
       {
@@ -30,6 +37,15 @@ const nextConfig: NextConfig = {
         headers: [
           ...baseSecurityHeaders,
           { key: "Content-Security-Policy", value: "frame-ancestors https://web.telegram.org https://*.telegram.org" },
+        ],
+      },
+      // Long-cache the static brand images (unhashed public assets) so repeat visits and
+      // OG/social scrapers don't re-download them.
+      {
+        source: "/:file(logo|icon).png",
+        headers: [
+          ...baseSecurityHeaders,
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
         ],
       },
       { source: "/:path*", headers: baseSecurityHeaders },
@@ -42,6 +58,13 @@ const nextConfig: NextConfig = {
         // verified server-side; the browser only ever talks to the web origin.
         source: "/api/studio/:path*",
         destination: `${API_INTERNAL_URL}/api/studio/:path*`,
+      },
+      {
+        // Worker "do a quest" Mini App → API (GET /api/quests/:id/worker, POST .../submit).
+        // Same-origin proxy so the browser only talks to the web origin; initData is
+        // forwarded and verified server-side.
+        source: "/api/quests/:path*",
+        destination: `${API_INTERNAL_URL}/api/quests/:path*`,
       },
     ];
   },

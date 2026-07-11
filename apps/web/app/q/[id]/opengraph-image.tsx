@@ -6,6 +6,9 @@ import { ImageResponse } from "next/og";
 export const alt = "NimiqEarn Quest";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+// Cache the generated card for 5 minutes — social scrapers can unfurl it instantly instead
+// of rendering + hitting the API on every request.
+export const revalidate = 300;
 
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
 
@@ -34,7 +37,7 @@ interface PublicQuest {
 async function getQuest(id: string): Promise<PublicQuest | null> {
   try {
     const res = await fetch(`${API_INTERNAL_URL}/api/quests/${encodeURIComponent(id)}`, {
-      cache: "no-store",
+      next: { revalidate: 300 },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { quest?: PublicQuest };
