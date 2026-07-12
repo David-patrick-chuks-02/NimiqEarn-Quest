@@ -29,14 +29,12 @@ function studioBaseUrl(): string | null {
 }
 
 export function creatorHubKeyboard() {
-  // The Studio Mini App handles creating/drafting/publishing; the Manage Quests app is the
-  // deeper analytics surface (per-quest charts). Both open only over HTTPS.
+  // One Mini App: the Creator Studio handles creating, publishing, AND per-quest analytics,
+  // so creators never switch apps. web_app buttons open only over HTTPS.
   const base = studioBaseUrl();
   if (base) {
     return new InlineKeyboard()
       .webApp("Open Creator Studio", `${base}/studio`)
-      .row()
-      .webApp("Manage Quests", `${base}/studio/manage`)
       .row()
       .text("Refresh", CREATOR_CALLBACKS.refresh)
       .text("Main Menu", CREATOR_CALLBACKS.backToMenu);

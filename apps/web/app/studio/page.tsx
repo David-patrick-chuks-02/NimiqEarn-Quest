@@ -3,6 +3,7 @@
 import Script from "next/script";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnalyticsDetail, AnalyticsSkeleton, type Analytics } from "./_analytics";
 
 const CATEGORIES = [
   { value: "PRODUCT_TESTING", label: "Product testing" },
@@ -76,6 +77,10 @@ export default function StudioPage() {
     reachable: false,
   });
   const [confirmQuest, setConfirmQuest] = useState<Quest | null>(null);
+  // Per-quest analytics viewed inline (no separate Mini App). analyticsData null while loading.
+  const [analyticsFor, setAnalyticsFor] = useState<{ id: string; title: string } | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<Analytics | null>(null);
+  const analyticsReqRef = useRef<string | null>(null);
   const initDataRef = useRef<string>("");
 
   // Total reward pool the creator funds = reward per completion × number of taskers.
@@ -107,6 +112,36 @@ export default function StudioPage() {
       throw new Error((body.error as string) ?? `Request failed (${res.status})`);
     }
     return body;
+  }, []);
+
+  // Open a quest's analytics inline: swap to the detail view immediately (skeleton with the
+  // real title), then load. A stale response is ignored if the user backs out or opens another.
+  const openAnalytics = useCallback(
+    async (quest: Quest) => {
+      analyticsReqRef.current = quest.id;
+      setAnalyticsFor({ id: quest.id, title: quest.title });
+      setAnalyticsData(null);
+      setError("");
+      try {
+        const resBody = (await api(`/api/studio/quests/${quest.id}/analytics`)) as {
+          analytics?: Analytics;
+        };
+        if (analyticsReqRef.current !== quest.id) return;
+        if (resBody.analytics) setAnalyticsData(resBody.analytics);
+        else setAnalyticsFor(null);
+      } catch (e) {
+        if (analyticsReqRef.current !== quest.id) return;
+        setError((e as Error).message);
+        setAnalyticsFor(null); // back to the studio home, where the error shows
+      }
+    },
+    [api],
+  );
+
+  const closeAnalytics = useCallback(() => {
+    analyticsReqRef.current = null;
+    setAnalyticsFor(null);
+    setAnalyticsData(null);
   }, []);
 
   const loadQuests = useCallback(async () => {
@@ -371,7 +406,17 @@ export default function StudioPage() {
           </div>
         )}
 
-        {phase === "ready" && dashboard && (
+        {phase === "ready" && dashboard && analyticsFor && (
+          <div className="mt-4">
+            {analyticsData ? (
+              <AnalyticsDetail analytics={analyticsData} onBack={closeAnalytics} />
+            ) : (
+              <AnalyticsSkeleton title={analyticsFor.title} onBack={closeAnalytics} />
+            )}
+          </div>
+        )}
+
+        {phase === "ready" && dashboard && !analyticsFor && (
           <div className="mt-4 space-y-5">
             <StatRow dashboard={dashboard} />
             <WalletCard balance={balance} />
@@ -531,6 +576,7 @@ export default function StudioPage() {
               sharedId={sharedId}
               onPublish={requestPublish}
               onShare={shareQuest}
+              onViewAnalytics={openAnalytics}
             />
           </div>
         )}
@@ -788,12 +834,14 @@ function QuestList({
   sharedId,
   onPublish,
   onShare,
+  onViewAnalytics,
 }: {
   quests: Quest[];
   publishingId: string | null;
   sharedId: string | null;
   onPublish: (quest: Quest) => void;
   onShare: (id: string) => void;
+  onViewAnalytics: (quest: Quest) => void;
 }) {
   if (quests.length === 0) {
     return (
@@ -836,6 +884,15 @@ function QuestList({
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10"
               >
                 {sharedId === q.id ? "Link copied" : "Share quest link"}
+              </button>
+            )}
+
+            {q.status !== "DRAFT" && (
+              <button
+                onClick={() => onViewAnalytics(q)}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/25"
+              >
+                View analytics
               </button>
             )}
           </div>
