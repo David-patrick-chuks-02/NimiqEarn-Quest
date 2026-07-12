@@ -794,7 +794,7 @@ export default function StudioPage() {
                     <AnalyticsSkeleton title={analyticsFor.title} onBack={closeAnalytics} />
                   )
                 ) : (
-                  <QuestList
+                  <QuestsPanel
                     quests={quests}
                     publishingId={publishingId}
                     sharedId={sharedId}
@@ -1293,6 +1293,202 @@ function WalletCard({ balance }: { balance: { nim: number | null; reachable: boo
   );
 }
 
+type QuestFilter = { status: "all" | "PUBLISHED" | "DRAFT" | "CLOSED"; promotedOnly: boolean };
+const QUEST_PAGE_SIZE = 6;
+
+interface QuestListProps {
+  quests: Quest[];
+  publishingId: string | null;
+  sharedId: string | null;
+  promotingId: string | null;
+  promotion: { promotionAvailable: boolean; promotionFeeNim: number };
+  onPublish: (quest: Quest) => void;
+  onShare: (id: string) => void;
+  onViewAnalytics: (quest: Quest) => void;
+  onPromote: (id: string) => void;
+}
+
+// The Quests tab: filter toolbar + paginated quest cards (each with its OG-card preview).
+function QuestsPanel(props: QuestListProps) {
+  const [filter, setFilter] = useState<QuestFilter>({ status: "all", promotedOnly: false });
+  const [page, setPage] = useState(0);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const filtered = props.quests.filter((q) => {
+    if (filter.status !== "all" && q.status !== filter.status) return false;
+    if (filter.promotedOnly && !q.promoted) return false;
+    return true;
+  });
+  const activeFilters = (filter.status !== "all" ? 1 : 0) + (filter.promotedOnly ? 1 : 0);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / QUEST_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageItems = filtered.slice(safePage * QUEST_PAGE_SIZE, safePage * QUEST_PAGE_SIZE + QUEST_PAGE_SIZE);
+
+  if (props.quests.length === 0) {
+    return (
+      <div className="glass rounded-2xl p-6 text-center">
+        <p className="text-sm font-semibold text-white">No quests yet</p>
+        <p className="mt-1 text-sm text-[var(--brand-muted)]">
+          Head to the Create tab to draft your first quest.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-[var(--brand-muted)]">
+          {filtered.length} {filtered.length === 1 ? "quest" : "quests"}
+        </p>
+        <button
+          onClick={() => setFilterOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-white/25"
+        >
+          <FilterIcon />
+          Filter
+          {activeFilters > 0 && (
+            <span className="rounded-full bg-[var(--brand-gold)] px-1.5 text-[0.65rem] font-bold text-[var(--brand-ink)]">
+              {activeFilters}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="glass rounded-2xl p-6 text-center text-sm text-[var(--brand-muted)]">
+          No quests match these filters.
+        </div>
+      ) : (
+        <>
+          <QuestList {...props} quests={pageItems} />
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <button
+                disabled={safePage === 0}
+                onClick={() => setPage(safePage - 1)}
+                className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+              >
+                Prev
+              </button>
+              <span className="text-sm text-[var(--brand-muted)]">
+                Page {safePage + 1} of {pageCount}
+              </span>
+              <button
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage(safePage + 1)}
+                className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {filterOpen && (
+        <FilterModal
+          filter={filter}
+          onApply={(f) => {
+            setFilter(f);
+            setPage(0);
+            setFilterOpen(false);
+          }}
+          onClose={() => setFilterOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden
+    >
+      <path d="M4 5h16M7 12h10M10 19h4" />
+    </svg>
+  );
+}
+
+function FilterModal({
+  filter,
+  onApply,
+  onClose,
+}: {
+  filter: QuestFilter;
+  onApply: (f: QuestFilter) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<QuestFilter>(filter);
+  const statuses: { value: QuestFilter["status"]; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "PUBLISHED", label: "Published" },
+    { value: "DRAFT", label: "Draft" },
+    { value: "CLOSED", label: "Closed" },
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:px-5"
+      onClick={onClose}
+    >
+      <div
+        className="glass w-full max-w-sm rounded-t-2xl p-5 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-bold text-white">Filter quests</h2>
+
+        <p className="eyebrow mt-4">Status</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {statuses.map((s) => {
+            const on = draft.status === s.value;
+            return (
+              <button
+                key={s.value}
+                onClick={() => setDraft({ ...draft, status: s.value })}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+                  on
+                    ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
+                    : "border border-white/10 text-white hover:border-white/25"
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <label className="mt-5 flex cursor-pointer items-center justify-between">
+          <span className="text-sm font-semibold text-white">Promoted only</span>
+          <input
+            type="checkbox"
+            checked={draft.promotedOnly}
+            onChange={(e) => setDraft({ ...draft, promotedOnly: e.target.checked })}
+            className="h-5 w-5 accent-[var(--brand-gold)]"
+          />
+        </label>
+
+        <button onClick={() => onApply(draft)} className={`${primaryBtn} mt-5 w-full`}>
+          Apply
+        </button>
+        <button
+          onClick={() => onApply({ status: "all", promotedOnly: false })}
+          className="mt-2 w-full py-1.5 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
+        >
+          Clear filters
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function QuestList({
   quests,
   publishingId,
@@ -1303,35 +1499,26 @@ function QuestList({
   onShare,
   onViewAnalytics,
   onPromote,
-}: {
-  quests: Quest[];
-  publishingId: string | null;
-  sharedId: string | null;
-  promotingId: string | null;
-  promotion: { promotionAvailable: boolean; promotionFeeNim: number };
-  onPublish: (quest: Quest) => void;
-  onShare: (id: string) => void;
-  onViewAnalytics: (quest: Quest) => void;
-  onPromote: (id: string) => void;
-}) {
-  if (quests.length === 0) {
-    return (
-      <div className="glass rounded-2xl p-6 text-center">
-        <p className="text-sm font-semibold text-white">No quests yet</p>
-        <p className="mt-1 text-sm text-[var(--brand-muted)]">
-          Head to the Create tab to draft your first quest.
-        </p>
-      </div>
-    );
-  }
+}: QuestListProps) {
   return (
     <div className="space-y-2.5">
       {quests.map((q) => {
         return (
           <div
             key={q.id}
-            className={`glass rounded-xl p-4 ${q.promoted ? "border-[var(--brand-gold)]/40" : ""}`}
+            className={`glass overflow-hidden rounded-xl ${q.promoted ? "border-[var(--brand-gold)]/40" : ""}`}
           >
+            {q.status !== "DRAFT" && (
+              // The shareable OG card (non-counting thumbnail) — a visual preview of the quest.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/q/${q.id}/opengraph-image`}
+                alt=""
+                loading="lazy"
+                className="aspect-[1200/630] w-full border-b border-white/10 object-cover"
+              />
+            )}
+            <div className="p-4">
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 truncate text-sm font-semibold text-white">{q.title}</p>
               <div className="flex shrink-0 items-center gap-1.5">
@@ -1393,6 +1580,7 @@ function QuestList({
                 View analytics
               </button>
             )}
+            </div>
           </div>
         );
       })}

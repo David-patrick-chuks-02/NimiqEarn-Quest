@@ -38,7 +38,8 @@ interface PublicQuest {
 
 async function getQuest(id: string): Promise<PublicQuest | null> {
   try {
-    const res = await fetch(`${API_INTERNAL_URL}/api/quests/${encodeURIComponent(id)}`, {
+    // count=0 — rendering the card (scrapers, studio thumbnails) must not inflate views.
+    const res = await fetch(`${API_INTERNAL_URL}/api/quests/${encodeURIComponent(id)}?count=0`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;

@@ -291,22 +291,25 @@ export function createQuestService(
 
     /**
      * Public, unauthenticated view of a single PUBLISHED quest (for shareable links).
-     * Counts the view. Returns null for drafts/closed/missing quests.
+     * Counts the view unless `count` is false (used by OG-image/thumbnail reads so previews
+     * and studio list cards don't inflate analytics). Returns null for drafts/closed/missing.
      */
-    async getPublicQuest(questId: string) {
+    async getPublicQuest(questId: string, count = true) {
       const quest = await db.quest.findFirst({
         where: { id: questId, status: "PUBLISHED" },
         include: { creator: { select: { displayName: true } } },
       });
       if (!quest) return null;
-      // Best-effort view tracking — never block or fail the read on it. We keep the
-      // running counter (cheap reads) AND append a timestamped event (time-series charts).
-      await Promise.all([
-        db.quest
-          .update({ where: { id: quest.id }, data: { viewCount: { increment: 1 } } })
-          .catch(() => undefined),
-        db.questEvent.create({ data: { questId: quest.id, type: "VIEW" } }).catch(() => undefined),
-      ]);
+      if (count) {
+        // Best-effort view tracking — never block or fail the read on it. We keep the running
+        // counter (cheap reads) AND append a timestamped event (time-series charts).
+        await Promise.all([
+          db.quest
+            .update({ where: { id: quest.id }, data: { viewCount: { increment: 1 } } })
+            .catch(() => undefined),
+          db.questEvent.create({ data: { questId: quest.id, type: "VIEW" } }).catch(() => undefined),
+        ]);
+      }
       return quest;
     },
 

@@ -66,13 +66,18 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
   };
 
   // Public, unauthenticated: a single published quest for shareable links (t.me + web).
-  app.get<{ Params: { id: string } }>("/api/quests/:id", async (request, reply) => {
-    const quest = await quests.getPublicQuest(request.params.id);
-    if (!quest) {
-      return reply.code(404).send({ error: "This quest isn't available." });
-    }
-    return { quest: toPublicQuestResponse(quest) };
-  });
+  // Pass ?count=0 to read without incrementing the view count (OG images / list thumbnails).
+  app.get<{ Params: { id: string }; Querystring: { count?: string } }>(
+    "/api/quests/:id",
+    async (request, reply) => {
+      const shouldCount = request.query.count !== "0";
+      const quest = await quests.getPublicQuest(request.params.id, shouldCount);
+      if (!quest) {
+        return reply.code(404).send({ error: "This quest isn't available." });
+      }
+      return { quest: toPublicQuestResponse(quest) };
+    },
+  );
 
   // Worker Mini App: the quest plus this worker's context (own it? already done? can submit?).
   // Authenticated with verified Telegram initData, so it's exempt from the shared-secret gate.
