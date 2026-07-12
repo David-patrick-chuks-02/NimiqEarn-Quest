@@ -76,10 +76,34 @@ export default function DoQuestPage() {
       ...((init?.headers as Record<string, string>) ?? {}),
     };
     if (init?.body != null) headers["Content-Type"] = "application/json";
-    const res = await fetch(path, { ...init, headers });
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error((body.error as string) ?? `Request failed (${res.status})`);
-    return body;
+
+    // The API runs on a plan that can cold-start; the first request through the proxy may
+    // return a gateway error (502/503/504) while it wakes. Retry a few times with backoff
+    // before surfacing it, but only for idempotent GETs so we never double-submit.
+    const idempotent = !init?.method || init.method.toUpperCase() === "GET";
+    const maxAttempts = idempotent ? 4 : 1;
+    let lastGatewayStatus = 0;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let res: Response;
+      try {
+        res = await fetch(path, { ...init, headers });
+      } catch (e) {
+        if (attempt < maxAttempts - 1) {
+          await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+          continue;
+        }
+        throw e;
+      }
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < maxAttempts - 1) {
+        lastGatewayStatus = res.status;
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error((body.error as string) ?? `Request failed (${res.status})`);
+      return body;
+    }
+    throw new Error(`The server is waking up (${lastGatewayStatus}). Please try again in a moment.`);
   }, []);
 
   const load = useCallback(async () => {

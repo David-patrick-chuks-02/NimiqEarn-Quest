@@ -870,7 +870,10 @@ const TAB_META: Partial<Record<TabKey, { title: string; subtitle: string }>> = {
 // Fixed bottom navigation — the single surface for the whole Creator Studio Mini App.
 function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[var(--brand-navy-900)]/95 backdrop-blur">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[var(--brand-navy-900)]/95 pb-3 backdrop-blur"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
       <div className="mx-auto flex max-w-lg items-stretch">
         {TABS.map((t) => {
           const isActive = t.key === active;
@@ -905,8 +908,6 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) 
           );
         })}
       </div>
-      {/* iOS home-indicator safe area */}
-      <div style={{ height: "env(safe-area-inset-bottom)" }} />
     </nav>
   );
 }
