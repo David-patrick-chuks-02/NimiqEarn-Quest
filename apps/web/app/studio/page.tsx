@@ -34,7 +34,9 @@ interface Quest {
   rewardAmount: string;
   totalSlots: number;
   filledSlots: number;
-  deadline: string;
+  startAt: string | null;
+  scheduled: boolean;
+  promoted: boolean;
   status: "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
   escrowAddress: string | null;
   viewCount: number;
@@ -52,7 +54,7 @@ const emptyForm = {
   description: "",
   rewardAmount: "",
   totalSlots: "",
-  deadline: "",
+  startAt: "",
   proofType: "LINK",
   proofInstructions: "",
 };
@@ -84,21 +86,30 @@ export default function StudioPage() {
   const [analyticsFor, setAnalyticsFor] = useState<{ id: string; title: string } | null>(null);
   const [analyticsData, setAnalyticsData] = useState<Analytics | null>(null);
   const analyticsReqRef = useRef<string | null>(null);
+  const [config, setConfig] = useState<{
+    feePercent: number;
+    promotionAvailable: boolean;
+    promotionFeeNim: number;
+  }>({ feePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
+  const [promotingId, setPromotingId] = useState<string | null>(null);
   const initDataRef = useRef<string>("");
 
-  // Total reward pool the creator funds = reward per completion × number of taskers.
+  // Reward pool the creator funds = reward per completion × number of taskers, plus the
+  // platform fee charged on top at publish.
   const reward = Number(form.rewardAmount);
   const slots = Number(form.totalSlots);
-  const totalCost =
+  const pool =
     Number.isFinite(reward) && Number.isFinite(slots) && reward > 0 && slots > 0
       ? reward * slots
       : null;
+  const platformFee = pool != null ? Math.round(pool * (config.feePercent / 100)) : null;
+  const totalCost = pool != null ? pool + (platformFee ?? 0) : null;
 
-  // The server requires a future deadline; block past dates in the picker itself (tomorrow+).
-  const minDeadline = (() => {
+  // Earliest schedulable start for the picker: now (local, formatted for datetime-local).
+  const minStart = (() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
   })();
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
@@ -193,6 +204,24 @@ export default function StudioPage() {
     }
   }, [api]);
 
+  // Platform fee % + promotion pricing/availability — drives the fee display and Promote button.
+  const loadConfig = useCallback(async () => {
+    try {
+      const c = (await api("/api/studio/config")) as {
+        feePercent?: number;
+        promotionAvailable?: boolean;
+        promotionFeeNim?: number;
+      };
+      setConfig({
+        feePercent: c.feePercent ?? 0,
+        promotionAvailable: Boolean(c.promotionAvailable),
+        promotionFeeNim: c.promotionFeeNim ?? 0,
+      });
+    } catch {
+      // Non-fatal — the studio still works; fee shows as 0 until it loads.
+    }
+  }, [api]);
+
   // Manual refresh from the studio header — reloads quests, stats, and wallet balance.
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
@@ -233,13 +262,13 @@ export default function StudioPage() {
         return;
       }
       setDashboard(me.dashboard);
-      await Promise.all([loadQuests(), loadBalance()]);
+      await Promise.all([loadQuests(), loadBalance(), loadConfig()]);
       setPhase("ready");
     } catch (e) {
       setError((e as Error).message);
       setPhase("error");
     }
-  }, [api, loadQuests, loadBalance]);
+  }, [api, loadQuests, loadBalance, loadConfig]);
 
   // If Telegram injected the SDK before hydration, boot immediately; otherwise the
   // Script onLoad handler below triggers it.
@@ -282,11 +311,16 @@ export default function StudioPage() {
         setError("Slots: enter a whole number greater than zero.");
         return;
       }
-      // The `min` attribute is only advisory — a typed/pasted past date still reaches
-      // here, so re-check against the same floor before hitting the server.
-      if (!form.deadline || form.deadline < minDeadline) {
-        setError("Deadline: pick a future date (tomorrow or later).");
-        return;
+      // Optional schedule: a datetime-local string (local time). Reject a past time; omit
+      // startAt entirely when left blank (the quest goes live immediately on publish).
+      let startAt: string | undefined;
+      if (form.startAt) {
+        const when = new Date(form.startAt);
+        if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+          setError("Start time: pick a time in the future, or leave it blank to start now.");
+          return;
+        }
+        startAt = when.toISOString();
       }
 
       setSubmitting(true);
@@ -299,7 +333,7 @@ export default function StudioPage() {
             description: form.description.trim(),
             rewardAmount: rewardNum,
             totalSlots: slotsNum,
-            deadline: form.deadline, // YYYY-MM-DD — coerced to a date server-side
+            ...(startAt ? { startAt } : {}),
             proofType: form.proofType,
             proofInstructions: form.proofInstructions.trim(),
           }),
@@ -314,7 +348,7 @@ export default function StudioPage() {
         setSubmitting(false);
       }
     },
-    [api, form, minDeadline, loadQuests, refreshDashboard],
+    [api, form, loadQuests, refreshDashboard],
   );
 
   const publish = useCallback(
@@ -352,6 +386,25 @@ export default function StudioPage() {
     setConfirmQuest(null);
     await publish(quest.id);
   }, [confirmQuest, publish]);
+
+  // Promote a quest ("premium ad") — charges the flat promotion fee from the wallet.
+  const promoteQuest = useCallback(
+    async (id: string) => {
+      setPromotingId(id);
+      setError("");
+      setNotice("");
+      try {
+        await api(`/api/studio/quests/${id}/promote`, { method: "POST" });
+        setNotice("Quest promoted — it now appears first, highlighted.");
+        await Promise.all([loadQuests(), loadBalance()]);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setPromotingId(null);
+      }
+    },
+    [api, loadQuests, loadBalance],
+  );
 
   // Any in-flight write blocks the whole studio behind an overlay so the user can't
   // double-submit or navigate mid-action.
@@ -531,17 +584,19 @@ export default function StudioPage() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Deadline</label>
+                  <label className={labelClass}>Schedule start (optional)</label>
                   <input
-                    type="date"
-                    // appearance-none strips WebKit's oversized native date widget, which
-                    // otherwise ignores width and overflows the form on mobile Safari.
+                    type="datetime-local"
+                    // appearance-none strips WebKit's oversized native widget, which otherwise
+                    // ignores width and overflows the form on mobile Safari.
                     className={`${inputClass} appearance-none`}
-                    value={form.deadline}
-                    min={minDeadline}
-                    onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                    required
+                    value={form.startAt}
+                    min={minStart}
+                    onChange={(e) => setForm({ ...form, startAt: e.target.value })}
                   />
+                  <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                    Leave blank to go live as soon as you publish.
+                  </p>
                 </div>
 
                 <div>
@@ -557,18 +612,30 @@ export default function StudioPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl border border-[var(--brand-gold)]/25 bg-[var(--brand-gold)]/[0.07] px-3.5 py-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">
-                      Total reward pool
-                    </p>
-                    <p className="text-[0.7rem] text-[var(--brand-muted)]">
-                      {reward > 0 && slots > 0 ? `${reward.toLocaleString()} NIM × ${slots} taskers` : "reward × taskers"}
-                    </p>
+                <div className="rounded-xl border border-[var(--brand-gold)]/25 bg-[var(--brand-gold)]/[0.07] px-3.5 py-3">
+                  <div className="flex items-center justify-between text-sm text-[var(--brand-muted)]">
+                    <span>
+                      Reward pool
+                      <span className="text-[0.7rem]">
+                        {reward > 0 && slots > 0 ? ` (${reward.toLocaleString()} × ${slots})` : ""}
+                      </span>
+                    </span>
+                    <span className="text-white">{pool != null ? `${pool.toLocaleString()} NIM` : "—"}</span>
                   </div>
-                  <p className="text-lg font-bold text-[var(--brand-gold)]">
-                    {totalCost != null ? `${totalCost.toLocaleString()} NIM` : "—"}
-                  </p>
+                  <div className="mt-1 flex items-center justify-between text-sm text-[var(--brand-muted)]">
+                    <span>Platform fee ({config.feePercent}%)</span>
+                    <span className="text-white">
+                      {platformFee != null ? `${platformFee.toLocaleString()} NIM` : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+                    <span className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">
+                      Total charged
+                    </span>
+                    <span className="text-lg font-bold text-[var(--brand-gold)]">
+                      {totalCost != null ? `${totalCost.toLocaleString()} NIM` : "—"}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-[0.7rem] text-[var(--brand-muted)]">
                   Charged from your wallet balance when you publish.
@@ -593,9 +660,12 @@ export default function StudioPage() {
                     quests={quests}
                     publishingId={publishingId}
                     sharedId={sharedId}
+                    promotingId={promotingId}
+                    promotion={config}
                     onPublish={requestPublish}
                     onShare={shareQuest}
                     onViewAnalytics={openAnalytics}
+                    onPromote={promoteQuest}
                   />
                 ))}
 
@@ -1008,16 +1078,22 @@ function QuestList({
   quests,
   publishingId,
   sharedId,
+  promotingId,
+  promotion,
   onPublish,
   onShare,
   onViewAnalytics,
+  onPromote,
 }: {
   quests: Quest[];
   publishingId: string | null;
   sharedId: string | null;
+  promotingId: string | null;
+  promotion: { promotionAvailable: boolean; promotionFeeNim: number };
   onPublish: (quest: Quest) => void;
   onShare: (id: string) => void;
   onViewAnalytics: (quest: Quest) => void;
+  onPromote: (id: string) => void;
 }) {
   if (quests.length === 0) {
     return (
@@ -1033,11 +1109,24 @@ function QuestList({
     <div className="space-y-2.5">
       {quests.map((q) => {
         return (
-          <div key={q.id} className="glass rounded-xl p-4">
+          <div
+            key={q.id}
+            className={`glass rounded-xl p-4 ${q.promoted ? "border-[var(--brand-gold)]/40" : ""}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 truncate text-sm font-semibold text-white">{q.title}</p>
-              <StatusBadge status={q.status} />
+              <div className="flex shrink-0 items-center gap-1.5">
+                {q.promoted && <Tag label="Promoted" gold />}
+                {q.scheduled && <Tag label="Scheduled" />}
+                <StatusBadge status={q.status} />
+              </div>
             </div>
+
+            {q.scheduled && q.startAt && (
+              <p className="mt-1.5 text-xs text-[var(--brand-muted)]">
+                Starts {new Date(q.startAt).toLocaleString()}
+              </p>
+            )}
 
             <div className="mt-2.5 grid grid-cols-4 gap-2">
               <Metric label="Views" value={q.viewCount.toLocaleString()} />
@@ -1065,6 +1154,18 @@ function QuestList({
               </button>
             )}
 
+            {q.status === "PUBLISHED" && !q.promoted && promotion.promotionAvailable && (
+              <button
+                onClick={() => onPromote(q.id)}
+                disabled={promotingId === q.id}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10 disabled:opacity-60"
+              >
+                {promotingId === q.id
+                  ? "Promoting…"
+                  : `Promote — ${promotion.promotionFeeNim.toLocaleString()} NIM`}
+              </button>
+            )}
+
             {q.status !== "DRAFT" && (
               <button
                 onClick={() => onViewAnalytics(q)}
@@ -1077,6 +1178,18 @@ function QuestList({
         );
       })}
     </div>
+  );
+}
+
+function Tag({ label, gold }: { label: string; gold?: boolean }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide ${
+        gold ? "bg-[var(--brand-gold)]/20 text-[var(--brand-gold)]" : "bg-white/10 text-[var(--brand-muted)]"
+      }`}
+    >
+      {label}
+    </span>
   );
 }
 

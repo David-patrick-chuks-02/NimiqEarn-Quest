@@ -244,7 +244,7 @@ export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {
         return;
       }
       if (code === "INVALID_QUEST") {
-        await ctx.reply(messages.quest.publishDeadlinePassed);
+        await ctx.reply(messages.quest.invalidQuest);
         return;
       }
       // Custodial funding errors carry a descriptive message (insufficient balance, no wallet, …).

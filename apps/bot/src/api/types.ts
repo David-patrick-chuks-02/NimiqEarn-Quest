@@ -6,7 +6,9 @@ export interface ApiQuest {
   rewardAmount: string;
   totalSlots: number;
   filledSlots: number;
-  deadline: string;
+  startAt: string | null;
+  scheduled?: boolean;
+  promoted: boolean;
   proofType: string;
   proofInstructions: string;
   status: string;

@@ -8,12 +8,7 @@ import { afterQuestSavedKeyboard, cancelStepKeyboard, NAV_CANCEL } from "../menu
 import { escapeMarkdown } from "../utils/markdown.js";
 import { StepChat } from "../utils/chat-cleanup.js";
 import { waitForTextOrCancel } from "../utils/conversation-input.js";
-import {
-  parseDeadline,
-  parsePositiveInt,
-  parsePositiveNumber,
-  formatDeadline,
-} from "../utils/quest-input.js";
+import { parsePositiveInt, parsePositiveNumber } from "../utils/quest-input.js";
 import {
   CATEGORY_LABELS,
   PROOF_TYPE_LABELS,
@@ -47,8 +42,6 @@ function formatQuestSummary(draft: CreateQuestInput) {
     `*Reward*\n${draft.rewardAmount} NIM per slot`,
     "",
     `*Slots*\n${draft.totalSlots}`,
-    "",
-    `*Deadline*\n${formatDeadline(draft.deadline)}`,
     "",
     `*Proof type*\n${PROOF_TYPE_LABELS[draft.proofType]}`,
     "",
@@ -306,29 +299,6 @@ export function createQuestConversation(api: ApiClient) {
       }
     }
 
-    await stepChat.prompt(messages.quest.promptDeadline, {
-      parse_mode: "Markdown",
-      reply_markup: cancelStepKeyboard(),
-    });
-    let deadline: Date | null = null;
-    while (deadline === null) {
-      const deadlineText = await waitForTextOrCancel(conversation, ctx, {
-        timeoutMs: STEP_TIMEOUT_MS,
-        timeoutMessage: messages.quest.timeout,
-        stepChat,
-      });
-      if (!deadlineText) {
-        await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
-        return;
-      }
-      deadline = parseDeadline(deadlineText);
-      if (deadline === null) {
-        await stepChat.prompt(messages.quest.invalidDeadline, {
-          reply_markup: cancelStepKeyboard(),
-        });
-      }
-    }
-
     const proofType = await waitForProofType(conversation, ctx, stepChat);
     if (!proofType) {
       await ctx.reply(messages.quest.cancelled, { reply_markup: creatorHubKeyboard() });
@@ -356,7 +326,6 @@ export function createQuestConversation(api: ApiClient) {
       description,
       rewardAmount,
       totalSlots,
-      deadline,
       proofType,
       proofInstructions,
     };

@@ -53,7 +53,8 @@ export const createQuestSchema = z.object({
   description: z.string().min(10).max(2000),
   rewardAmount: rewardAmountSchema,
   totalSlots: z.number().int().positive().max(1_000_000),
-  deadline: z.coerce.date(),
+  // Optional scheduled start. Omitted/null = the quest goes live as soon as it's published.
+  startAt: z.coerce.date().optional(),
   proofType: questProofTypeSchema,
   proofInstructions: z.string().min(5).max(1000),
 });

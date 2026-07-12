@@ -15,7 +15,9 @@ interface PublicQuest {
   rewardAmount: string;
   totalSlots: number;
   slotsLeft: number;
-  deadline: string;
+  startAt: string | null;
+  scheduled: boolean;
+  promoted: boolean;
   proofType: string;
   proofInstructions: string;
   creatorName: string | null;
@@ -26,7 +28,7 @@ interface WorkerView {
   isCreator: boolean;
   submitted: boolean;
   canSubmit: boolean;
-  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "EXPIRED" | null;
+  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "NOT_STARTED" | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -53,7 +55,7 @@ const BLOCKED_COPY: Record<NonNullable<WorkerView["reason"]>, string> = {
   CREATOR: "You created this quest — you can't complete your own quest.",
   ALREADY_SUBMITTED: "You've already done this quest.",
   FULL: "All slots for this quest are taken.",
-  EXPIRED: "This quest's deadline has passed.",
+  NOT_STARTED: "This quest hasn't started yet. Check back at its start time.",
 };
 
 export default function DoQuestPage() {
@@ -194,7 +196,14 @@ export default function DoQuestPage() {
               <div className="mt-4 grid grid-cols-3 gap-2.5">
                 <Stat label="Reward" value={`${Number(view.quest.rewardAmount).toLocaleString()}`} highlight />
                 <Stat label="Slots left" value={`${view.quest.slotsLeft}/${view.quest.totalSlots}`} />
-                <Stat label="Deadline" value={view.quest.deadline.slice(0, 10)} />
+                <Stat
+                  label={view.quest.scheduled ? "Starts" : "Status"}
+                  value={
+                    view.quest.scheduled && view.quest.startAt
+                      ? view.quest.startAt.slice(0, 10)
+                      : "Open"
+                  }
+                />
               </div>
 
               <p className="mt-4 whitespace-pre-line text-sm text-[var(--brand-text)]">

@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 // Renders a readable, on-brand quest card so a shared /q/<id> link previews the quest
-// itself (title, reward, slots, deadline) — not just a logo — in Telegram/Twitter/etc.
+// itself (title, reward, slots, start) — not just a logo — in Telegram/Twitter/etc.
 
 export const alt = "NimiqEarn Quest";
 export const size = { width: 1200, height: 630 };
@@ -30,7 +30,9 @@ interface PublicQuest {
   rewardAmount: string;
   totalSlots: number;
   slotsLeft: number;
-  deadline: string;
+  startAt: string | null;
+  scheduled: boolean;
+  promoted: boolean;
   creatorName: string | null;
 }
 
@@ -89,12 +91,13 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   const { id } = await params;
   const quest = await getQuest(id);
 
-  const category = quest ? (CATEGORY_LABELS[quest.category] ?? "Quest") : "Quest";
+  const baseCategory = quest ? (CATEGORY_LABELS[quest.category] ?? "Quest") : "Quest";
+  const category = quest?.promoted ? `Promoted · ${baseCategory}` : baseCategory;
   const title = quest ? quest.title.slice(0, 90) : "This quest isn't available";
   const description = quest ? quest.description.slice(0, 160) : "Complete quests and earn NIM.";
   const reward = quest ? `${Number(quest.rewardAmount).toLocaleString()} NIM` : "—";
   const slots = quest ? `${quest.slotsLeft}/${quest.totalSlots}` : "—";
-  const deadline = quest ? quest.deadline.slice(0, 10) : "—";
+  const startsOn = quest?.scheduled && quest.startAt ? quest.startAt.slice(0, 10) : null;
 
   return new ImageResponse(
     (
@@ -146,7 +149,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         <div style={{ display: "flex", gap: 20 }}>
           <Pill label="Reward" value={reward} accent />
           <Pill label="Slots left" value={slots} />
-          <Pill label="Deadline" value={deadline} />
+          {startsOn ? <Pill label="Starts" value={startsOn} /> : null}
           <div
             style={{
               display: "flex",

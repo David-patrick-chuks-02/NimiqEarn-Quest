@@ -318,7 +318,7 @@ export const messages = {
   quest: {
     intro: section(
       "Create a quest",
-      "You will be guided through eight steps. Review the summary before saving your draft.",
+      "You will be guided through seven steps. Review the summary before saving your draft.",
     ),
     notCreator: section(
       "Creator access required",
@@ -326,41 +326,35 @@ export const messages = {
     ),
     alreadyInProgress:
       "A quest is already being created. Please finish or cancel the current flow first.",
-    promptTitle: questStep(1, 8, "Title", "Send a clear quest title (3–100 characters)."),
-    promptCategory: questStep(2, 8, "Category", "Select the category that best describes this quest."),
+    promptTitle: questStep(1, 7, "Title", "Send a clear quest title (3–100 characters)."),
+    promptCategory: questStep(2, 7, "Category", "Select the category that best describes this quest."),
     promptDescription: questStep(
       3,
-      8,
+      7,
       "Description",
       "Describe the task workers should complete (minimum 10 characters).",
     ),
     promptReward: questStep(
       4,
-      8,
+      7,
       "Reward",
       "Send the reward amount per slot in NIM (example: `10`).",
     ),
     promptSlots: questStep(
       5,
-      8,
+      7,
       "Slots",
       "Send the number of available participant slots (example: `5`).",
     ),
-    promptDeadline: questStep(
-      6,
-      8,
-      "Deadline",
-      "Send the quest deadline as `YYYY-MM-DD` (must be a future date).",
-    ),
     promptProofType: questStep(
+      6,
       7,
-      8,
       "Proof type",
       "Select the type of proof workers must submit.",
     ),
     promptProofInstructions: questStep(
-      8,
-      8,
+      7,
+      7,
       "Proof instructions",
       "Explain exactly what workers should submit (minimum 5 characters).",
     ),
@@ -370,8 +364,6 @@ export const messages = {
       "The description must be at least 10 characters. Please restart from *Creator Hub* → *Create Quest*.",
     invalidReward: "Please send a positive number for the reward (example: `10`).",
     invalidSlots: "Please send a positive whole number for slots (example: `5`).",
-    invalidDeadline:
-      "Please send a valid future date in `YYYY-MM-DD` format (example: `2026-12-31`).",
     invalidProofInstructions:
       "Proof instructions must be at least 5 characters. Please restart from *Creator Hub* → *Create Quest*.",
     pickCategoryButton: "Please select a category using the buttons above.",
@@ -393,8 +385,6 @@ export const messages = {
       "Only draft quests can be published. This quest is no longer in draft status.",
     publishNotFound:
       "Quest not found. Please refresh *My Quests* and try again.",
-    publishDeadlinePassed:
-      "This quest deadline has passed. Please create a new draft with a future date.",
     publishNotFunded:
       "This quest isn't funded yet. Open *Creator Studio* from the Creator Hub to fund its escrow wallet with the reward pool, then publish from there.",
     saveFailed:

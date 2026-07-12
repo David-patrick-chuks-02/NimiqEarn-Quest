@@ -28,22 +28,17 @@ export function formatCreatorQuestList(quests: ApiQuest[]): string {
     const category = CATEGORY_LABELS[quest.category as keyof typeof CATEGORY_LABELS] ?? quest.category;
     const proof =
       PROOF_TYPE_LABELS[quest.proofType as keyof typeof PROOF_TYPE_LABELS] ?? quest.proofType;
-    const deadline = new Date(quest.deadline).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
     const draftNumber =
       quest.status === "DRAFT" ? drafts.findIndex((draft) => draft.id === quest.id) + 1 : 0;
-    const prefix = draftNumber > 0 ? `Draft #${draftNumber} · ` : "";
+    const draftPrefix = draftNumber > 0 ? `Draft #${draftNumber} · ` : "";
+    const promotedTag = quest.promoted ? "[Promoted] " : "";
 
     lines.push(
-      `${prefix}*${escapeMarkdown(quest.title)}*`,
+      `${draftPrefix}${promotedTag}*${escapeMarkdown(quest.title)}*`,
       `Status · ${formatQuestStatus(quest.status)}`,
       `Category · ${category}`,
       `Reward · ${quest.rewardAmount} NIM per slot`,
       `Slots · ${quest.filledSlots}/${quest.totalSlots}`,
-      `Deadline · ${deadline}`,
       `Proof · ${proof}`,
       "",
     );

@@ -27,7 +27,8 @@ export interface PublicQuest {
   totalSlots: number;
   filledSlots: number;
   slotsLeft: number;
-  deadline: string;
+  startAt: string | null;
+  promoted: boolean;
   proofType: string;
   proofInstructions: string;
   viewCount: number;
@@ -277,10 +278,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         {
           method: "POST",
           headers: jsonHeaders,
-          body: JSON.stringify({
-            ...input,
-            deadline: input.deadline.toISOString(),
-          }),
+          body: JSON.stringify(input),
         },
       );
 
@@ -299,9 +297,6 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       input: UpdateQuestInput,
     ): Promise<ApiQuest> {
       const body: Record<string, unknown> = { ...input };
-      if (input.deadline instanceof Date) {
-        body.deadline = input.deadline.toISOString();
-      }
 
       const response = await fetch(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}`,

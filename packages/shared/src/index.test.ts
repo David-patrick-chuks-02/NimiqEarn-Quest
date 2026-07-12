@@ -25,7 +25,6 @@ describe("createQuestSchema", () => {
       description: "Long enough description",
       rewardAmount: 0,
       totalSlots: 10,
-      deadline: new Date(Date.now() + 86_400_000).toISOString(),
       proofType: "TEXT",
       proofInstructions: "Write feedback",
     });

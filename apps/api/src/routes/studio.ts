@@ -9,7 +9,7 @@ const QUEST_FIELD_LABELS: Record<string, string> = {
   description: "Description",
   rewardAmount: "Reward",
   totalSlots: "Slots",
-  deadline: "Deadline",
+  startAt: "Start time",
   proofType: "Proof type",
   proofInstructions: "Proof instructions",
 };
@@ -27,6 +27,7 @@ import {
   createQuestService,
   QuestServiceError,
   toQuestResponse,
+  type PlatformFees,
 } from "../services/quest.service.js";
 import { questErrorStatus } from "./quests.js";
 import { createCreatorService, CreatorServiceError } from "../services/creator.service.js";
@@ -35,6 +36,7 @@ import type { EscrowService } from "../services/escrow.service.js";
 interface StudioRouteOptions {
   botToken?: string;
   escrow?: EscrowService;
+  fees?: PlatformFees;
 }
 
 function sendStudioError(reply: FastifyReply, error: unknown) {
@@ -71,7 +73,7 @@ function readInitData(request: FastifyRequest): string | null {
  */
 export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, opts) => {
   const botToken = opts.botToken;
-  const quests = createQuestService(app.db, opts.escrow);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees);
   const creators = createCreatorService(app.db);
 
   app.addHook("onRequest", async (request, reply) => {
@@ -209,6 +211,32 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       try {
         const analytics = await quests.getQuestAnalytics(telegramId(request), request.params.questId);
         return { analytics };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  // Fee/promotion config so the studio can show the platform fee on the reward pool and the
+  // promotion cost, and enable the Promote button only when promotion is configured.
+  app.get("/api/studio/config", async () => {
+    const promotionAvailable = Boolean(
+      opts.escrow?.enabled && opts.fees?.address && (opts.fees?.promotionNim ?? 0) > 0,
+    );
+    return {
+      feePercent: opts.fees?.percent ?? 0,
+      promotionAvailable,
+      promotionFeeNim: opts.fees?.promotionNim ?? 0,
+    };
+  });
+
+  // Promote a published quest ("premium ad") — charges the flat promotion fee.
+  app.post<{ Params: { questId: string } }>(
+    "/api/studio/quests/:questId/promote",
+    async (request, reply) => {
+      try {
+        await quests.promoteQuest(telegramId(request), request.params.questId);
+        return { ok: true };
       } catch (error) {
         return sendStudioError(reply, error);
       }

@@ -90,7 +90,7 @@ const WORKER_POINTS = [
 ];
 
 const CREATOR_POINTS = [
-  "Publish bounties with rewards, slots, deadlines",
+  "Publish bounties with rewards, slots, and scheduled starts",
   "Define exactly what proof workers submit",
   "Draft, review, and publish from Telegram",
   "Reach a community of motivated contributors",

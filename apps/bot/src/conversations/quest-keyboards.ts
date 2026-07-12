@@ -17,7 +17,6 @@ export type EditableQuestField =
   | "description"
   | "reward"
   | "slots"
-  | "deadline"
   | "proofType"
   | "proofInstructions";
 
@@ -27,7 +26,6 @@ const EDIT_FIELD_BUTTONS: { field: EditableQuestField; label: string }[] = [
   { field: "description", label: "Description" },
   { field: "reward", label: "Reward" },
   { field: "slots", label: "Slots" },
-  { field: "deadline", label: "Deadline" },
   { field: "proofType", label: "Proof type" },
   { field: "proofInstructions", label: "Proof instructions" },
 ];

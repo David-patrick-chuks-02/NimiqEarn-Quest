@@ -25,7 +25,10 @@ export class QuestServiceError extends Error {
       | "QUEST_EXPIRED"
       | "ALREADY_SUBMITTED"
       | "INVALID_PROOF"
-      | "PAYOUT_FAILED",
+      | "PAYOUT_FAILED"
+      | "QUEST_NOT_STARTED"
+      | "ALREADY_PROMOTED"
+      | "PROMOTION_UNAVAILABLE",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -36,7 +39,22 @@ function isCreatorRole(role: string) {
   return role === "CREATOR" || role === "ADMIN";
 }
 
-export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
+export interface PlatformFees {
+  /** Percent charged on top of the reward pool at publish (e.g. 6). */
+  percent: number;
+  /** Recipient address for platform + promotion fees. Unset = fees disabled. */
+  address?: string;
+  /** Flat fee in NIM to promote a quest. */
+  promotionNim: number;
+}
+
+const DEFAULT_FEES: PlatformFees = { percent: 0, promotionNim: 0 };
+
+export function createQuestService(
+  db: PrismaClient,
+  escrow?: EscrowService,
+  fees: PlatformFees = DEFAULT_FEES,
+) {
   const profiles = createProfileService(db);
 
   return {
@@ -46,8 +64,10 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         throw new QuestServiceError("Invalid quest data.", "INVALID_QUEST");
       }
 
-      if (parsed.data.deadline <= new Date()) {
-        throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
+      if (parsed.data.startAt && parsed.data.startAt <= new Date()) {
+        // A start time in the past just means "start now" — normalise it to null rather than
+        // rejecting, so a slightly-stale client clock doesn't block creation.
+        parsed.data.startAt = undefined;
       }
 
       const user = await db.user.findUnique({
@@ -82,7 +102,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
           description: parsed.data.description,
           rewardAmount: parsed.data.rewardAmount,
           totalSlots: parsed.data.totalSlots,
-          deadline: parsed.data.deadline,
+          startAt: parsed.data.startAt ?? null,
           proofType: parsed.data.proofType,
           proofInstructions: parsed.data.proofInstructions,
           status: "DRAFT",
@@ -102,8 +122,8 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         throw new QuestServiceError("Invalid quest data.", "INVALID_QUEST");
       }
 
-      if (parsed.data.deadline && parsed.data.deadline <= new Date()) {
-        throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
+      if (parsed.data.startAt && parsed.data.startAt <= new Date()) {
+        parsed.data.startAt = undefined;
       }
 
       const user = await db.user.findUnique({
@@ -165,7 +185,8 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
           creatorId: user.id,
           ...(statusFilter ? { status: statusFilter } : {}),
         },
-        orderBy: { createdAt: "desc" },
+        // Promoted quests first, then newest.
+        orderBy: [{ promoted: "desc" }, { createdAt: "desc" }],
       });
     },
 
@@ -199,12 +220,9 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       if (quest.status !== "DRAFT") {
         throw new QuestServiceError("Only draft quests can be published.", "INVALID_STATUS");
       }
-      if (quest.deadline <= new Date()) {
-        throw new QuestServiceError("Deadline must be in the future.", "INVALID_QUEST");
-      }
-
-      // Fund the quest from the creator's custodial wallet: transfer the full reward pool
-      // to the quest's escrow wallet on-chain. This is where the creator "pays" for the quest.
+      // Fund the quest from the creator's custodial wallet: transfer the reward pool to the
+      // quest's escrow wallet on-chain, plus the platform fee (charged on top) to the fee
+      // wallet. This is where the creator "pays" for the quest.
       let fundedAt: Date | null = null;
       if (escrow?.enabled && quest.escrowAddress) {
         const creatorWallet = user.walletProfiles.find((w) => w.keyCiphertext);
@@ -212,8 +230,13 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
           throw new QuestServiceError("Set up your wallet before publishing.", "NO_WALLET");
         }
 
-        const requiredLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
-        const balance = await escrow.getFunding(creatorWallet.nimiqAddress, requiredLuna);
+        const poolLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
+        // Fee is only charged when a recipient is configured.
+        const feeLuna =
+          fees.address && fees.percent > 0 ? Math.round((poolLuna * fees.percent) / 100) : 0;
+        const totalLuna = poolLuna + feeLuna;
+
+        const balance = await escrow.getFunding(creatorWallet.nimiqAddress, totalLuna);
         if (!balance.reachable) {
           throw new QuestServiceError(
             "Couldn't reach the Nimiq network. Please try again shortly.",
@@ -223,7 +246,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         if (!balance.funded) {
           const have = balance.balanceNim ?? 0;
           throw new QuestServiceError(
-            `Insufficient balance — you need ${balance.requiredNim.toLocaleString()} NIM but have ${have.toLocaleString()}. Top up your wallet and try again.`,
+            `Insufficient balance — you need ${balance.requiredNim.toLocaleString()} NIM (reward pool + ${fees.percent}% platform fee) but have ${have.toLocaleString()}. Top up your wallet and try again.`,
             "INSUFFICIENT_BALANCE",
           );
         }
@@ -231,7 +254,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         const result = await escrow.transfer({
           fromKeyCiphertext: creatorWallet.keyCiphertext,
           toAddress: quest.escrowAddress,
-          valueLuna: BigInt(requiredLuna),
+          valueLuna: BigInt(poolLuna),
         });
         if (!result.hash) {
           throw new QuestServiceError(
@@ -240,6 +263,19 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
           );
         }
         fundedAt = new Date();
+
+        // Collect the platform fee (best-effort — the quest is already funded, so a fee
+        // hiccup shouldn't block the creator).
+        if (feeLuna > 0 && fees.address) {
+          const feeResult = await escrow.transfer({
+            fromKeyCiphertext: creatorWallet.keyCiphertext,
+            toAddress: fees.address,
+            valueLuna: BigInt(feeLuna),
+          });
+          if (!feeResult.hash) {
+            console.error("Platform fee transfer failed for quest", quest.id, feeResult.error);
+          }
+        }
       }
 
       return db.quest.update({
@@ -350,13 +386,13 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       const pool = reward * quest.totalSlots;
       const committed = reward * quest.filledSlots;
       const conversionRate = quest.viewCount > 0 ? quest.filledSlots / quest.viewCount : 0;
-      const msLeft = quest.deadline.getTime() - Date.now();
-      const daysLeft = Math.max(0, Math.ceil(msLeft / 86_400_000));
+      const scheduled = quest.startAt != null && quest.startAt.getTime() > Date.now();
 
       return {
         id: quest.id,
         title: quest.title,
         status: quest.status,
+        promoted: quest.promoted,
         rewardAmount: reward,
         totalSlots: quest.totalSlots,
         filledSlots: quest.filledSlots,
@@ -366,8 +402,8 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
         committed,
         remainingPool: Math.max(0, pool - committed),
         conversionRate,
-        deadline: quest.deadline.toISOString(),
-        daysLeft,
+        startAt: quest.startAt?.toISOString() ?? null,
+        scheduled,
         publishedAt: quest.publishedAt?.toISOString() ?? null,
         createdAt: quest.createdAt.toISOString(),
         windowDays: days,
@@ -396,7 +432,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
 
       const isCreator = Boolean(user) && quest.creatorId === user!.id;
       const slotsLeft = Math.max(0, quest.totalSlots - quest.filledSlots);
-      const expired = quest.deadline.getTime() <= Date.now();
+      const notStarted = quest.startAt != null && quest.startAt.getTime() > Date.now();
 
       let canSubmit = true;
       let reason: WorkerQuestView["reason"] = null;
@@ -409,12 +445,12 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       } else if (existing) {
         canSubmit = false;
         reason = "ALREADY_SUBMITTED";
+      } else if (notStarted) {
+        canSubmit = false;
+        reason = "NOT_STARTED";
       } else if (slotsLeft <= 0) {
         canSubmit = false;
         reason = "FULL";
-      } else if (expired) {
-        canSubmit = false;
-        reason = "EXPIRED";
       }
 
       return {
@@ -430,7 +466,7 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
      * Record a worker's proof for a quest, fill a slot, and pay the reward to their wallet.
      * Proof is auto-accepted (no creator review in this milestone) — our system is the
      * verifier. Guards against the creator doing their own quest, duplicates, a full quest,
-     * and an expired deadline. When payments are configured the reward is disbursed on-chain
+     * and a quest that hasn't started. When payments are configured the reward is disbursed on-chain
      * from the quest's escrow to the worker's custodial wallet immediately.
      */
     async submitQuest(
@@ -464,8 +500,8 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
       if (quest.creatorId === user.id) {
         throw new QuestServiceError("You can't complete your own quest.", "CREATOR_CANNOT_SUBMIT");
       }
-      if (quest.deadline.getTime() <= Date.now()) {
-        throw new QuestServiceError("This quest's deadline has passed.", "QUEST_EXPIRED");
+      if (quest.startAt != null && quest.startAt.getTime() > Date.now()) {
+        throw new QuestServiceError("This quest hasn't started yet.", "QUEST_NOT_STARTED");
       }
 
       // Pay the reward on accept when escrow is configured and the quest holds its own key.
@@ -535,6 +571,66 @@ export function createQuestService(db: PrismaClient, escrow?: EscrowService) {
 
       return { txHash };
     },
+
+    /**
+     * Promote a published quest ("premium ad"): charge the flat promotion fee to the
+     * platform wallet and flag it. Requires escrow + a configured fee address.
+     */
+    async promoteQuest(telegramId: string, questId: string): Promise<void> {
+      const user = await db.user.findUnique({
+        where: { telegramId },
+        include: { walletProfiles: true },
+      });
+      if (!user) throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const quest = await db.quest.findFirst({ where: { id: questId, creatorId: user.id } });
+      if (!quest) throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      if (quest.promoted) {
+        throw new QuestServiceError("This quest is already promoted.", "ALREADY_PROMOTED");
+      }
+      if (quest.status !== "PUBLISHED") {
+        throw new QuestServiceError("Only published quests can be promoted.", "INVALID_STATUS");
+      }
+      if (!escrow?.enabled || !fees.address || fees.promotionNim <= 0) {
+        throw new QuestServiceError("Promotion isn't available right now.", "PROMOTION_UNAVAILABLE");
+      }
+
+      const wallet = user.walletProfiles.find((w) => w.keyCiphertext);
+      if (!wallet?.keyCiphertext) {
+        throw new QuestServiceError("Set up your wallet first.", "NO_WALLET");
+      }
+
+      const feeLuna = escrow.requiredLuna(fees.promotionNim, 1);
+      const balance = await escrow.getFunding(wallet.nimiqAddress, feeLuna);
+      if (!balance.reachable) {
+        throw new QuestServiceError(
+          "Couldn't reach the Nimiq network. Please try again shortly.",
+          "RPC_UNAVAILABLE",
+        );
+      }
+      if (!balance.funded) {
+        throw new QuestServiceError(
+          `Insufficient balance — promoting costs ${fees.promotionNim.toLocaleString()} NIM.`,
+          "INSUFFICIENT_BALANCE",
+        );
+      }
+      const result = await escrow.transfer({
+        fromKeyCiphertext: wallet.keyCiphertext,
+        toAddress: fees.address,
+        valueLuna: BigInt(feeLuna),
+      });
+      if (!result.hash) {
+        throw new QuestServiceError(
+          result.error ?? "Promotion payment failed. Please try again.",
+          "FUNDING_FAILED",
+        );
+      }
+
+      await db.quest.update({ where: { id: quest.id }, data: { promoted: true } });
+    },
   };
 }
 
@@ -543,13 +639,14 @@ export interface WorkerQuestView {
   isCreator: boolean;
   submitted: boolean;
   canSubmit: boolean;
-  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "EXPIRED" | null;
+  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "NOT_STARTED" | null;
 }
 
 export interface QuestAnalytics {
   id: string;
   title: string;
   status: string;
+  promoted: boolean;
   rewardAmount: number;
   totalSlots: number;
   filledSlots: number;
@@ -559,8 +656,8 @@ export interface QuestAnalytics {
   committed: number;
   remainingPool: number;
   conversionRate: number;
-  deadline: string;
-  daysLeft: number;
+  startAt: string | null;
+  scheduled: boolean;
   publishedAt: string | null;
   createdAt: string;
   windowDays: number;
@@ -578,7 +675,9 @@ export function toQuestResponse(quest: Quest) {
     rewardAmount: quest.rewardAmount.toString(),
     totalSlots: quest.totalSlots,
     filledSlots: quest.filledSlots,
-    deadline: quest.deadline.toISOString(),
+    startAt: quest.startAt?.toISOString() ?? null,
+    scheduled: quest.startAt != null && quest.startAt.getTime() > Date.now(),
+    promoted: quest.promoted,
     proofType: quest.proofType,
     proofInstructions: quest.proofInstructions,
     status: quest.status,
@@ -601,7 +700,9 @@ export function toPublicQuestResponse(quest: Quest & { creator?: { displayName: 
     totalSlots: quest.totalSlots,
     filledSlots: quest.filledSlots,
     slotsLeft: Math.max(0, quest.totalSlots - quest.filledSlots),
-    deadline: quest.deadline.toISOString(),
+    startAt: quest.startAt?.toISOString() ?? null,
+    scheduled: quest.startAt != null && quest.startAt.getTime() > Date.now(),
+    promoted: quest.promoted,
     proofType: quest.proofType,
     proofInstructions: quest.proofInstructions,
     viewCount: quest.viewCount,

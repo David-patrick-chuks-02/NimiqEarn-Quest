@@ -9,12 +9,7 @@ import { cancelStepKeyboard } from "../menus/nav.js";
 import { escapeMarkdown } from "../utils/markdown.js";
 import { StepChat } from "../utils/chat-cleanup.js";
 import { waitForTextOrCancel } from "../utils/conversation-input.js";
-import {
-  formatDeadline,
-  parseDeadline,
-  parsePositiveInt,
-  parsePositiveNumber,
-} from "../utils/quest-input.js";
+import { parsePositiveInt, parsePositiveNumber } from "../utils/quest-input.js";
 import {
   askTextStep,
   STEP_TIMEOUT_MS,
@@ -47,7 +42,6 @@ function formatOverview(quest: ApiQuest): string {
     `*Category* · ${category}`,
     `*Reward* · ${quest.rewardAmount} NIM per slot`,
     `*Slots* · ${quest.totalSlots}`,
-    `*Deadline* · ${formatDeadline(new Date(quest.deadline))}`,
     `*Proof type* · ${proof}`,
     "",
     "Select a field to edit, or tap *Done*.",
@@ -175,23 +169,6 @@ async function collectFieldValue(
         parsePositiveInt,
       );
       return value === null ? null : { totalSlots: value };
-    }
-    case "deadline": {
-      await stepChat.prompt(messages.quest.promptDeadline, {
-        parse_mode: "Markdown",
-        reply_markup: cancelStepKeyboard(),
-      });
-      while (true) {
-        const text = await waitForTextOrCancel(conversation, ctx, {
-          timeoutMs: STEP_TIMEOUT_MS,
-          timeoutMessage: messages.quest.edit.timeout,
-          stepChat,
-        });
-        if (!text) return null;
-        const deadline = parseDeadline(text);
-        if (deadline) return { deadline };
-        await stepChat.prompt(messages.quest.invalidDeadline, { reply_markup: cancelStepKeyboard() });
-      }
     }
     case "category": {
       const category = await waitForCategory(conversation, ctx, stepChat);

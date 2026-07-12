@@ -16,7 +16,9 @@ interface PublicQuest {
   rewardAmount: string;
   totalSlots: number;
   slotsLeft: number;
-  deadline: string;
+  startAt: string | null;
+  scheduled: boolean;
+  promoted: boolean;
   proofType: string;
   proofInstructions: string;
   creatorName: string | null;
@@ -108,7 +110,12 @@ export default async function QuestPage({ params }: { params: Promise<{ id: stri
         <div className="mt-5 grid grid-cols-3 gap-2.5">
           <Stat label="Reward" value={`${reward} NIM`} highlight />
           <Stat label="Slots left" value={`${quest.slotsLeft}/${quest.totalSlots}`} />
-          <Stat label="Deadline" value={quest.deadline.slice(0, 10)} />
+          <Stat
+            label={quest.scheduled ? "Starts" : "Status"}
+            value={
+              quest.scheduled && quest.startAt ? quest.startAt.slice(0, 10) : "Open"
+            }
+          />
         </div>
 
         <div className="mt-5">

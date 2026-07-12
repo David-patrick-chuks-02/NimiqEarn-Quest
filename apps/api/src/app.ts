@@ -85,9 +85,15 @@ export async function buildServer() {
     network: env.NIMIQ_NETWORK,
   });
 
+  const fees = {
+    percent: env.PLATFORM_FEE_PERCENT,
+    address: env.PLATFORM_FEE_ADDRESS,
+    promotionNim: env.PROMOTION_FEE_NIM,
+  };
+
   await app.register(creatorRoutes);
-  await app.register(questRoutes, { escrow, botToken: env.BOT_TOKEN });
-  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow });
+  await app.register(questRoutes, { escrow, botToken: env.BOT_TOKEN, fees });
+  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow, fees });
   await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 

@@ -27,7 +27,6 @@ describe("createQuestService", () => {
       description: "Help us test the new onboarding flow.",
       rewardAmount: 10,
       totalSlots: 5,
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       proofType: "TEXT",
       proofInstructions: "Send a short summary of your experience.",
     });
@@ -56,7 +55,6 @@ describe("createQuestService", () => {
         description: "Help us test the new onboarding flow.",
         rewardAmount: 10,
         totalSlots: 5,
-        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         proofType: "TEXT",
         proofInstructions: "Send a short summary of your experience.",
       }),
@@ -75,7 +73,6 @@ describe("createQuestService", () => {
       id: "quest-1",
       creatorId: "user-1",
       status: "DRAFT",
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const update = vi.fn().mockResolvedValue({
       id: "quest-1",
@@ -109,7 +106,6 @@ describe("createQuestService", () => {
       id: "quest-1",
       creatorId: "user-1",
       status: "PUBLISHED",
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
     const service = createQuestService({
@@ -130,7 +126,6 @@ describe("createQuestService", () => {
       status: "PUBLISHED",
       totalSlots: 5,
       filledSlots: 0,
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const transaction = vi.fn();
 
@@ -159,7 +154,6 @@ describe("createQuestService", () => {
       totalSlots: 5,
       filledSlots: 1,
       escrowKeyCiphertext: null,
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const submissionCreate = vi.fn().mockResolvedValue({ id: "sub-1" });
     const questUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -205,7 +199,6 @@ describe("createQuestService", () => {
       filledSlots: 0,
       rewardAmount: "10",
       escrowKeyCiphertext: "escrow-enc",
-      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     const transaction = vi.fn(async (fn) =>
       fn({

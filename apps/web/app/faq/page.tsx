@@ -41,7 +41,7 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "How do I become a creator?",
-    a: "Open the Creator Hub in the bot and register as a creator. You can then create quests with a reward, slots, deadline, and the exact proof you require, and publish them.",
+    a: "Open the Creator Hub in the bot and register as a creator. You can then create quests with a reward, slots, an optional scheduled start, and the exact proof you require, and publish them.",
   },
   {
     q: "Is my data safe?",

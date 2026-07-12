@@ -23,6 +23,13 @@ const envSchema = z.object({
   ESCROW_ENCRYPTION_KEY: z.string().optional(),
   // Sentry error monitoring. When empty, monitoring is disabled (local dev, tests, CI).
   SENTRY_DSN: z.string().optional(),
+  // Platform fee charged to creators on top of the reward pool at publish (percent).
+  PLATFORM_FEE_PERCENT: z.coerce.number().min(0).max(100).default(6),
+  // Nimiq address that receives the platform fee + promotion fees. When unset, no fee is
+  // charged (dev) and promoting a quest is unavailable.
+  PLATFORM_FEE_ADDRESS: z.string().optional(),
+  // Flat fee (in NIM) to promote a quest ("premium ad" boost).
+  PROMOTION_FEE_NIM: z.coerce.number().min(0).default(100),
 });
 
 export type Env = z.infer<typeof envSchema>;

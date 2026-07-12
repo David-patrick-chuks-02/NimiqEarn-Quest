@@ -31,28 +31,33 @@ const PROOF_LABELS: Record<string, string> = {
   REFERRAL_EVENT: "A referral",
 };
 
-function formatDeadline(iso: string): string {
-  // YYYY-MM-DD is unambiguous and locale-free for a bot audience.
-  return iso.slice(0, 10);
-}
-
 /** Detail card shown when someone opens a shared quest link. */
 export function formatSharedQuest(quest: PublicQuest): string {
   const category = CATEGORY_LABELS[quest.category] ?? "Quest";
   const proof = PROOF_LABELS[quest.proofType] ?? quest.proofType;
   const by = quest.creatorName ? ` · by *${escapeMarkdown(quest.creatorName)}*` : "";
 
-  return [
+  const lines = [
     `*${escapeMarkdown(quest.title)}*`,
     `_${category}_${by}`,
     "",
     `*Reward:* ${escapeMarkdown(Number(quest.rewardAmount).toLocaleString())} NIM`,
     `*Slots:* ${quest.slotsLeft} of ${quest.totalSlots} left`,
-    `*Deadline:* ${formatDeadline(quest.deadline)}`,
+  ];
+
+  // Only surface a start date when it's genuinely in the future (scheduled quest).
+  if (quest.startAt && new Date(quest.startAt).getTime() > Date.now()) {
+    // YYYY-MM-DD is unambiguous and locale-free for a bot audience.
+    lines.push(`*Starts:* ${quest.startAt.slice(0, 10)}`);
+  }
+
+  lines.push(
     `*Proof:* ${escapeMarkdown(proof)} — ${escapeMarkdown(quest.proofInstructions)}`,
     "",
     escapeMarkdown(quest.description),
     "",
     "_Tap *Do this quest* below to complete it and earn NIM, paid to your wallet._",
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }

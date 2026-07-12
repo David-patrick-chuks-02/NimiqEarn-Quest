@@ -8,6 +8,7 @@ export interface Analytics {
   id: string;
   title: string;
   status: string;
+  promoted: boolean;
   rewardAmount: number;
   totalSlots: number;
   filledSlots: number;
@@ -17,8 +18,8 @@ export interface Analytics {
   committed: number;
   remainingPool: number;
   conversionRate: number;
-  deadline: string;
-  daysLeft: number;
+  startAt: string | null;
+  scheduled: boolean;
   publishedAt: string | null;
   createdAt: string;
   windowDays: number;
@@ -50,8 +51,10 @@ export function AnalyticsDetail({
       <div>
         <h1 className="text-lg font-bold text-white">{analytics.title}</h1>
         <p className="mt-0.5 text-xs uppercase tracking-wide text-[var(--brand-gold)]">
-          {analytics.status.toLowerCase()} ·{" "}
-          {analytics.daysLeft > 0 ? `${analytics.daysLeft} days left` : "deadline passed"}
+          {analytics.promoted && "promoted · "}
+          {analytics.scheduled && analytics.startAt
+            ? `scheduled · starts ${new Date(analytics.startAt).toLocaleDateString()}`
+            : analytics.status.toLowerCase()}
         </p>
       </div>
 

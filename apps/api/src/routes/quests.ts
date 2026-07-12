@@ -5,6 +5,7 @@ import {
   QuestServiceError,
   toPublicQuestResponse,
   toQuestResponse,
+  type PlatformFees,
 } from "../services/quest.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
 import { verifyInitData } from "../telegram-auth.js";
@@ -13,6 +14,7 @@ interface QuestRouteOptions {
   escrow?: EscrowService;
   /** Bot token used to verify worker Mini App initData on the do-a-quest routes. */
   botToken?: string;
+  fees?: PlatformFees;
 }
 
 /** Verify Telegram Mini App initData on a request and return the telegram id, or null. */
@@ -42,15 +44,19 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
     case "QUEST_NOT_PUBLISHED":
     case "QUEST_FULL":
     case "QUEST_EXPIRED":
+    case "QUEST_NOT_STARTED":
     case "ALREADY_SUBMITTED":
+    case "ALREADY_PROMOTED":
       return 409;
+    case "PROMOTION_UNAVAILABLE":
+      return 503;
     default:
       return 400;
   }
 }
 
 export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
-  const quests = createQuestService(app.db, opts.escrow);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees);
 
   const sendQuestError = (reply: FastifyReply, error: unknown) => {
     if (error instanceof QuestServiceError) {

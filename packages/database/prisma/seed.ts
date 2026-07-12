@@ -41,7 +41,6 @@ async function main() {
       proofType: "TEXT",
       proofInstructions: "Reply with a short intro message.",
       status: "DRAFT",
-      deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },
   });
 

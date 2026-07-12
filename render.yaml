@@ -50,6 +50,12 @@ services:
         sync: false # Albatross RPC node (balance checks + escrow funding). Testnet: https://rpc.testnet.nimiqwatch.com/
       - key: ESCROW_ENCRYPTION_KEY
         generateValue: true # encrypts per-quest escrow wallet keys at rest (generated once)
+      - key: PLATFORM_FEE_PERCENT
+        value: "6" # platform fee charged to creators on top of the reward pool at publish
+      - key: PLATFORM_FEE_ADDRESS
+        sync: false # Nimiq address that receives platform + promotion fees (unset = no fees)
+      - key: PROMOTION_FEE_NIM
+        value: "100" # flat NIM fee to promote ("premium ad") a quest
       - key: ADMIN_API_KEY
         sync: false # optional: enables /api/admin/* endpoints
       - key: SENTRY_DSN
