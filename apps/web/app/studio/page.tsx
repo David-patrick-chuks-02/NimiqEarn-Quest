@@ -25,6 +25,7 @@ const PROOF_TYPES = [
 ] as const;
 
 type Phase = "loading" | "no-telegram" | "not-creator" | "ready" | "error";
+type TabKey = "home" | "create" | "quests" | "wallet";
 
 interface Quest {
   id: string;
@@ -72,10 +73,12 @@ export default function StudioPage() {
   const [sharedId, setSharedId] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [balance, setBalance] = useState<{ nim: number | null; reachable: boolean }>({
-    nim: null,
-    reachable: false,
-  });
+  const [balance, setBalance] = useState<{
+    nim: number | null;
+    reachable: boolean;
+    address: string | null;
+  }>({ nim: null, reachable: false, address: null });
+  const [tab, setTab] = useState<TabKey>("home");
   const [confirmQuest, setConfirmQuest] = useState<Quest | null>(null);
   // Per-quest analytics viewed inline (no separate Mini App). analyticsData null while loading.
   const [analyticsFor, setAnalyticsFor] = useState<{ id: string; title: string } | null>(null);
@@ -178,10 +181,15 @@ export default function StudioPage() {
       const b = (await api("/api/studio/balance")) as {
         balanceNim?: number | null;
         reachable?: boolean;
+        address?: string | null;
       };
-      setBalance({ nim: b.balanceNim ?? null, reachable: Boolean(b.reachable) });
+      setBalance({
+        nim: b.balanceNim ?? null,
+        reachable: Boolean(b.reachable),
+        address: b.address ?? null,
+      });
     } catch {
-      setBalance({ nim: null, reachable: false });
+      setBalance({ nim: null, reachable: false, address: null });
     }
   }, [api]);
 
@@ -297,7 +305,8 @@ export default function StudioPage() {
           }),
         });
         setForm(emptyForm);
-        setNotice("Draft saved. Publishing funds it from your wallet balance.");
+        setNotice("Draft saved. Publish it from your wallet balance below.");
+        setTab("quests"); // jump to the list so they can review + publish the new draft
         await Promise.all([loadQuests(), refreshDashboard()]);
       } catch (e2) {
         setError((e2 as Error).message);
@@ -406,37 +415,36 @@ export default function StudioPage() {
           </div>
         )}
 
-        {phase === "ready" && dashboard && analyticsFor && (
-          <div className="mt-4">
-            {analyticsData ? (
-              <AnalyticsDetail analytics={analyticsData} onBack={closeAnalytics} />
-            ) : (
-              <AnalyticsSkeleton title={analyticsFor.title} onBack={closeAnalytics} />
-            )}
-          </div>
-        )}
+        {phase === "ready" && dashboard && (
+          <>
+            <div className="mt-4 space-y-5 pb-24">
+              {notice && (
+                <p className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5 text-sm text-[var(--brand-gold)]">
+                  {notice}
+                </p>
+              )}
+              {error && (
+                <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+                  {error}
+                </p>
+              )}
 
-        {phase === "ready" && dashboard && !analyticsFor && (
-          <div className="mt-4 space-y-5">
-            <StatRow dashboard={dashboard} />
-            <WalletCard balance={balance} />
+              {tab === "home" && (
+                <>
+                  <StatRow dashboard={dashboard} />
+                  <WalletCard balance={balance} />
+                  <button onClick={() => setTab("create")} className={`${primaryBtn} w-full`}>
+                    Create a quest
+                  </button>
+                </>
+              )}
 
-            {notice && (
-              <p className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5 text-sm text-[var(--brand-gold)]">
-                {notice}
-              </p>
-            )}
-            {error && (
-              <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
-                {error}
-              </p>
-            )}
-
-            <form onSubmit={submitQuest} className="glass rounded-2xl p-5">
-              <h2 className="text-base font-bold text-white">Create a quest</h2>
-              <p className="mt-1 text-xs text-[var(--brand-muted)]">
-                Saved as a draft. Review and publish it below.
-              </p>
+              {tab === "create" && (
+                <form onSubmit={submitQuest} className="glass rounded-2xl p-5">
+                  <h2 className="text-base font-bold text-white">Create a quest</h2>
+                  <p className="mt-1 text-xs text-[var(--brand-muted)]">
+                    Saved as a draft — find it in the Quests tab to publish.
+                  </p>
 
               <div className="mt-4 space-y-3.5">
                 <div>
@@ -568,17 +576,38 @@ export default function StudioPage() {
                   {submitting ? "Saving…" : "Save draft"}
                 </button>
               </div>
-            </form>
+                </form>
+              )}
 
-            <QuestList
-              quests={quests}
-              publishingId={publishingId}
-              sharedId={sharedId}
-              onPublish={requestPublish}
-              onShare={shareQuest}
-              onViewAnalytics={openAnalytics}
+              {tab === "quests" &&
+                (analyticsFor ? (
+                  analyticsData ? (
+                    <AnalyticsDetail analytics={analyticsData} onBack={closeAnalytics} />
+                  ) : (
+                    <AnalyticsSkeleton title={analyticsFor.title} onBack={closeAnalytics} />
+                  )
+                ) : (
+                  <QuestList
+                    quests={quests}
+                    publishingId={publishingId}
+                    sharedId={sharedId}
+                    onPublish={requestPublish}
+                    onShare={shareQuest}
+                    onViewAnalytics={openAnalytics}
+                  />
+                ))}
+
+              {tab === "wallet" && <WalletTab balance={balance} />}
+            </div>
+
+            <TabBar
+              active={tab}
+              onChange={(next) => {
+                closeAnalytics();
+                setTab(next);
+              }}
             />
-          </div>
+          </>
         )}
       </main>
     </>
@@ -587,6 +616,126 @@ export default function StudioPage() {
 
 const primaryBtn =
   "inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-5 py-2.5 text-sm font-semibold text-[var(--brand-ink)] transition hover:bg-[var(--brand-gold-600)] disabled:opacity-60";
+
+/* --------------------------------- tab bar -------------------------------- */
+
+const TAB_ICON: Record<TabKey, React.ReactNode> = {
+  home: (
+    <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" />
+  ),
+  create: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v8M8 12h8" />
+    </>
+  ),
+  quests: (
+    <>
+      <path d="M8 6h13M8 12h13M8 18h13" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" />
+    </>
+  ),
+  wallet: (
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M16 12h.01M3 9h18" />
+    </>
+  ),
+};
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "home", label: "Home" },
+  { key: "create", label: "Create" },
+  { key: "quests", label: "Quests" },
+  { key: "wallet", label: "Wallet" },
+];
+
+// Fixed bottom navigation — the single surface for the whole Creator Studio Mini App.
+function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[var(--brand-navy-900)]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-lg items-stretch">
+        {TABS.map((t) => {
+          const isActive = t.key === active;
+          return (
+            <button
+              key={t.key}
+              onClick={() => onChange(t.key)}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[0.65rem] font-medium transition ${
+                isActive ? "text-[var(--brand-gold)]" : "text-[var(--brand-muted)] hover:text-white"
+              }`}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                {TAB_ICON[t.key]}
+              </svg>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* iOS home-indicator safe area */}
+      <div style={{ height: "env(safe-area-inset-bottom)" }} />
+    </nav>
+  );
+}
+
+// Wallet tab — the creator's custodial wallet that funds their quests. This is the one place
+// the full address is shown (deposit here to top up), with a tap-to-copy.
+function WalletTab({ balance }: { balance: { nim: number | null; reachable: boolean; address: string | null } }) {
+  const [copied, setCopied] = useState(false);
+  const known = balance.reachable && balance.nim !== null;
+
+  const copy = async () => {
+    if (!balance.address) return;
+    try {
+      await navigator.clipboard.writeText(balance.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable — no-op.
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-2xl p-5 text-center">
+        <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">Wallet balance</p>
+        {known ? (
+          <p className="mt-1 text-3xl font-bold text-white">
+            {balance.nim!.toLocaleString()}{" "}
+            <span className="text-base font-semibold text-[var(--brand-gold)]">NIM</span>
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
+        )}
+      </div>
+
+      {balance.address && (
+        <div className="glass rounded-2xl p-5">
+          <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">Deposit address</p>
+          <p className="mt-1.5 break-all font-mono text-sm text-white">{balance.address}</p>
+          <button onClick={() => void copy()} className={`${primaryBtn} mt-3 w-full`}>
+            {copied ? "Copied" : "Copy address"}
+          </button>
+          <p className="mt-2 text-[0.7rem] text-[var(--brand-muted)]">
+            Send NIM here to fund your quests. Publishing a quest charges its reward pool from
+            this balance.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Header({ onRefresh, refreshing }: { onRefresh?: () => void; refreshing?: boolean }) {
   return (
