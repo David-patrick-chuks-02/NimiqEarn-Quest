@@ -417,7 +417,14 @@ export default function StudioPage() {
 
         {phase === "ready" && dashboard && (
           <>
-            <div className="mt-4 space-y-5 pb-24">
+            <div className="mt-5 space-y-5 pb-28">
+              {!analyticsFor && TAB_META[tab] && (
+                <div>
+                  <h1 className="text-2xl font-bold text-white">{TAB_META[tab]!.title}</h1>
+                  <p className="mt-1 text-sm text-[var(--brand-muted)]">{TAB_META[tab]!.subtitle}</p>
+                </div>
+              )}
+
               {notice && (
                 <p className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5 text-sm text-[var(--brand-gold)]">
                   {notice}
@@ -441,12 +448,7 @@ export default function StudioPage() {
 
               {tab === "create" && (
                 <form onSubmit={submitQuest} className="glass rounded-2xl p-5">
-                  <h2 className="text-base font-bold text-white">Create a quest</h2>
-                  <p className="mt-1 text-xs text-[var(--brand-muted)]">
-                    Saved as a draft — find it in the Quests tab to publish.
-                  </p>
-
-              <div className="mt-4 space-y-3.5">
+              <div className="space-y-3.5">
                 <div>
                   <label className={labelClass}>Title</label>
                   <input
@@ -650,6 +652,13 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "wallet", label: "Wallet" },
 ];
 
+// Per-tab page header (home has its own personalised greeting, so it's omitted here).
+const TAB_META: Partial<Record<TabKey, { title: string; subtitle: string }>> = {
+  create: { title: "Create a quest", subtitle: "Draft a paid task for the community." },
+  quests: { title: "Your quests", subtitle: "Publish, share, and track performance." },
+  wallet: { title: "Wallet", subtitle: "The balance that funds your quests." },
+};
+
 // Fixed bottom navigation — the single surface for the whole Creator Studio Mini App.
 function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
   return (
@@ -662,10 +671,15 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) 
               key={t.key}
               onClick={() => onChange(t.key)}
               aria-current={isActive ? "page" : undefined}
-              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[0.65rem] font-medium transition ${
+              className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[0.65rem] font-medium transition ${
                 isActive ? "text-[var(--brand-gold)]" : "text-[var(--brand-muted)] hover:text-white"
               }`}
             >
+              <span
+                className={`absolute inset-x-5 top-0 h-0.5 rounded-full bg-[var(--brand-gold)] transition-opacity ${
+                  isActive ? "opacity-100" : "opacity-0"
+                }`}
+              />
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -708,28 +722,30 @@ function WalletTab({ balance }: { balance: { nim: number | null; reachable: bool
 
   return (
     <div className="space-y-4">
-      <div className="glass rounded-2xl p-5 text-center">
-        <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">Wallet balance</p>
+      <div className="glass rounded-2xl p-6 text-center">
+        <p className="eyebrow">Available balance</p>
         {known ? (
-          <p className="mt-1 text-3xl font-bold text-white">
-            {balance.nim!.toLocaleString()}{" "}
-            <span className="text-base font-semibold text-[var(--brand-gold)]">NIM</span>
+          <p className="mt-2 text-4xl font-bold tracking-tight">
+            <span className="text-gradient-gold">{balance.nim!.toLocaleString()}</span>
+            <span className="ml-2 text-lg font-semibold text-[var(--brand-muted)]">NIM</span>
           </p>
         ) : (
-          <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
+          <p className="mt-2 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
         )}
       </div>
 
       {balance.address && (
         <div className="glass rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">Deposit address</p>
-          <p className="mt-1.5 break-all font-mono text-sm text-white">{balance.address}</p>
+          <p className="eyebrow">Deposit address</p>
+          <p className="mt-2 break-all rounded-xl bg-black/20 px-3.5 py-3 font-mono text-sm text-white">
+            {balance.address}
+          </p>
           <button onClick={() => void copy()} className={`${primaryBtn} mt-3 w-full`}>
             {copied ? "Copied" : "Copy address"}
           </button>
-          <p className="mt-2 text-[0.7rem] text-[var(--brand-muted)]">
-            Send NIM here to fund your quests. Publishing a quest charges its reward pool from
-            this balance.
+          <p className="mt-3 text-xs leading-relaxed text-[var(--brand-muted)]">
+            Send NIM to this address to fund your quests. Publishing a quest charges its reward
+            pool from this balance.
           </p>
         </div>
       )}
@@ -936,15 +952,15 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
   ];
   return (
     <div>
-      <p className="text-sm text-[var(--brand-muted)]">
-        Welcome back,{" "}
-        <span className="font-semibold text-white">{dashboard.user.displayName ?? "Creator"}</span>
-      </p>
-      <div className="mt-2.5 grid grid-cols-3 gap-2.5">
+      <p className="eyebrow">Welcome back</p>
+      <h1 className="mt-1 text-2xl font-bold text-white">
+        {dashboard.user.displayName ?? "Creator"}
+      </h1>
+      <div className="mt-4 grid grid-cols-3 gap-2.5">
         {stats.map((s) => (
-          <div key={s.label} className="glass rounded-xl px-3 py-2.5 text-center">
-            <p className="text-xl font-bold text-white">{s.value}</p>
-            <p className="text-[0.7rem] uppercase tracking-wide text-[var(--brand-muted)]">
+          <div key={s.label} className="glass rounded-xl px-3 py-3 text-center">
+            <p className="text-2xl font-bold tracking-tight text-white">{s.value}</p>
+            <p className="mt-0.5 text-[0.68rem] uppercase tracking-wide text-[var(--brand-muted)]">
               {s.label}
             </p>
           </div>
@@ -959,20 +975,31 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
 function WalletCard({ balance }: { balance: { nim: number | null; reachable: boolean } }) {
   const known = balance.reachable && balance.nim !== null;
   return (
-    <div className="glass flex items-center justify-between rounded-2xl px-4 py-3.5">
+    <div className="glass flex items-center justify-between rounded-2xl px-5 py-4">
       <div>
-        <p className="text-[0.7rem] uppercase tracking-wide text-[var(--brand-muted)]">
-          Wallet balance
-        </p>
+        <p className="eyebrow">Wallet balance</p>
         {known ? (
-          <p className="mt-0.5 text-xl font-bold text-white">
+          <p className="mt-1 text-xl font-bold text-white">
             {balance.nim!.toLocaleString()}{" "}
-            <span className="text-sm font-semibold text-[var(--brand-gold)]">NIM</span>
+            <span className="text-sm font-semibold text-[var(--brand-muted)]">NIM</span>
           </p>
         ) : (
-          <p className="mt-0.5 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
+          <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
         )}
       </div>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-6 w-6 text-[var(--brand-muted)]"
+        aria-hidden
+      >
+        <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <path d="M16 12h.01M3 9h18" />
+      </svg>
     </div>
   );
 }
@@ -994,14 +1021,16 @@ function QuestList({
 }) {
   if (quests.length === 0) {
     return (
-      <div className="glass rounded-2xl p-5 text-center text-sm text-[var(--brand-muted)]">
-        No quests yet. Create your first one above.
+      <div className="glass rounded-2xl p-6 text-center">
+        <p className="text-sm font-semibold text-white">No quests yet</p>
+        <p className="mt-1 text-sm text-[var(--brand-muted)]">
+          Head to the Create tab to draft your first quest.
+        </p>
       </div>
     );
   }
   return (
     <div className="space-y-2.5">
-      <h2 className="text-base font-bold text-white">Your quests</h2>
       {quests.map((q) => {
         return (
           <div key={q.id} className="glass rounded-xl p-4">
