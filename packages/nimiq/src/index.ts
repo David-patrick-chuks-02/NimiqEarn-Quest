@@ -226,6 +226,57 @@ export async function fetchNimiqAccount(
   }
 }
 
+export interface NimiqTx {
+  hash: string;
+  from: string;
+  to: string;
+  valueLuna: number;
+  valueNim: number;
+  /** Milliseconds since epoch, or null when the node didn't include a timestamp. */
+  timestamp: number | null;
+  blockNumber: number | null;
+}
+
+/**
+ * Recent transactions for an address via Albatross `getTransactionsByAddress`. Returns null
+ * when the node is unreachable or doesn't support the method (never throws). Newest first.
+ */
+export async function fetchNimiqTransactions(
+  rpcUrl: string,
+  address: string,
+  max = 25,
+  timeoutMs = 8000,
+): Promise<NimiqTx[] | null> {
+  // Albatross signature: (address, max, startAt|null). The third arg is required.
+  const json = await rpcCall(rpcUrl, "getTransactionsByAddress", [address, max, null], timeoutMs);
+  if (!json || json.error) return null;
+  const list = unwrap(json.result);
+  if (!Array.isArray(list)) return null;
+
+  const txs: NimiqTx[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const t = raw as Record<string, unknown>;
+    const hash = typeof t.hash === "string" ? t.hash : null;
+    const from = typeof t.from === "string" ? t.from : "";
+    const to = typeof t.to === "string" ? t.to : "";
+    const valueLuna = typeof t.value === "number" ? t.value : 0;
+    if (!hash) continue;
+    txs.push({
+      hash,
+      from,
+      to,
+      valueLuna,
+      valueNim: valueLuna / LUNA_PER_NIM,
+      timestamp: typeof t.timestamp === "number" ? t.timestamp : null,
+      blockNumber: typeof t.blockNumber === "number" ? t.blockNumber : null,
+    });
+  }
+  // Newest first (nodes usually return this order already, but don't rely on it).
+  txs.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+  return txs;
+}
+
 export interface VerifySignedMessageInput {
   /** Expected signer, user-friendly Nimiq address. */
   address: string;

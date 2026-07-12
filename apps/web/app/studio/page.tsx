@@ -807,7 +807,7 @@ export default function StudioPage() {
                   />
                 ))}
 
-              {tab === "wallet" && <WalletTab balance={balance} />}
+              {tab === "wallet" && <WalletTab balance={balance} api={api} />}
             </div>
 
             <TabBar
@@ -914,9 +914,44 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) 
 
 // Wallet tab — the creator's custodial wallet that funds their quests. This is the one place
 // the full address is shown (deposit here to top up), with a tap-to-copy.
-function WalletTab({ balance }: { balance: { nim: number | null; reachable: boolean; address: string | null } }) {
+interface WalletTx {
+  hash: string;
+  direction: "in" | "out";
+  amountNim: number;
+  timestamp: number | null;
+  explorerUrl: string;
+}
+
+function WalletTab({
+  balance,
+  api,
+}: {
+  balance: { nim: number | null; reachable: boolean; address: string | null };
+  api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
+}) {
   const [copied, setCopied] = useState(false);
+  const [txs, setTxs] = useState<WalletTx[] | null>(null); // null = loading
+  const [txSupported, setTxSupported] = useState(true);
   const known = balance.reachable && balance.nim !== null;
+
+  useEffect(() => {
+    let active = true;
+    api("/api/studio/transactions")
+      .then((body) => {
+        if (!active) return;
+        const b = body as { supported?: boolean; transactions?: WalletTx[] };
+        setTxSupported(Boolean(b.supported));
+        setTxs(b.transactions ?? []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setTxSupported(false);
+        setTxs([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
 
   const copy = async () => {
     if (!balance.address) return;
@@ -958,6 +993,65 @@ function WalletTab({ balance }: { balance: { nim: number | null; reachable: bool
           </p>
         </div>
       )}
+
+      <div className="glass rounded-2xl p-5">
+        <div className="flex items-center justify-between">
+          <p className="eyebrow">Transaction history</p>
+          <span className="text-[0.7rem] text-[var(--brand-muted)]">on-chain · verifiable</span>
+        </div>
+
+        {txs === null ? (
+          <div className="mt-3 space-y-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-11 animate-pulse rounded-lg bg-white/10" />
+            ))}
+          </div>
+        ) : !txSupported ? (
+          <p className="mt-3 text-sm text-[var(--brand-muted)]">
+            Transaction history isn&apos;t available right now.
+          </p>
+        ) : txs.length === 0 ? (
+          <p className="mt-3 text-sm text-[var(--brand-muted)]">No transactions yet.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-white/5">
+            {txs.map((t) => (
+              <li key={t.hash} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">
+                    {t.direction === "in" ? "Received" : "Sent"}
+                  </p>
+                  <a
+                    href={t.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-[var(--brand-muted)] transition hover:text-[var(--brand-gold)]"
+                  >
+                    {t.hash.slice(0, 8)}…{t.hash.slice(-6)}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3" aria-hidden>
+                      <path d="M14 5h5v5M19 5l-9 9M12 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </a>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p
+                    className={`text-sm font-bold ${
+                      t.direction === "in" ? "text-emerald-400" : "text-white"
+                    }`}
+                  >
+                    {t.direction === "in" ? "+" : "−"}
+                    {t.amountNim.toLocaleString()} NIM
+                  </p>
+                  {t.timestamp && (
+                    <p className="text-[0.7rem] text-[var(--brand-muted)]">
+                      {new Date(t.timestamp).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

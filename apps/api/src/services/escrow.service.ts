@@ -1,10 +1,12 @@
 import {
   buildBasicTransaction,
   fetchNimiqAccount,
+  fetchNimiqTransactions,
   generateNimiqKeypair,
   getRpcBlockNumber,
   networkIdFor,
   sendRawTransaction,
+  type NimiqTx,
 } from "@nimiqearn/nimiq";
 import { createSecretBox } from "../crypto.js";
 
@@ -104,6 +106,21 @@ export function createEscrowService(config: EscrowConfig) {
     /** Decrypt a stored escrow key. Reserved for disbursement (a later milestone). */
     decryptKey(keyCiphertext: string): string {
       return box.decrypt(keyCiphertext);
+    },
+
+    /** Recent on-chain transactions for an address, or null when unavailable. */
+    async getTransactions(address: string): Promise<NimiqTx[] | null> {
+      if (!rpcUrl) return null;
+      return fetchNimiqTransactions(rpcUrl, address);
+    },
+
+    /** NimiqWatch explorer link for a transaction hash (for on-chain transparency). */
+    explorerTxUrl(hash: string): string {
+      const base =
+        config.network === "mainnet"
+          ? "https://nimiq.watch"
+          : "https://v2.nimiqwatch.com";
+      return `${base}/#${hash}`;
     },
   };
 }

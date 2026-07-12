@@ -155,6 +155,36 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     }
   });
 
+  // On-chain transaction history for the creator's custodial wallet (transparency), with a
+  // NimiqWatch explorer link per transaction. `supported:false` when there's no wallet/node.
+  app.get("/api/studio/transactions", async (request, reply) => {
+    try {
+      const user = await app.db.user.findUnique({
+        where: { telegramId: telegramId(request) },
+        include: { walletProfiles: true },
+      });
+      const wallet = user?.walletProfiles.find((w) => w.keyCiphertext) ?? null;
+      if (!wallet || !opts.escrow) {
+        return { supported: false, transactions: [] };
+      }
+      const txs = await opts.escrow.getTransactions(wallet.nimiqAddress);
+      if (txs === null) {
+        return { supported: false, transactions: [] };
+      }
+      const self = wallet.nimiqAddress.replace(/\s/g, "").toUpperCase();
+      const transactions = txs.map((t) => ({
+        hash: t.hash,
+        direction: t.to.replace(/\s/g, "").toUpperCase() === self ? "in" : "out",
+        amountNim: t.valueNim,
+        timestamp: t.timestamp,
+        explorerUrl: opts.escrow!.explorerTxUrl(t.hash),
+      }));
+      return { supported: true, address: wallet.nimiqAddress, transactions };
+    } catch (error) {
+      return sendStudioError(reply, error);
+    }
+  });
+
   app.post("/api/studio/quests", async (request, reply) => {
     const parsed = createQuestSchema.safeParse(request.body);
     if (!parsed.success) {
