@@ -20,6 +20,7 @@ interface PublicQuest {
   promoted: boolean;
   proofType: string;
   proofInstructions: string;
+  sampleEvidence: string | null;
   creatorName: string | null;
 }
 
@@ -216,6 +217,20 @@ export default function DoQuestPage() {
                 </p>
                 <p className="mt-1 text-sm text-white">{view.quest.proofInstructions}</p>
               </div>
+
+              {view.quest.sampleEvidence && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+                    Example of accepted proof
+                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={view.quest.sampleEvidence}
+                    alt="Sample evidence"
+                    className="mt-2 w-full rounded-xl border border-white/10"
+                  />
+                </div>
+              )}
             </div>
 
             {view.canSubmit ? (

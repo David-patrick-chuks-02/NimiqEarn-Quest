@@ -57,7 +57,37 @@ const emptyForm = {
   startAt: "",
   proofType: "LINK",
   proofInstructions: "",
+  sampleEvidence: "", // compressed image data URL, optional
 };
+
+/**
+ * Read an image File and return a compressed JPEG data URL (max ~1000px, quality 0.7),
+ * so sample-evidence uploads stay small enough to store inline. Rejects non-images.
+ */
+async function compressImage(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    // Note: `Image` in this module is next/image, so use the DOM element explicitly.
+    const el = document.createElement("img");
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("That doesn't look like an image."));
+    el.src = dataUrl;
+  });
+  const max = 1000;
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Couldn't process that image.");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.7);
+}
 
 const inputClass =
   "mt-1.5 block w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-[var(--brand-navy-700)] px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-[var(--brand-gold)] focus:ring-1 focus:ring-[var(--brand-gold)] placeholder:text-[var(--brand-muted)]";
@@ -82,6 +112,11 @@ export default function StudioPage() {
   }>({ nim: null, reachable: false, address: null });
   const [tab, setTab] = useState<TabKey>("home");
   const [confirmQuest, setConfirmQuest] = useState<Quest | null>(null);
+  // Holds the validated create payload while the creator chooses publish-now vs draft.
+  const [createConfirm, setCreateConfirm] = useState<{ payload: Record<string, unknown> } | null>(
+    null,
+  );
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
   // Per-quest analytics viewed inline (no separate Mini App). analyticsData null while loading.
   const [analyticsFor, setAnalyticsFor] = useState<{ id: string; title: string } | null>(null);
   const [analyticsData, setAnalyticsData] = useState<Analytics | null>(null);
@@ -323,32 +358,64 @@ export default function StudioPage() {
         startAt = when.toISOString();
       }
 
+      // Don't create anything yet — ask the creator whether to publish now or save a draft.
+      setCreateConfirm({
+        payload: {
+          title: form.title.trim(),
+          category: form.category,
+          description: form.description.trim(),
+          rewardAmount: rewardNum,
+          totalSlots: slotsNum,
+          ...(startAt ? { startAt } : {}),
+          proofType: form.proofType,
+          proofInstructions: form.proofInstructions.trim(),
+          ...(form.sampleEvidence ? { sampleEvidence: form.sampleEvidence } : {}),
+        },
+      });
+    },
+    [form],
+  );
+
+  // Finalize a quest from the confirmation modal — save as draft, or create + publish now.
+  const finalizeCreate = useCallback(
+    async (publishNow: boolean) => {
+      const payload = createConfirm?.payload;
+      if (!payload) return;
+      setCreateConfirm(null);
       setSubmitting(true);
+      setError("");
+      setNotice("");
+      let createdId: string | null = null;
       try {
-        await api("/api/studio/quests", {
+        const body = (await api("/api/studio/quests", {
           method: "POST",
-          body: JSON.stringify({
-            title: form.title.trim(),
-            category: form.category,
-            description: form.description.trim(),
-            rewardAmount: rewardNum,
-            totalSlots: slotsNum,
-            ...(startAt ? { startAt } : {}),
-            proofType: form.proofType,
-            proofInstructions: form.proofInstructions.trim(),
-          }),
-        });
+          body: JSON.stringify(payload),
+        })) as { quest?: { id: string } };
+        createdId = body.quest?.id ?? null;
+
+        if (publishNow && createdId) {
+          await api(`/api/studio/quests/${createdId}/publish`, { method: "POST" });
+          setNotice("Quest published — it's now live.");
+        } else {
+          setNotice("Draft saved. Publish it from the Quests tab when you're ready.");
+        }
         setForm(emptyForm);
-        setNotice("Draft saved. Publish it from your wallet balance below.");
-        setTab("quests"); // jump to the list so they can review + publish the new draft
-        await Promise.all([loadQuests(), refreshDashboard()]);
+        setTab("quests");
+        await Promise.all([loadQuests(), refreshDashboard(), loadBalance()]);
       } catch (e2) {
+        // If the draft was created but publishing failed (e.g. low balance), it's saved —
+        // send them to the Quests tab to retry publishing, with the error shown.
         setError((e2 as Error).message);
+        if (createdId) {
+          setForm(emptyForm);
+          setTab("quests");
+          await Promise.all([loadQuests(), refreshDashboard()]).catch(() => undefined);
+        }
       } finally {
         setSubmitting(false);
       }
     },
-    [api, form, loadQuests, refreshDashboard],
+    [api, createConfirm, loadQuests, refreshDashboard, loadBalance],
   );
 
   const publish = useCallback(
@@ -430,6 +497,16 @@ export default function StudioPage() {
           balance={balance}
           onCancel={() => setConfirmQuest(null)}
           onConfirm={() => void confirmPublish()}
+        />
+      )}
+      {createConfirm && (
+        <CreateConfirmModal
+          payload={createConfirm.payload}
+          feePercent={config.feePercent}
+          balance={balance}
+          onCancel={() => setCreateConfirm(null)}
+          onDraft={() => void finalizeCreate(false)}
+          onPublish={() => void finalizeCreate(true)}
         />
       )}
       <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-6">
@@ -612,6 +689,63 @@ export default function StudioPage() {
                   />
                 </div>
 
+                <div>
+                  <label className={labelClass}>Sample evidence (optional)</label>
+                  <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                    Upload an example screenshot so workers know exactly what to submit.
+                  </p>
+                  {form.sampleEvidence ? (
+                    <div className="mt-2 flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={form.sampleEvidence}
+                        alt="Sample evidence"
+                        className="h-16 w-16 rounded-lg border border-white/10 object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, sampleEvidence: "" })}
+                        className="text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className={`${inputClass} mt-1.5 flex cursor-pointer items-center justify-center text-[var(--brand-muted)] ${
+                        evidenceBusy ? "opacity-60" : "hover:border-[var(--brand-gold)]"
+                      }`}
+                    >
+                      {evidenceBusy ? "Processing…" : "Choose an image"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={evidenceBusy}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = ""; // allow re-selecting the same file
+                          if (!file) return;
+                          setEvidenceBusy(true);
+                          setError("");
+                          try {
+                            const compressed = await compressImage(file);
+                            if (compressed.length > 700_000) {
+                              setError("That image is too large even after compression. Try a smaller one.");
+                            } else {
+                              setForm((f) => ({ ...f, sampleEvidence: compressed }));
+                            }
+                          } catch (err) {
+                            setError((err as Error).message);
+                          } finally {
+                            setEvidenceBusy(false);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
                 <div className="rounded-xl border border-[var(--brand-gold)]/25 bg-[var(--brand-gold)]/[0.07] px-3.5 py-3">
                   <div className="flex items-center justify-between text-sm text-[var(--brand-muted)]">
                     <span>
@@ -641,8 +775,12 @@ export default function StudioPage() {
                   Charged from your wallet balance when you publish.
                 </p>
 
-                <button type="submit" disabled={submitting} className={`${primaryBtn} w-full`}>
-                  {submitting ? "Saving…" : "Save draft"}
+                <button
+                  type="submit"
+                  disabled={submitting || evidenceBusy}
+                  className={`${primaryBtn} w-full`}
+                >
+                  {submitting ? "Saving…" : "Continue"}
                 </button>
               </div>
                 </form>
@@ -936,6 +1074,86 @@ function LoadingOverlay({ label }: { label: string }) {
  * pool and blocks the Publish button when it's short — before any request is made. When the
  * balance can't be read (RPC down), it lets the user proceed and the server enforces funding.
  */
+// After the create form, ask whether to publish now (funds it) or just save a draft.
+function CreateConfirmModal({
+  payload,
+  feePercent,
+  balance,
+  onCancel,
+  onDraft,
+  onPublish,
+}: {
+  payload: Record<string, unknown>;
+  feePercent: number;
+  balance: { nim: number | null; reachable: boolean };
+  onCancel: () => void;
+  onDraft: () => void;
+  onPublish: () => void;
+}) {
+  const reward = Number(payload.rewardAmount) || 0;
+  const slots = Number(payload.totalSlots) || 0;
+  const pool = reward * slots;
+  const fee = Math.round(pool * (feePercent / 100));
+  const total = pool + fee;
+  const known = balance.reachable && balance.nim !== null;
+  const insufficient = known && (balance.nim ?? 0) < total;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-5 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div className="glass w-full max-w-sm rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-bold text-white">Publish this quest?</h2>
+        <p className="mt-1 text-sm text-[var(--brand-muted)]">
+          <span className="text-white">{String(payload.title)}</span>
+        </p>
+
+        <dl className="mt-4 space-y-1.5 text-sm">
+          <div className="flex items-center justify-between">
+            <dt className="text-[var(--brand-muted)]">Reward pool</dt>
+            <dd className="text-white">{pool.toLocaleString()} NIM</dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-[var(--brand-muted)]">Platform fee ({feePercent}%)</dt>
+            <dd className="text-white">{fee.toLocaleString()} NIM</dd>
+          </div>
+          <div className="flex items-center justify-between border-t border-white/10 pt-1.5">
+            <dt className="text-[var(--brand-muted)]">Charged to publish</dt>
+            <dd className="font-bold text-[var(--brand-gold)]">{total.toLocaleString()} NIM</dd>
+          </div>
+        </dl>
+
+        {insufficient && (
+          <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+            Not enough balance to publish now — save it as a draft and top up, then publish.
+          </p>
+        )}
+
+        <button
+          onClick={onPublish}
+          disabled={insufficient}
+          className={`${primaryBtn} mt-4 w-full disabled:opacity-50`}
+        >
+          Publish now
+        </button>
+        <button
+          onClick={onDraft}
+          className="mt-2 w-full rounded-full border border-white/12 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/5"
+        >
+          Save as draft
+        </button>
+        <button
+          onClick={onCancel}
+          className="mt-2 w-full py-1.5 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
+        >
+          Keep editing
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PublishConfirmModal({
   quest,
   balance,

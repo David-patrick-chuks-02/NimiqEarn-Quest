@@ -57,6 +57,13 @@ export const createQuestSchema = z.object({
   startAt: z.coerce.date().optional(),
   proofType: questProofTypeSchema,
   proofInstructions: z.string().min(5).max(1000),
+  // Optional sample-evidence image as a compressed JPEG/PNG data URL. Capped ~700 KB of
+  // base64 (client compresses before upload) so it stays a reasonable DB text value.
+  sampleEvidence: z
+    .string()
+    .max(700_000)
+    .refine((v) => v.startsWith("data:image/"), "Must be an image data URL")
+    .optional(),
 });
 
 // Editing a draft: every field is optional, but the same per-field rules apply.

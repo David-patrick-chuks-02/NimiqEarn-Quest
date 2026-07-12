@@ -12,6 +12,7 @@ const QUEST_FIELD_LABELS: Record<string, string> = {
   startAt: "Start time",
   proofType: "Proof type",
   proofInstructions: "Proof instructions",
+  sampleEvidence: "Sample evidence",
 };
 
 /** Turn a Zod validation error into a single actionable message naming the offending field. */
