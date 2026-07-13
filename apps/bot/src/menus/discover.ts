@@ -70,6 +70,7 @@ export function discoverKeyboard(page: DiscoverPage): InlineKeyboard {
     kb.row();
   }
 
-  kb.text("Main Menu", MAIN_MENU_REFRESH);
+  // Refresh re-pulls the current page (the list is stale after completing a quest).
+  kb.text("Refresh", `${DISCOVER_PAGE_PREFIX}${page.page}`).text("Main Menu", MAIN_MENU_REFRESH);
   return kb;
 }
