@@ -226,4 +226,16 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
       }
     },
   );
+
+  // A worker's submission history + total NIM earned (for the My Earnings view).
+  app.get<{ Params: { telegramId: string } }>(
+    "/api/users/:telegramId/submissions",
+    async (request, reply) => {
+      try {
+        return await quests.getWorkerSubmissions(request.params.telegramId);
+      } catch (error) {
+        return sendQuestError(reply, error);
+      }
+    },
+  );
 };
