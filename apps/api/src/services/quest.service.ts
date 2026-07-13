@@ -686,7 +686,52 @@ export function createQuestService(
 
       await db.quest.update({ where: { id: quest.id }, data: { promoted: true } });
     },
+
+    /**
+     * A worker's own submission history + total NIM earned — for the earnings view.
+     * Newest first; each item carries the quest title, reward, status, and payout tx hash.
+     */
+    async getWorkerSubmissions(telegramId: string): Promise<WorkerEarnings> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) {
+        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      }
+      const subs = await db.questSubmission.findMany({
+        where: { userId: user.id },
+        include: { quest: { select: { title: true, rewardAmount: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+      const submissions = subs.map((s) => ({
+        id: s.id,
+        questId: s.questId,
+        questTitle: s.quest.title,
+        reward: Number(s.quest.rewardAmount),
+        status: s.status,
+        payoutTxHash: s.payoutTxHash ?? null,
+        paidAt: s.paidAt?.toISOString() ?? null,
+        createdAt: s.createdAt.toISOString(),
+      }));
+      const totalEarned = submissions
+        .filter((s) => s.status === "ACCEPTED")
+        .reduce((sum, s) => sum + s.reward, 0);
+      return { totalEarned, count: submissions.length, submissions };
+    },
   };
+}
+
+export interface WorkerEarnings {
+  totalEarned: number;
+  count: number;
+  submissions: {
+    id: string;
+    questId: string;
+    questTitle: string;
+    reward: number;
+    status: string;
+    payoutTxHash: string | null;
+    paidAt: string | null;
+    createdAt: string;
+  }[];
 }
 
 export interface WorkerQuestView {
