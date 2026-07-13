@@ -13,6 +13,12 @@ function questMiniAppUrl(id: string): string | null {
   return base.startsWith("https://") ? `${base}/quest/${id}` : null;
 }
 
+/** Public share-page URL (works over http) — fallback when web_app buttons aren't available. */
+function questShareUrl(id: string): string | null {
+  const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
+  return base ? `${base}/q/${id}` : null;
+}
+
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
@@ -46,10 +52,16 @@ export function discoverKeyboard(page: DiscoverPage): InlineKeyboard {
   const kb = new InlineKeyboard();
 
   for (const q of page.quests) {
-    const url = questMiniAppUrl(q.id);
     const label = `${truncate(q.title, 24)} · ${Number(q.rewardAmount).toLocaleString()} NIM`;
-    // web_app buttons need HTTPS; in non-HTTPS dev we simply omit them (the list still shows).
-    if (url) kb.webApp(label, url).row();
+    const appUrl = questMiniAppUrl(q.id);
+    if (appUrl) {
+      // Preferred: open the Mini App to do the quest (requires HTTPS).
+      kb.webApp(label, appUrl).row();
+    } else {
+      // Fallback (non-HTTPS dev): a plain URL button to the public share page.
+      const shareUrl = questShareUrl(q.id);
+      if (shareUrl) kb.url(label, shareUrl).row();
+    }
   }
 
   if (page.pageCount > 1) {
