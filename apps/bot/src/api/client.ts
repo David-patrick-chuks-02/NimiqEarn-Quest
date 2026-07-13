@@ -241,10 +241,15 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         `${normalizedBase}/api/quests${query ? `?${query}` : ""}`,
         { headers: authHeaders },
       );
-      if (!response.ok) {
-        return { total: 0, page: opts.page ?? 0, pageSize: 10, pageCount: 1, quests: [] };
+      const body = (await response.json().catch(() => ({}))) as DiscoverPage & {
+        error?: string;
+        code?: string;
+      };
+      // Throw on failure so the caller shows an error instead of a misleading empty list.
+      if (!response.ok || !Array.isArray(body.quests)) {
+        throw parseApiError(body, `Couldn't load quests (${response.status}).`);
       }
-      return (await response.json().catch(() => ({}))) as DiscoverPage;
+      return body;
     },
 
     /** A worker's submission history + total NIM earned. */
@@ -253,8 +258,14 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/submissions`,
         { headers: authHeaders },
       );
-      if (!response.ok) return { totalEarned: 0, count: 0, submissions: [] };
-      return (await response.json().catch(() => ({}))) as WorkerEarnings;
+      const body = (await response.json().catch(() => ({}))) as WorkerEarnings & {
+        error?: string;
+        code?: string;
+      };
+      if (!response.ok || !Array.isArray(body.submissions)) {
+        throw parseApiError(body, `Couldn't load earnings (${response.status}).`);
+      }
+      return body;
     },
 
     async getPublicQuest(questId: string): Promise<PublicQuest | null> {
