@@ -191,6 +191,38 @@ export function createQuestService(
       });
     },
 
+    /**
+     * Public discovery list: live, open, PUBLISHED quests for workers to browse. Promoted
+     * first, then newest, paginated. "Open" = a free slot and past its start time. Optional
+     * category filter. (Slot fullness can't be expressed in a Prisma `where` column-compare,
+     * so we filter it in memory — fine at MVP scale.)
+     */
+    async listDiscoverableQuests(
+      opts: { page?: number; pageSize?: number; category?: string } = {},
+    ) {
+      const now = new Date();
+      const matching = await db.quest.findMany({
+        where: {
+          status: "PUBLISHED",
+          OR: [{ startAt: null }, { startAt: { lte: now } }],
+          ...(opts.category ? { category: opts.category as Quest["category"] } : {}),
+        },
+        include: { creator: { select: { displayName: true } } },
+        orderBy: [{ promoted: "desc" }, { createdAt: "desc" }],
+      });
+      const open = matching.filter((q) => q.filledSlots < q.totalSlots);
+      const pageSize = Math.min(50, Math.max(1, opts.pageSize ?? 10));
+      const page = Math.max(0, opts.page ?? 0);
+      const start = page * pageSize;
+      return {
+        total: open.length,
+        page,
+        pageSize,
+        pageCount: Math.max(1, Math.ceil(open.length / pageSize)),
+        quests: open.slice(start, start + pageSize).map(toDiscoverQuestResponse),
+      };
+    },
+
     async publishQuest(telegramId: string, questId: string): Promise<Quest> {
       const user = await db.user.findUnique({
         where: { telegramId },
@@ -690,6 +722,28 @@ export function toQuestResponse(quest: Quest) {
     escrowAddress: quest.escrowAddress ?? null,
     fundedAt: quest.fundedAt?.toISOString() ?? null,
     viewCount: quest.viewCount,
+  };
+}
+
+/**
+ * Lightweight quest shape for discovery/browse lists — the fields a card needs, without the
+ * heavy `sampleEvidence` image or `proofInstructions` (fetched on the quest detail instead).
+ */
+export function toDiscoverQuestResponse(
+  quest: Quest & { creator?: { displayName: string | null } },
+) {
+  return {
+    id: quest.id,
+    title: quest.title,
+    category: quest.category,
+    rewardAmount: quest.rewardAmount.toString(),
+    totalSlots: quest.totalSlots,
+    filledSlots: quest.filledSlots,
+    slotsLeft: Math.max(0, quest.totalSlots - quest.filledSlots),
+    promoted: quest.promoted,
+    proofType: quest.proofType,
+    viewCount: quest.viewCount,
+    creatorName: quest.creator?.displayName ?? null,
   };
 }
 
