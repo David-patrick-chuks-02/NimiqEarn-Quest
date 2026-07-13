@@ -142,8 +142,8 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
         return reply.code(400).send({ error: "proof is required" });
       }
       try {
-        const { txHash } = await quests.submitQuest(telegramId, request.params.id, proof);
-        return { ok: true, txHash };
+        const { txHash, txUrl } = await quests.submitQuest(telegramId, request.params.id, proof);
+        return { ok: true, txHash, txUrl };
       } catch (error) {
         return sendQuestError(reply, error);
       }

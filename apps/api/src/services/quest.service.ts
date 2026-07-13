@@ -530,7 +530,7 @@ export function createQuestService(
       telegramId: string,
       questId: string,
       proof: string,
-    ): Promise<{ txHash: string | null }> {
+    ): Promise<{ txHash: string | null; txUrl: string | null }> {
       const trimmed = proof.trim();
       if (trimmed.length === 0 || trimmed.length > 2000) {
         throw new QuestServiceError(
@@ -594,6 +594,7 @@ export function createQuestService(
       }
 
       let txHash: string | null = null;
+      let txUrl: string | null = null;
       if (willPay && workerWallet) {
         const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
         const result = await escrow!.transfer({
@@ -628,7 +629,7 @@ export function createQuestService(
         // text — the quest title is untrusted and would break Markdown parsing; the bare URL
         // is auto-linked by Telegram anyway.
         const rewardNim = Number(quest.rewardAmount).toLocaleString();
-        const txUrl = escrow!.explorerTxUrl(txHash);
+        txUrl = escrow!.explorerTxUrl(txHash);
         void notifier?.notify(
           user.telegramId,
           `You earned ${rewardNim} NIM for completing "${quest.title}".\n\nView the payout on-chain: ${txUrl}`,
@@ -638,7 +639,7 @@ export function createQuestService(
       // FILL marks a completed+paid slot — logged after payout so analytics stay honest.
       await db.questEvent.create({ data: { questId, type: "FILL" } }).catch(() => undefined);
 
-      return { txHash };
+      return { txHash, txUrl };
     },
 
     /**

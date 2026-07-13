@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -68,6 +69,7 @@ export default function DoQuestPage() {
   const [view, setView] = useState<WorkerView | null>(null);
   const [proof, setProof] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [txUrl, setTxUrl] = useState<string | null>(null);
   const initDataRef = useRef<string>("");
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
@@ -148,10 +150,11 @@ export default function DoQuestPage() {
     setSubmitting(true);
     setError("");
     try {
-      await api(`/api/quests/${questId}/submit`, {
+      const res = (await api(`/api/quests/${questId}/submit`, {
         method: "POST",
         body: JSON.stringify({ proof: proof.trim() }),
-      });
+      })) as { txUrl?: string | null };
+      setTxUrl(res.txUrl ?? null);
       setPhase("done");
     } catch (e) {
       setError((e as Error).message);
@@ -202,11 +205,30 @@ export default function DoQuestPage() {
               Your {Number(view.quest.rewardAmount).toLocaleString()} NIM reward is on its way to
               your wallet.
             </p>
+            {txUrl && (
+              <a
+                href={txUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block text-sm font-semibold text-[var(--brand-gold)] underline"
+              >
+                View the payout on-chain
+              </a>
+            )}
+            <Link href="/earn" className={`${primaryBtn} mt-5 block w-full`}>
+              Browse more quests
+            </Link>
           </div>
         )}
 
         {(phase === "ready" || (phase === "error" && view)) && view && (
           <div className="space-y-5">
+            <Link
+              href="/earn"
+              className="inline-block text-sm text-[var(--brand-muted)] transition hover:text-white"
+            >
+              ← Browse quests
+            </Link>
             <div className="glass rounded-2xl p-5">
               <p className="text-xs uppercase tracking-wide text-[var(--brand-gold)]">
                 {CATEGORY_LABELS[view.quest.category] ?? "Quest"}
@@ -289,12 +311,17 @@ export default function DoQuestPage() {
                 </button>
               </div>
             ) : (
-              <div
-                className={`glass rounded-2xl p-5 text-center text-sm ${
-                  view.submitted ? "text-[var(--brand-gold)]" : "text-[var(--brand-muted)]"
-                }`}
-              >
-                {view.reason ? BLOCKED_COPY[view.reason] : "This quest can't be completed right now."}
+              <div className="glass rounded-2xl p-5 text-center">
+                <p
+                  className={`text-sm ${
+                    view.submitted ? "text-[var(--brand-gold)]" : "text-[var(--brand-muted)]"
+                  }`}
+                >
+                  {view.reason ? BLOCKED_COPY[view.reason] : "This quest can't be completed right now."}
+                </p>
+                <Link href="/earn" className={`${primaryBtn} mt-4 block w-full`}>
+                  Browse other quests
+                </Link>
               </div>
             )}
           </div>

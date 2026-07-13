@@ -174,7 +174,7 @@ describe("createQuestService", () => {
 
     const result = await service.submitQuest("999", "quest-1", "  here is my proof  ");
 
-    expect(result).toEqual({ txHash: null });
+    expect(result).toEqual({ txHash: null, txUrl: null });
     expect(submissionCreate).toHaveBeenCalledWith({
       data: { questId: "quest-1", userId: "worker-9", proof: "here is my proof", status: "ACCEPTED" },
     });
@@ -232,7 +232,7 @@ describe("createQuestService", () => {
       toAddress: "NQ_WORKER",
       valueLuna: BigInt(10 * 100_000),
     });
-    expect(result).toEqual({ txHash: "0xdeadbeef" });
+    expect(result).toEqual({ txHash: "0xdeadbeef", txUrl: "https://nimiq.watch/#0xdeadbeef" });
     expect(submissionUpdate).toHaveBeenCalledWith({
       where: { id: "sub-1" },
       data: expect.objectContaining({ payoutTxHash: "0xdeadbeef" }),
