@@ -624,13 +624,14 @@ export function createQuestService(
           .update({ where: { id: submissionId }, data: { payoutTxHash: txHash, paidAt: new Date() } })
           .catch(() => undefined);
 
-        // Confirm the payout to the worker in Telegram (best-effort, fire-and-forget).
+        // Confirm the payout to the worker in Telegram (best-effort, fire-and-forget). Plain
+        // text — the quest title is untrusted and would break Markdown parsing; the bare URL
+        // is auto-linked by Telegram anyway.
         const rewardNim = Number(quest.rewardAmount).toLocaleString();
         const txUrl = escrow!.explorerTxUrl(txHash);
         void notifier?.notify(
           user.telegramId,
-          `You earned *${rewardNim} NIM* for completing "${quest.title}".\n\nView the payout on-chain: ${txUrl}`,
-          { markdown: true },
+          `You earned ${rewardNim} NIM for completing "${quest.title}".\n\nView the payout on-chain: ${txUrl}`,
         );
       }
 
