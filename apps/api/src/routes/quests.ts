@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { createQuestSchema, updateQuestSchema } from "@nimiqearn/shared";
+import { createQuestSchema, questCategorySchema, updateQuestSchema } from "@nimiqearn/shared";
 import {
   createQuestService,
   QuestServiceError,
@@ -64,6 +64,23 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
     }
     throw error;
   };
+
+  // Public discovery: live, open quests for workers to browse (promoted first, paginated).
+  app.get<{ Querystring: { page?: string; pageSize?: string; category?: string } }>(
+    "/api/quests",
+    async (request) => {
+      const page = Number.parseInt(request.query.page ?? "", 10);
+      const pageSize = Number.parseInt(request.query.pageSize ?? "", 10);
+      const category = questCategorySchema.safeParse(request.query.category).success
+        ? request.query.category
+        : undefined;
+      return quests.listDiscoverableQuests({
+        page: Number.isNaN(page) ? undefined : page,
+        pageSize: Number.isNaN(pageSize) ? undefined : pageSize,
+        category,
+      });
+    },
+  );
 
   // Public, unauthenticated: a single published quest for shareable links (t.me + web).
   // Pass ?count=0 to read without incrementing the view count (OG images / list thumbnails).
