@@ -5,11 +5,13 @@ import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
 import { sendDiscover } from "../commands/quests.js";
+import { sendEarnings } from "./earnings.js";
 import { walletHeader } from "./wallet-summary.js";
 import { renderWalletMenu } from "./wallet.js";
 
 export const MAIN_MENU_CALLBACKS = {
   startEarning: "menu:start-earning",
+  earnings: "menu:earnings",
   wallet: "menu:wallet",
   creator: "menu:creator",
   refresh: "menu:refresh",
@@ -23,7 +25,10 @@ function earnMiniAppUrl(): string | null {
 }
 
 export function mainMenuKeyboard() {
-  const kb = new InlineKeyboard().text("Start Earning", MAIN_MENU_CALLBACKS.startEarning).row();
+  const kb = new InlineKeyboard()
+    .text("Start Earning", MAIN_MENU_CALLBACKS.startEarning)
+    .text("My Earnings", MAIN_MENU_CALLBACKS.earnings)
+    .row();
 
   // Richer visual browse in the Mini App (in addition to the native Start Earning list).
   const earnUrl = earnMiniAppUrl();
@@ -70,6 +75,16 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
       await sendDiscover(ctx, api, 0);
     } catch (error) {
       console.error("Start earning failed:", error);
+      await ctx.reply(messages.errors.apiUnavailable);
+    }
+  });
+
+  bot.callbackQuery(MAIN_MENU_CALLBACKS.earnings, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    try {
+      await sendEarnings(ctx, api);
+    } catch (error) {
+      console.error("My Earnings failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
     }
   });

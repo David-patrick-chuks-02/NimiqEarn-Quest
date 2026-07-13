@@ -708,6 +708,8 @@ export function createQuestService(
         reward: Number(s.quest.rewardAmount),
         status: s.status,
         payoutTxHash: s.payoutTxHash ?? null,
+        // NimiqWatch explorer link for on-chain transparency (single source of truth).
+        payoutTxUrl: s.payoutTxHash && escrow ? escrow.explorerTxUrl(s.payoutTxHash) : null,
         paidAt: s.paidAt?.toISOString() ?? null,
         createdAt: s.createdAt.toISOString(),
       }));
@@ -729,6 +731,7 @@ export interface WorkerEarnings {
     reward: number;
     status: string;
     payoutTxHash: string | null;
+    payoutTxUrl: string | null;
     paidAt: string | null;
     createdAt: string;
   }[];

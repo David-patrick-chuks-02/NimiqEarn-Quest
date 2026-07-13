@@ -1,5 +1,5 @@
 import type { CreateQuestInput, CreateUserInput, UpdateQuestInput } from "@nimiqearn/shared";
-import type { ApiQuest, CreatorDashboard, DiscoverPage } from "./types.js";
+import type { ApiQuest, CreatorDashboard, DiscoverPage, WorkerEarnings } from "./types.js";
 import { parseApiError } from "./types.js";
 
 export interface ApiWallet {
@@ -245,6 +245,16 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
         return { total: 0, page: opts.page ?? 0, pageSize: 10, pageCount: 1, quests: [] };
       }
       return (await response.json().catch(() => ({}))) as DiscoverPage;
+    },
+
+    /** A worker's submission history + total NIM earned. */
+    async getWorkerSubmissions(telegramId: string): Promise<WorkerEarnings> {
+      const response = await fetch(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/submissions`,
+        { headers: authHeaders },
+      );
+      if (!response.ok) return { totalEarned: 0, count: 0, submissions: [] };
+      return (await response.json().catch(() => ({}))) as WorkerEarnings;
     },
 
     async getPublicQuest(questId: string): Promise<PublicQuest | null> {

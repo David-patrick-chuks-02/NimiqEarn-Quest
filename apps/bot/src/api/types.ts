@@ -39,6 +39,24 @@ export interface DiscoverPage {
   quests: DiscoverQuest[];
 }
 
+export interface WorkerSubmission {
+  id: string;
+  questId: string;
+  questTitle: string;
+  reward: number;
+  status: string;
+  payoutTxHash: string | null;
+  payoutTxUrl: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface WorkerEarnings {
+  totalEarned: number;
+  count: number;
+  submissions: WorkerSubmission[];
+}
+
 export interface CreatorDashboard {
   user: {
     id: string;
