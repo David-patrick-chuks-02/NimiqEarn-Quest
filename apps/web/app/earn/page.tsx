@@ -184,6 +184,12 @@ export default function EarnPage() {
               })}
             </div>
 
+            {error && (
+              <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+                {error} Tap a filter or Prev/Next to retry.
+              </p>
+            )}
+
             {data.quests.length === 0 ? (
               <Info>No open quests match. Try another category or check back soon.</Info>
             ) : (
