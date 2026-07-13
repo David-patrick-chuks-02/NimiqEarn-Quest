@@ -16,6 +16,29 @@ export interface ApiQuest {
   publishedAt: string | null;
 }
 
+/** Lightweight quest shape returned by the discovery/browse list. */
+export interface DiscoverQuest {
+  id: string;
+  title: string;
+  category: string;
+  rewardAmount: string;
+  totalSlots: number;
+  filledSlots: number;
+  slotsLeft: number;
+  promoted: boolean;
+  proofType: string;
+  viewCount: number;
+  creatorName: string | null;
+}
+
+export interface DiscoverPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  quests: DiscoverQuest[];
+}
+
 export interface CreatorDashboard {
   user: {
     id: string;

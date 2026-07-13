@@ -1,5 +1,5 @@
 import type { CreateQuestInput, CreateUserInput, UpdateQuestInput } from "@nimiqearn/shared";
-import type { ApiQuest, CreatorDashboard } from "./types.js";
+import type { ApiQuest, CreatorDashboard, DiscoverPage } from "./types.js";
 import { parseApiError } from "./types.js";
 
 export interface ApiWallet {
@@ -228,6 +228,22 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     /** Public: fetch a shared (published) quest by id, or null if unavailable. */
+    /** Live, open quests for worker discovery (promoted first, paginated). */
+    async discoverQuests(opts: { page?: number; category?: string } = {}): Promise<DiscoverPage> {
+      const params = new URLSearchParams();
+      if (opts.page != null) params.set("page", String(opts.page));
+      if (opts.category) params.set("category", opts.category);
+      const query = params.toString();
+      const response = await fetch(
+        `${normalizedBase}/api/quests${query ? `?${query}` : ""}`,
+        { headers: authHeaders },
+      );
+      if (!response.ok) {
+        return { total: 0, page: opts.page ?? 0, pageSize: 10, pageCount: 1, quests: [] };
+      }
+      return (await response.json().catch(() => ({}))) as DiscoverPage;
+    },
+
     async getPublicQuest(questId: string): Promise<PublicQuest | null> {
       const response = await fetch(
         `${normalizedBase}/api/quests/${encodeURIComponent(questId)}`,
