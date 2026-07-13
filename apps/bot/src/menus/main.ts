@@ -25,14 +25,13 @@ function earnMiniAppUrl(): string | null {
 }
 
 export function mainMenuKeyboard() {
-  const kb = new InlineKeyboard()
-    .text("Start Earning", MAIN_MENU_CALLBACKS.startEarning)
-    .text("My Earnings", MAIN_MENU_CALLBACKS.earnings)
-    .row();
+  const kb = new InlineKeyboard();
 
-  // Richer visual browse in the Mini App (in addition to the native Start Earning list).
+  // One browse entry: the rich Mini App over HTTPS, else the native bot list (dev fallback).
   const earnUrl = earnMiniAppUrl();
-  if (earnUrl) kb.webApp("Browse quests", earnUrl).row();
+  if (earnUrl) kb.webApp("Start Earning", earnUrl);
+  else kb.text("Start Earning", MAIN_MENU_CALLBACKS.startEarning);
+  kb.text("My Earnings", MAIN_MENU_CALLBACKS.earnings).row();
 
   return kb
     .text("My Wallet", MAIN_MENU_CALLBACKS.wallet)
@@ -40,7 +39,6 @@ export function mainMenuKeyboard() {
     .row()
     .text("Refresh", MAIN_MENU_CALLBACKS.refresh)
     .text("Settings", "settings:open")
-    .row()
     .text("Help", MAIN_MENU_CALLBACKS.help);
 }
 
