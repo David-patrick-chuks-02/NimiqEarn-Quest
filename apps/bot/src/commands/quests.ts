@@ -9,7 +9,9 @@ const DISCOVER_PAGE_SIZE = 5;
 
 /** Fetch a page of open quests and render (edit in place when reached via pagination). */
 export async function sendDiscover(ctx: BotContext, api: ApiClient, page: number) {
-  const list = await api.discoverQuests({ page, pageSize: DISCOVER_PAGE_SIZE });
+  // Pass the worker's id so the API hides quests they created or already did.
+  const telegramId = ctx.from ? String(ctx.from.id) : undefined;
+  const list = await api.discoverQuests({ page, pageSize: DISCOVER_PAGE_SIZE, telegramId });
   await editOrReply(ctx, formatDiscoverList(list), {
     parse_mode: "Markdown",
     reply_markup: discoverKeyboard(list),

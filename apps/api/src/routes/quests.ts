@@ -10,6 +10,7 @@ import {
 import type { EscrowService } from "../services/escrow.service.js";
 import type { TelegramNotifier } from "../services/telegram-notify.js";
 import { verifyInitData } from "../telegram-auth.js";
+import { safeCompare } from "../security.js";
 
 interface QuestRouteOptions {
   escrow?: EscrowService;
@@ -17,6 +18,8 @@ interface QuestRouteOptions {
   botToken?: string;
   fees?: PlatformFees;
   notifier?: TelegramNotifier;
+  /** Shared secret — lets a trusted internal caller (the bot) pass ?telegramId to personalize. */
+  apiSharedSecret?: string;
 }
 
 /** Verify Telegram Mini App initData on a request and return the telegram id, or null. */
@@ -68,7 +71,7 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
   };
 
   // Public discovery: live, open quests for workers to browse (promoted first, paginated).
-  app.get<{ Querystring: { page?: string; pageSize?: string; category?: string } }>(
+  app.get<{ Querystring: { page?: string; pageSize?: string; category?: string; telegramId?: string } }>(
     "/api/quests",
     async (request) => {
       const page = Number.parseInt(request.query.page ?? "", 10);
@@ -76,8 +79,17 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
       const category = questCategorySchema.safeParse(request.query.category).success
         ? request.query.category
         : undefined;
-      // Optional: if the Mini App sends valid initData, personalize (hide own + already-done).
-      const telegramId = workerTelegramId(request, opts.botToken) ?? undefined;
+      // Personalize (hide own + already-done) using either a trusted ?telegramId (the bot,
+      // proven by the shared secret) or the Mini App's verified initData.
+      const internalOk =
+        Boolean(opts.apiSharedSecret) &&
+        safeCompare(request.headers["x-internal-key"], opts.apiSharedSecret!);
+      const telegramId =
+        (internalOk && typeof request.query.telegramId === "string"
+          ? request.query.telegramId
+          : undefined) ??
+        workerTelegramId(request, opts.botToken) ??
+        undefined;
       return quests.listDiscoverableQuests({
         page: Number.isNaN(page) ? undefined : page,
         pageSize: Number.isNaN(pageSize) ? undefined : pageSize,

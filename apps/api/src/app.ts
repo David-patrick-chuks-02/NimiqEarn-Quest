@@ -95,7 +95,13 @@ export async function buildServer() {
   const notifier = createTelegramNotifier(env.BOT_TOKEN);
 
   await app.register(creatorRoutes);
-  await app.register(questRoutes, { escrow, botToken: env.BOT_TOKEN, fees, notifier });
+  await app.register(questRoutes, {
+    escrow,
+    botToken: env.BOT_TOKEN,
+    fees,
+    notifier,
+    apiSharedSecret: env.API_SHARED_SECRET,
+  });
   await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow, fees, notifier });
   await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
