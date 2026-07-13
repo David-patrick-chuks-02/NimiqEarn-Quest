@@ -198,19 +198,38 @@ export function createQuestService(
      * so we filter it in memory — fine at MVP scale.)
      */
     async listDiscoverableQuests(
-      opts: { page?: number; pageSize?: number; category?: string } = {},
+      opts: { page?: number; pageSize?: number; category?: string; telegramId?: string } = {},
     ) {
       const now = new Date();
+
+      // When a worker is identified (Mini App initData), hide quests they created and ones
+      // they've already submitted, so browse only shows quests they can actually do.
+      let excludeCreatorId: string | undefined;
+      let doneQuestIds = new Set<string>();
+      if (opts.telegramId) {
+        const user = await db.user.findUnique({
+          where: { telegramId: opts.telegramId },
+          include: { submissions: { select: { questId: true } } },
+        });
+        if (user) {
+          excludeCreatorId = user.id;
+          doneQuestIds = new Set(user.submissions.map((s) => s.questId));
+        }
+      }
+
       const matching = await db.quest.findMany({
         where: {
           status: "PUBLISHED",
           OR: [{ startAt: null }, { startAt: { lte: now } }],
           ...(opts.category ? { category: opts.category as Quest["category"] } : {}),
+          ...(excludeCreatorId ? { creatorId: { not: excludeCreatorId } } : {}),
         },
         include: { creator: { select: { displayName: true } } },
         orderBy: [{ promoted: "desc" }, { createdAt: "desc" }],
       });
-      const open = matching.filter((q) => q.filledSlots < q.totalSlots);
+      const open = matching.filter(
+        (q) => q.filledSlots < q.totalSlots && !doneQuestIds.has(q.id),
+      );
       const pageSize = Math.min(50, Math.max(1, opts.pageSize ?? 10));
       const page = Math.max(0, opts.page ?? 0);
       const start = page * pageSize;

@@ -74,10 +74,13 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
       const category = questCategorySchema.safeParse(request.query.category).success
         ? request.query.category
         : undefined;
+      // Optional: if the Mini App sends valid initData, personalize (hide own + already-done).
+      const telegramId = workerTelegramId(request, opts.botToken) ?? undefined;
       return quests.listDiscoverableQuests({
         page: Number.isNaN(page) ? undefined : page,
         pageSize: Number.isNaN(pageSize) ? undefined : pageSize,
         category,
+        telegramId,
       });
     },
   );
