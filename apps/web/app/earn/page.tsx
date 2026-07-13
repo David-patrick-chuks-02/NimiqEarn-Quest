@@ -140,7 +140,7 @@ export default function EarnPage() {
           </p>
         </div>
 
-        {phase === "loading" && <p className="text-sm text-[var(--brand-muted)]">Loading…</p>}
+        {phase === "loading" && <EarnSkeleton />}
 
         {phase === "no-telegram" && (
           <Info>Open this from the NimiqEarn Quest bot in Telegram to browse quests.</Info>
@@ -288,6 +288,27 @@ function QuestCard({ quest }: { quest: DiscoverQuest }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function EarnSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Loading quests">
+      <div className="flex gap-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-8 w-20 animate-pulse rounded-full bg-white/10" />
+        ))}
+      </div>
+      {[0, 1].map((i) => (
+        <div key={i} className="glass overflow-hidden rounded-xl">
+          <div className="aspect-[1200/630] w-full animate-pulse bg-white/5" />
+          <div className="space-y-2 p-4">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-1/3 animate-pulse rounded bg-white/10" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
