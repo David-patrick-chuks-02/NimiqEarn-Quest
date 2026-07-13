@@ -443,4 +443,67 @@ describe("createQuestService", () => {
       code: "PROMOTION_UNAVAILABLE",
     });
   });
+
+  const discoverQuest = (id: string, promoted = false, filled = 0) => ({
+    id,
+    title: id,
+    category: "OTHER",
+    rewardAmount: "10",
+    totalSlots: 5,
+    filledSlots: filled,
+    promoted,
+    proofType: "TEXT",
+    viewCount: 0,
+    creator: { displayName: "C" },
+  });
+
+  it("discovery lists open quests, excludes full ones, promoted-first ordering", async () => {
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([discoverQuest("q1"), discoverQuest("q2", false, 5), discoverQuest("q3", true)]);
+    const service = createQuestService({
+      quest: { findMany },
+      user: { findUnique: vi.fn() },
+    } as never);
+
+    const res = await service.listDiscoverableQuests({ pageSize: 10 });
+
+    expect(res.total).toBe(2); // q2 is full -> excluded
+    expect(res.quests.map((q) => q.id)).toEqual(["q1", "q3"]);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ promoted: "desc" }, { createdAt: "desc" }],
+        where: expect.objectContaining({ status: "PUBLISHED" }),
+      }),
+    );
+  });
+
+  it("discovery excludes the worker's own + already-done quests when identified", async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: "u1", submissions: [{ questId: "q3" }] });
+    const findMany = vi.fn().mockResolvedValue([discoverQuest("q1"), discoverQuest("q3")]);
+    const service = createQuestService({ quest: { findMany }, user: { findUnique } } as never);
+
+    const res = await service.listDiscoverableQuests({ telegramId: "999" });
+
+    expect(res.quests.map((q) => q.id)).toEqual(["q1"]); // q3 already submitted
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ creatorId: { not: "u1" } }) }),
+    );
+  });
+
+  it("discovery paginates", async () => {
+    const many = Array.from({ length: 25 }, (_, i) => discoverQuest(`q${i}`));
+    const findMany = vi.fn().mockResolvedValue(many);
+    const service = createQuestService({
+      quest: { findMany },
+      user: { findUnique: vi.fn() },
+    } as never);
+
+    const res = await service.listDiscoverableQuests({ page: 1, pageSize: 10 });
+
+    expect(res.total).toBe(25);
+    expect(res.pageCount).toBe(3);
+    expect(res.quests).toHaveLength(10);
+    expect(res.quests[0].id).toBe("q10");
+  });
 });
