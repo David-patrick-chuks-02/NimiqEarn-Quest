@@ -144,23 +144,64 @@ export default function EarnPage() {
             {data.quests.length === 0 ? (
               <Info>No open quests right now. Check back soon.</Info>
             ) : (
-              data.quests.map((q) => (
-                <Link
-                  key={q.id}
-                  href={`/quest/${q.id}`}
-                  className="glass block rounded-xl p-4 transition hover:border-[var(--brand-gold)]/40"
-                >
-                  <p className="truncate text-sm font-semibold text-white">{q.title}</p>
-                  <p className="mt-1 text-xs text-[var(--brand-muted)]">
-                    {Number(q.rewardAmount).toLocaleString()} NIM · {q.slotsLeft} of {q.totalSlots} left
-                  </p>
-                </Link>
-              ))
+              data.quests.map((q) => <QuestCard key={q.id} quest={q} />)
             )}
           </div>
         )}
       </main>
     </>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  PRODUCT_TESTING: "Product testing",
+  SOCIAL_CAMPAIGN: "Social campaign",
+  COMMUNITY_ENGAGEMENT: "Community engagement",
+  REFERRAL: "Referral",
+  CONTENT: "Content",
+  FEEDBACK: "Feedback",
+  BUG_BOUNTY: "Bug bounty",
+  OTHER: "Quest",
+};
+
+function QuestCard({ quest }: { quest: DiscoverQuest }) {
+  return (
+    <Link
+      href={`/quest/${quest.id}`}
+      className={`glass block overflow-hidden rounded-xl transition hover:border-[var(--brand-gold)]/40 ${
+        quest.promoted ? "border-[var(--brand-gold)]/40" : ""
+      }`}
+    >
+      {/* The shareable OG card as a preview (non-counting). */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/q/${quest.id}/opengraph-image`}
+        alt=""
+        loading="lazy"
+        className="aspect-[1200/630] w-full border-b border-white/10 object-cover"
+      />
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 truncate text-sm font-semibold text-white">{quest.title}</p>
+          {quest.promoted && (
+            <span className="shrink-0 rounded-full bg-[var(--brand-gold)]/15 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-[var(--brand-gold)]">
+              Promoted
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs uppercase tracking-wide text-[var(--brand-muted)]">
+          {CATEGORY_LABELS[quest.category] ?? "Quest"}
+        </p>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="text-base font-bold text-[var(--brand-gold)]">
+            {Number(quest.rewardAmount).toLocaleString()} NIM
+          </span>
+          <span className="text-xs text-[var(--brand-muted)]">
+            {quest.slotsLeft} of {quest.totalSlots} left
+          </span>
+        </div>
+      </div>
+    </Link>
   );
 }
 
