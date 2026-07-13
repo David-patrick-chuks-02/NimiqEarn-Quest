@@ -248,4 +248,199 @@ describe("createQuestService", () => {
       code: "INVALID_PROOF",
     });
   });
+
+  it("stores startAt and sampleEvidence on a draft", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      status: "ACTIVE",
+      walletProfiles: [{ status: "VERIFIED" }],
+    });
+    const create = vi.fn().mockResolvedValue({ id: "quest-1", status: "DRAFT" });
+    const service = createQuestService({
+      user: { findUnique },
+      quest: { create, findMany: vi.fn() },
+    } as never);
+
+    const startAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    await service.createDraftQuest("123", {
+      title: "Scheduled quest",
+      category: "FEEDBACK",
+      description: "A quest that starts later.",
+      rewardAmount: 10,
+      totalSlots: 5,
+      startAt,
+      proofType: "TEXT",
+      proofInstructions: "Send a short summary.",
+      sampleEvidence: "data:image/jpeg;base64,AAAA",
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        startAt,
+        sampleEvidence: "data:image/jpeg;base64,AAAA",
+      }),
+    });
+  });
+
+  it("charges the reward pool plus the platform fee on publish", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      status: "ACTIVE",
+      walletProfiles: [{ status: "VERIFIED", keyCiphertext: "creator-key", nimiqAddress: "NQ_CREATOR" }],
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "DRAFT",
+      rewardAmount: "10",
+      totalSlots: 5,
+      escrowAddress: "NQ_ESCROW",
+    });
+    const update = vi.fn().mockResolvedValue({ id: "quest-1", status: "PUBLISHED" });
+    const transfer = vi.fn().mockResolvedValue({ hash: "0xhash" });
+    const escrow = {
+      enabled: true,
+      requiredLuna: (nim: number, slots: number) => nim * slots * 100_000,
+      getFunding: vi.fn().mockResolvedValue({ reachable: true, funded: true, requiredNim: 53, balanceNim: 100 }),
+      transfer,
+    };
+
+    const service = createQuestService(
+      { user: { findUnique }, quest: { findFirst, update } } as never,
+      escrow as never,
+      { percent: 6, address: "NQ_FEE", promotionNim: 100 },
+    );
+
+    await service.publishQuest("123", "quest-1");
+
+    const poolLuna = 10 * 5 * 100_000; // 5,000,000
+    const feeLuna = Math.round(poolLuna * 0.06); // 300,000
+    // Funding is checked against pool + fee.
+    expect(escrow.getFunding).toHaveBeenCalledWith("NQ_CREATOR", poolLuna + feeLuna);
+    // Pool goes to escrow, fee goes to the platform wallet.
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "creator-key",
+      toAddress: "NQ_ESCROW",
+      valueLuna: BigInt(poolLuna),
+    });
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "creator-key",
+      toAddress: "NQ_FEE",
+      valueLuna: BigInt(feeLuna),
+    });
+    expect(update).toHaveBeenCalled();
+  });
+
+  it("blocks submitting a quest that hasn't started yet", async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: "worker-9", telegramId: "999", walletProfiles: [] });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "creator-x",
+      status: "PUBLISHED",
+      totalSlots: 5,
+      filledSlots: 0,
+      startAt: new Date(Date.now() + 60 * 60 * 1000), // starts in an hour
+    });
+
+    const service = createQuestService({
+      user: { findUnique },
+      quest: { findFirst },
+    } as never);
+
+    await expect(service.submitQuest("999", "quest-1", "my proof")).rejects.toMatchObject({
+      code: "QUEST_NOT_STARTED",
+    });
+  });
+
+  it("promotes a published quest and charges the promotion fee", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      walletProfiles: [{ keyCiphertext: "creator-key", nimiqAddress: "NQ_CREATOR" }],
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "PUBLISHED",
+      promoted: false,
+    });
+    const update = vi.fn().mockResolvedValue({});
+    const transfer = vi.fn().mockResolvedValue({ hash: "0xpromo" });
+    const escrow = {
+      enabled: true,
+      requiredLuna: (nim: number, slots: number) => nim * slots * 100_000,
+      getFunding: vi.fn().mockResolvedValue({ reachable: true, funded: true }),
+      transfer,
+    };
+
+    const service = createQuestService(
+      { user: { findUnique }, quest: { findFirst, update } } as never,
+      escrow as never,
+      { percent: 6, address: "NQ_FEE", promotionNim: 100 },
+    );
+
+    await service.promoteQuest("123", "quest-1");
+
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "creator-key",
+      toAddress: "NQ_FEE",
+      valueLuna: BigInt(100 * 100_000),
+    });
+    expect(update).toHaveBeenCalledWith({ where: { id: "quest-1" }, data: { promoted: true } });
+  });
+
+  it("rejects promoting an already-promoted quest", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      walletProfiles: [{ keyCiphertext: "k", nimiqAddress: "NQ" }],
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "PUBLISHED",
+      promoted: true,
+    });
+
+    const service = createQuestService(
+      { user: { findUnique }, quest: { findFirst, update: vi.fn() } } as never,
+      { enabled: true } as never,
+      { percent: 6, address: "NQ_FEE", promotionNim: 100 },
+    );
+
+    await expect(service.promoteQuest("123", "quest-1")).rejects.toMatchObject({
+      code: "ALREADY_PROMOTED",
+    });
+  });
+
+  it("rejects promotion when no fee address is configured", async () => {
+    const findUnique = vi.fn().mockResolvedValue({
+      id: "user-1",
+      telegramId: "123",
+      role: "CREATOR",
+      walletProfiles: [{ keyCiphertext: "k", nimiqAddress: "NQ" }],
+    });
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "quest-1",
+      creatorId: "user-1",
+      status: "PUBLISHED",
+      promoted: false,
+    });
+
+    const service = createQuestService(
+      { user: { findUnique }, quest: { findFirst, update: vi.fn() } } as never,
+      { enabled: true } as never,
+      { percent: 6, promotionNim: 100 }, // no address
+    );
+
+    await expect(service.promoteQuest("123", "quest-1")).rejects.toMatchObject({
+      code: "PROMOTION_UNAVAILABLE",
+    });
+  });
 });
