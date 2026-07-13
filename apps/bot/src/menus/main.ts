@@ -55,6 +55,13 @@ export async function sendMainMenu(ctx: BotContext, api: ApiClient, greeting: st
 
 
 export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
+  // Backward-compat: old in-chat quest-list buttons (discover:page:*) now open the browse
+  // Mini App instead of dead-ending.
+  bot.callbackQuery(/^discover:page:/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await sendBrowsePrompt(ctx).catch(() => undefined);
+  });
+
   // Start Earning → open the quest Mini App (over HTTPS the button opens it directly; this
   // callback is only hit on the non-HTTPS dev fallback).
   bot.callbackQuery(MAIN_MENU_CALLBACKS.startEarning, async (ctx) => {

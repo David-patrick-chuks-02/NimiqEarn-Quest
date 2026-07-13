@@ -58,7 +58,7 @@ export function createBot(env: BotEnv, logger: Logger) {
   registerWalletHandlers(bot, api);
   registerSettingsHandlers(bot, api);
   registerCreatorHandlers(bot, api);
-  bot.use(fallbackMiddleware(logger));
+  bot.use(fallbackMiddleware(logger, api));
 
   bot.catch((error) => {
     logger.error({ err: error.error ?? error }, "bot error");
