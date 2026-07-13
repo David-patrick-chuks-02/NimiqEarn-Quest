@@ -206,28 +206,16 @@ export const messages = {
   onboarding: {
     welcome: (name: string) =>
       [
-        section(`Welcome to ${APP_NAME}`, `Good to meet you, *${escapeMarkdown(name)}*.`),
+        `*Welcome aboard, ${escapeMarkdown(name)}*`,
         "",
-        "NimiqEarn Quest connects workers and creators inside Telegram. Complete quests, submit proof, and earn NIM rewards.",
-        "",
-        "To get started, review the terms below and create your worker profile.",
+        "NimiqEarn Quest turns Telegram into an earning channel: pick a quest, do the task, submit your proof, and get paid in NIM — straight to your wallet.",
       ].join("\n"),
     terms: () =>
-      section(
-        "Terms of participation",
-        [
-          "By continuing, you agree to:",
-          "• Complete tasks honestly",
-          "• Submit genuine proof of work",
-          "• Follow community and platform guidelines",
-          "",
-          "Accounts that submit misleading or fraudulent proof may be suspended.",
-          "",
-          `Read the full ${legalLinks()}.`,
-          "",
-          "Tap *I agree* to create your worker profile.",
-        ].join("\n"),
-      ),
+      [
+        "Keep it genuine — dishonest or spammy submissions get suspended.",
+        "",
+        `Tap *I agree* to accept the ${legalLinks()} and set up your wallet.`,
+      ].join("\n"),
     termsWrongButton:
       "Please tap *I agree* to continue, or send /start to begin again.",
     termsWrongButtonToast: "Select I agree to continue.",
