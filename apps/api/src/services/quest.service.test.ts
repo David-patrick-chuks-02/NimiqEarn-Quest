@@ -506,4 +506,48 @@ describe("createQuestService", () => {
     expect(res.quests).toHaveLength(10);
     expect(res.quests[0].id).toBe("q10");
   });
+
+  it("returns a worker's submissions with total earned (accepted only)", async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: "w1", telegramId: "999" });
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "s1",
+        questId: "q1",
+        status: "ACCEPTED",
+        payoutTxHash: "0xabc",
+        paidAt: new Date(),
+        createdAt: new Date(),
+        quest: { title: "Quest 1", rewardAmount: "25" },
+      },
+      {
+        id: "s2",
+        questId: "q2",
+        status: "REJECTED",
+        payoutTxHash: null,
+        paidAt: null,
+        createdAt: new Date(),
+        quest: { title: "Quest 2", rewardAmount: "10" },
+      },
+    ]);
+    const service = createQuestService({
+      user: { findUnique },
+      questSubmission: { findMany },
+    } as never);
+
+    const res = await service.getWorkerSubmissions("999");
+
+    expect(res.count).toBe(2);
+    expect(res.totalEarned).toBe(25); // only the ACCEPTED one counts
+    expect(res.submissions[0]).toMatchObject({ questTitle: "Quest 1", payoutTxHash: "0xabc" });
+  });
+
+  it("rejects submissions for an unknown user", async () => {
+    const service = createQuestService({
+      user: { findUnique: vi.fn().mockResolvedValue(null) },
+    } as never);
+
+    await expect(service.getWorkerSubmissions("nope")).rejects.toMatchObject({
+      code: "USER_NOT_FOUND",
+    });
+  });
 });
