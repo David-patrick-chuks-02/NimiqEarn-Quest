@@ -8,6 +8,7 @@ import {
   type PlatformFees,
 } from "../services/quest.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
+import type { TelegramNotifier } from "../services/telegram-notify.js";
 import { verifyInitData } from "../telegram-auth.js";
 
 interface QuestRouteOptions {
@@ -15,6 +16,7 @@ interface QuestRouteOptions {
   /** Bot token used to verify worker Mini App initData on the do-a-quest routes. */
   botToken?: string;
   fees?: PlatformFees;
+  notifier?: TelegramNotifier;
 }
 
 /** Verify Telegram Mini App initData on a request and return the telegram id, or null. */
@@ -56,7 +58,7 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
 }
 
 export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
-  const quests = createQuestService(app.db, opts.escrow, opts.fees);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier);
 
   const sendQuestError = (reply: FastifyReply, error: unknown) => {
     if (error instanceof QuestServiceError) {

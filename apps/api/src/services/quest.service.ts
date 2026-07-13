@@ -3,6 +3,7 @@ import type { CreateQuestInput, UpdateQuestInput } from "@nimiqearn/shared";
 import { createQuestSchema, questStatusSchema, updateQuestSchema } from "@nimiqearn/shared";
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
 import type { EscrowService, QuestFunding } from "./escrow.service.js";
+import type { TelegramNotifier } from "./telegram-notify.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -54,6 +55,7 @@ export function createQuestService(
   db: PrismaClient,
   escrow?: EscrowService,
   fees: PlatformFees = DEFAULT_FEES,
+  notifier?: TelegramNotifier,
 ) {
   const profiles = createProfileService(db);
 
@@ -600,6 +602,7 @@ export function createQuestService(
           valueLuna: BigInt(rewardLuna),
         });
         if (!result.hash) {
+          console.error("Quest payout failed", { questId, userId: user.id, error: result.error });
           // Payout failed — undo the slot + submission so the worker can retry cleanly.
           await db
             .$transaction(async (tx) => {
@@ -616,9 +619,19 @@ export function createQuestService(
           );
         }
         txHash = result.hash;
+        console.info("Quest payout ok", { questId, userId: user.id, txHash });
         await db.questSubmission
           .update({ where: { id: submissionId }, data: { payoutTxHash: txHash, paidAt: new Date() } })
           .catch(() => undefined);
+
+        // Confirm the payout to the worker in Telegram (best-effort, fire-and-forget).
+        const rewardNim = Number(quest.rewardAmount).toLocaleString();
+        const txUrl = escrow!.explorerTxUrl(txHash);
+        void notifier?.notify(
+          user.telegramId,
+          `You earned *${rewardNim} NIM* for completing "${quest.title}".\n\nView the payout on-chain: ${txUrl}`,
+          { markdown: true },
+        );
       }
 
       // FILL marks a completed+paid slot — logged after payout so analytics stay honest.

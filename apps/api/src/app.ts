@@ -14,6 +14,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { studioRoutes } from "./routes/studio.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { createEscrowService } from "./services/escrow.service.js";
+import { createTelegramNotifier } from "./services/telegram-notify.js";
 
 export async function buildServer() {
   const env = loadEnv();
@@ -91,10 +92,11 @@ export async function buildServer() {
     address: env.PLATFORM_FEE_ADDRESS,
     promotionNim: env.PROMOTION_FEE_NIM,
   };
+  const notifier = createTelegramNotifier(env.BOT_TOKEN);
 
   await app.register(creatorRoutes);
-  await app.register(questRoutes, { escrow, botToken: env.BOT_TOKEN, fees });
-  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow, fees });
+  await app.register(questRoutes, { escrow, botToken: env.BOT_TOKEN, fees, notifier });
+  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow, fees, notifier });
   await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 

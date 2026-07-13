@@ -221,6 +221,7 @@ describe("createQuestService", () => {
         enabled: true,
         requiredLuna: (nim: number, slots: number) => nim * slots * 100_000,
         transfer,
+        explorerTxUrl: (h: string) => `https://nimiq.watch/#${h}`,
       } as never,
     );
 

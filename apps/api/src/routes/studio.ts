@@ -33,11 +33,13 @@ import {
 import { questErrorStatus } from "./quests.js";
 import { createCreatorService, CreatorServiceError } from "../services/creator.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
+import type { TelegramNotifier } from "../services/telegram-notify.js";
 
 interface StudioRouteOptions {
   botToken?: string;
   escrow?: EscrowService;
   fees?: PlatformFees;
+  notifier?: TelegramNotifier;
 }
 
 function sendStudioError(reply: FastifyReply, error: unknown) {
@@ -74,7 +76,7 @@ function readInitData(request: FastifyRequest): string | null {
  */
 export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, opts) => {
   const botToken = opts.botToken;
-  const quests = createQuestService(app.db, opts.escrow, opts.fees);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier);
   const creators = createCreatorService(app.db);
 
   app.addHook("onRequest", async (request, reply) => {
