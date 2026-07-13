@@ -229,9 +229,12 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     /** Public: fetch a shared (published) quest by id, or null if unavailable. */
     /** Live, open quests for worker discovery (promoted first, paginated). */
-    async discoverQuests(opts: { page?: number; category?: string } = {}): Promise<DiscoverPage> {
+    async discoverQuests(
+      opts: { page?: number; pageSize?: number; category?: string } = {},
+    ): Promise<DiscoverPage> {
       const params = new URLSearchParams();
       if (opts.page != null) params.set("page", String(opts.page));
+      if (opts.pageSize != null) params.set("pageSize", String(opts.pageSize));
       if (opts.category) params.set("category", opts.category);
       const query = params.toString();
       const response = await fetch(
