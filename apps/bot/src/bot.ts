@@ -4,7 +4,6 @@ import { captureException } from "@nimiqearn/observability";
 import { createApiClient } from "./api/client.js";
 import type { BotEnv } from "./config.js";
 import { registerCommands } from "./commands/index.js";
-import { registerDiscoverHandlers } from "./commands/quests.js";
 import { createCaptchaGuard } from "./commands/start.js";
 import type { BotContext } from "./context.js";
 import { createOnboardingConversation } from "./conversations/onboarding.js";
@@ -55,7 +54,6 @@ export function createBot(env: BotEnv, logger: Logger) {
   bot.use(rateLimitMiddleware(createRateLimiter(redis), logger));
 
   registerCommands(bot, api);
-  registerDiscoverHandlers(bot, api);
   registerMainMenuHandlers(bot, api);
   registerWalletHandlers(bot, api);
   registerSettingsHandlers(bot, api);

@@ -4,7 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
-import { sendDiscover } from "../commands/quests.js";
+import { sendBrowsePrompt } from "../commands/quests.js";
 import { sendEarnings } from "./earnings.js";
 import { walletHeader } from "./wallet-summary.js";
 import { renderWalletMenu } from "./wallet.js";
@@ -53,24 +53,14 @@ export async function sendMainMenu(ctx: BotContext, api: ApiClient, greeting: st
   });
 }
 
-async function lookupUser(ctx: BotContext, api: ApiClient) {
-  const from = ctx.from;
-  if (!from) return null;
-  return api.getUserByTelegramId(String(from.id));
-}
 
 export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
-  // Start Earning → browse open quests (the worker discovery list).
+  // Start Earning → open the quest Mini App (over HTTPS the button opens it directly; this
+  // callback is only hit on the non-HTTPS dev fallback).
   bot.callbackQuery(MAIN_MENU_CALLBACKS.startEarning, async (ctx) => {
     await ctx.answerCallbackQuery();
-
     try {
-      const user = await lookupUser(ctx, api);
-      if (!user) {
-        await ctx.reply(messages.menu.notRegistered, { parse_mode: "Markdown" });
-        return;
-      }
-      await sendDiscover(ctx, api, 0);
+      await sendBrowsePrompt(ctx);
     } catch (error) {
       console.error("Start earning failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);

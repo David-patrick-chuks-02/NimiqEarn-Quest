@@ -248,24 +248,12 @@ export const messages = {
   },
 
   quests: {
-    comingSoon: section(
-      "Quests",
-      [
-        "Quest discovery for workers is opening soon.",
-        "",
-        "You'll browse open quests, join them, and submit proof to earn NIM — paid straight to your wallet.",
-        "",
-        "Your wallet is already set up, so you'll be ready the moment quests go live.",
-      ].join("\n"),
+    browsePrompt: section(
+      "Browse quests",
+      "Tap below to open the quest marketplace, complete quests, and earn NIM — paid straight to your wallet.",
     ),
-    creatorHint: section(
-      "Quests",
-      [
-        "Worker quest discovery launches in Milestone 2.",
-        "",
-        "As a creator, open *My Quests* from the Creator Hub to manage your own drafts and published quests.",
-      ].join("\n"),
-    ),
+    miniAppOnly:
+      "Quests are browsed in the Mini App, which needs the web app on HTTPS. It'll open here once WEB_PUBLIC_URL is set to an https:// address.",
     sharedUnavailable:
       "That quest link is no longer available — it may be a draft, closed, or removed. Use the menu below to get started.",
   },
