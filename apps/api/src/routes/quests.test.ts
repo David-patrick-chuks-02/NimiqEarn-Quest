@@ -1,17 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../app.js";
 
-const { findUnique, create, findFirst, update } = vi.hoisted(() => ({
+const { findUnique, create, findFirst, update, questEventCreate } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   create: vi.fn(),
   findFirst: vi.fn(),
   update: vi.fn(),
+  questEventCreate: vi.fn(),
 }));
 
 vi.mock("@nimiqearn/database", () => ({
   prisma: {
     user: { findUnique, upsert: vi.fn() },
     quest: { create, findMany: vi.fn(), findFirst, update },
+    questEvent: { create: questEventCreate },
     walletProfile: { findFirst: vi.fn(), create: vi.fn() },
     $disconnect: vi.fn(),
     $queryRaw: vi.fn(),
@@ -31,6 +33,7 @@ describe("quest routes", () => {
     create.mockReset();
     findFirst.mockReset();
     update.mockReset();
+    questEventCreate.mockReset();
   });
 
   afterEach(() => {
@@ -128,6 +131,55 @@ describe("quest routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().quest.status).toBe("PUBLISHED");
+    await app.close();
+  });
+
+  it("GET /api/quests/:id increments the view count by default", async () => {
+    findFirst.mockResolvedValue({
+      id: "quest-1",
+      title: "Public quest",
+      rewardAmount: "10",
+      totalSlots: 5,
+      filledSlots: 0,
+      startAt: null,
+      promoted: false,
+      status: "PUBLISHED",
+      creator: { displayName: "Ada" },
+    });
+    update.mockResolvedValue({});
+    questEventCreate.mockResolvedValue({});
+
+    const { app } = await buildServer();
+    const response = await app.inject({ method: "GET", url: "/api/quests/quest-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "quest-1" },
+      data: { viewCount: { increment: 1 } },
+    });
+    expect(questEventCreate).toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("GET /api/quests/:id?count=0 does not increment the view count", async () => {
+    findFirst.mockResolvedValue({
+      id: "quest-1",
+      title: "Public quest",
+      rewardAmount: "10",
+      totalSlots: 5,
+      filledSlots: 0,
+      startAt: null,
+      promoted: false,
+      status: "PUBLISHED",
+      creator: { displayName: "Ada" },
+    });
+
+    const { app } = await buildServer();
+    const response = await app.inject({ method: "GET", url: "/api/quests/quest-1?count=0" });
+
+    expect(response.statusCode).toBe(200);
+    expect(update).not.toHaveBeenCalled();
+    expect(questEventCreate).not.toHaveBeenCalled();
     await app.close();
   });
 });
