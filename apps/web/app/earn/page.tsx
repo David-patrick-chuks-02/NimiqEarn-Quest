@@ -35,6 +35,8 @@ export default function EarnPage() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
   const [data, setData] = useState<DiscoverPage | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const initDataRef = useRef<string>("");
 
   const api = useCallback(async (path: string) => {
@@ -63,11 +65,28 @@ export default function EarnPage() {
   }, []);
 
   const load = useCallback(
-    async (page = 0) => {
-      const body = (await api(`/api/quests?page=${page}&pageSize=${PAGE_SIZE}`)) as unknown as DiscoverPage;
+    async (page = 0, cat: string | null = null) => {
+      const q = `page=${page}&pageSize=${PAGE_SIZE}${cat ? `&category=${cat}` : ""}`;
+      const body = (await api(`/api/quests?${q}`)) as unknown as DiscoverPage;
       setData(body);
     },
     [api],
+  );
+
+  // Re-query on filter/page change (used by the chips + pagination once ready).
+  const refresh = useCallback(
+    async (page: number, cat: string | null) => {
+      setBusy(true);
+      setError("");
+      try {
+        await load(page, cat);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load],
   );
 
   const boot = useCallback(async () => {
@@ -140,11 +159,61 @@ export default function EarnPage() {
         )}
 
         {phase === "ready" && data && (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
+            {/* Category filter chips */}
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+              {[{ value: null, label: "All" }, ...CATEGORY_CHIPS].map((c) => {
+                const on = category === c.value;
+                return (
+                  <button
+                    key={c.label}
+                    disabled={busy}
+                    onClick={() => {
+                      setCategory(c.value);
+                      void refresh(0, c.value);
+                    }}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:opacity-60 ${
+                      on
+                        ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
+                        : "glass text-white hover:border-white/25"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+
             {data.quests.length === 0 ? (
-              <Info>No open quests right now. Check back soon.</Info>
+              <Info>No open quests match. Try another category or check back soon.</Info>
             ) : (
-              data.quests.map((q) => <QuestCard key={q.id} quest={q} />)
+              <div className="space-y-2.5">
+                {data.quests.map((q) => (
+                  <QuestCard key={q.id} quest={q} />
+                ))}
+              </div>
+            )}
+
+            {data.pageCount > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  disabled={busy || data.page === 0}
+                  onClick={() => void refresh(data.page - 1, category)}
+                  className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="text-sm text-[var(--brand-muted)]">
+                  Page {data.page + 1} of {data.pageCount}
+                </span>
+                <button
+                  disabled={busy || data.page >= data.pageCount - 1}
+                  onClick={() => void refresh(data.page + 1, category)}
+                  className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -163,6 +232,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   BUG_BOUNTY: "Bug bounty",
   OTHER: "Quest",
 };
+
+const CATEGORY_CHIPS: { value: string; label: string }[] = [
+  { value: "SOCIAL_CAMPAIGN", label: "Social" },
+  { value: "PRODUCT_TESTING", label: "Testing" },
+  { value: "CONTENT", label: "Content" },
+  { value: "COMMUNITY_ENGAGEMENT", label: "Community" },
+  { value: "REFERRAL", label: "Referral" },
+  { value: "FEEDBACK", label: "Feedback" },
+  { value: "BUG_BOUNTY", label: "Bounty" },
+  { value: "OTHER", label: "Other" },
+];
 
 function QuestCard({ quest }: { quest: DiscoverQuest }) {
   return (
