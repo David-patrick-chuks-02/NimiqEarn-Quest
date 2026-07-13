@@ -16,10 +16,20 @@ export const MAIN_MENU_CALLBACKS = {
   help: "menu:help",
 } as const;
 
+/** Worker "Browse & Earn" Mini App URL — web_app buttons require HTTPS. */
+function earnMiniAppUrl(): string | null {
+  const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
+  return base.startsWith("https://") ? `${base}/earn` : null;
+}
+
 export function mainMenuKeyboard() {
-  return new InlineKeyboard()
-    .text("Start Earning", MAIN_MENU_CALLBACKS.startEarning)
-    .row()
+  const kb = new InlineKeyboard().text("Start Earning", MAIN_MENU_CALLBACKS.startEarning).row();
+
+  // Richer visual browse in the Mini App (in addition to the native Start Earning list).
+  const earnUrl = earnMiniAppUrl();
+  if (earnUrl) kb.webApp("Browse quests", earnUrl).row();
+
+  return kb
     .text("My Wallet", MAIN_MENU_CALLBACKS.wallet)
     .text("Creator Hub", MAIN_MENU_CALLBACKS.creator)
     .row()
