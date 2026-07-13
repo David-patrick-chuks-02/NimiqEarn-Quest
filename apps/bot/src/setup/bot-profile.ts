@@ -10,7 +10,7 @@ export const BOT_COMMANDS = [
   { command: "start", description: "Create your profile or open the main menu" },
   { command: "menu", description: "Open the main menu" },
   { command: "wallet", description: "Link or update your Nimiq payout address" },
-  { command: "quests", description: "Browse quests (worker discovery in Milestone 2)" },
+  { command: "quests", description: "Browse open quests and earn NIM" },
   { command: "creator", description: "Open the Creator Hub" },
   { command: "settings", description: "Language and security settings" },
   { command: "help", description: "View commands and guidelines" },
