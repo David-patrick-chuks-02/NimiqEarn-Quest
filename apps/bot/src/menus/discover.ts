@@ -1,10 +1,11 @@
 import { InlineKeyboard } from "grammy";
 import type { DiscoverPage } from "../api/types.js";
 import { escapeMarkdown } from "../utils/markdown.js";
-import { MAIN_MENU_CALLBACKS } from "./main.js";
 
 /** Pagination callback: `discover:page:<n>`. */
 export const DISCOVER_PAGE_PREFIX = "discover:page:";
+// Main-menu callback (inlined to avoid an import cycle with menus/main.ts).
+const MAIN_MENU_REFRESH = "menu:refresh";
 
 /** Worker-facing quest Mini App URL — web_app buttons require HTTPS. */
 function questMiniAppUrl(id: string): string | null {
@@ -57,6 +58,6 @@ export function discoverKeyboard(page: DiscoverPage): InlineKeyboard {
     kb.row();
   }
 
-  kb.text("Main Menu", MAIN_MENU_CALLBACKS.refresh);
+  kb.text("Main Menu", MAIN_MENU_REFRESH);
   return kb;
 }

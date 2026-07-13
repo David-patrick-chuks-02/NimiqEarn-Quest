@@ -4,7 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
-import { formatWorkerStatus } from "./worker-status.js";
+import { sendDiscover } from "../commands/quests.js";
 import { walletHeader } from "./wallet-summary.js";
 import { renderWalletMenu } from "./wallet.js";
 
@@ -47,24 +47,19 @@ async function lookupUser(ctx: BotContext, api: ApiClient) {
 }
 
 export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
+  // Start Earning → browse open quests (the worker discovery list).
   bot.callbackQuery(MAIN_MENU_CALLBACKS.startEarning, async (ctx) => {
     await ctx.answerCallbackQuery();
 
     try {
-      const from = ctx.from;
       const user = await lookupUser(ctx, api);
       if (!user) {
         await ctx.reply(messages.menu.notRegistered, { parse_mode: "Markdown" });
         return;
       }
-
-      const header = from ? await walletHeader(api, String(from.id)) : "";
-      await editOrReply(ctx, header + formatWorkerStatus(user), {
-        parse_mode: "Markdown",
-        reply_markup: mainMenuKeyboard(),
-      });
+      await sendDiscover(ctx, api, 0);
     } catch (error) {
-      console.error("Start earning status failed:", error);
+      console.error("Start earning failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
     }
   });

@@ -8,7 +8,7 @@ import { DISCOVER_PAGE_PREFIX, discoverKeyboard, formatDiscoverList } from "../m
 const DISCOVER_PAGE_SIZE = 5;
 
 /** Fetch a page of open quests and render (edit in place when reached via pagination). */
-async function sendDiscover(ctx: BotContext, api: ApiClient, page: number) {
+export async function sendDiscover(ctx: BotContext, api: ApiClient, page: number) {
   const list = await api.discoverQuests({ page, pageSize: DISCOVER_PAGE_SIZE });
   await editOrReply(ctx, formatDiscoverList(list), {
     parse_mode: "Markdown",
