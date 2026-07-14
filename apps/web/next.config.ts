@@ -54,15 +54,18 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        // Creator Studio (Telegram Mini App) → API. Auth is the Mini App's initData,
-        // verified server-side; the browser only ever talks to the web origin.
+        source: "/api/studio",
+        destination: `${API_INTERNAL_URL}/api/studio`,
+      },
+      {
         source: "/api/studio/:path*",
         destination: `${API_INTERNAL_URL}/api/studio/:path*`,
       },
       {
-        // Worker "do a quest" Mini App → API (GET /api/quests/:id/worker, POST .../submit).
-        // Same-origin proxy so the browser only talks to the web origin; initData is
-        // forwarded and verified server-side.
+        source: "/api/quests",
+        destination: `${API_INTERNAL_URL}/api/quests`,
+      },
+      {
         source: "/api/quests/:path*",
         destination: `${API_INTERNAL_URL}/api/quests/:path*`,
       },
