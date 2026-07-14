@@ -31,6 +31,19 @@ export function createBot(env: BotEnv, logger: Logger) {
   const { redis, storage } = createRedisSessionStorage(env, logger);
 
   bot.use(loggingMiddleware(logger));
+
+  // answerCallbackQuery throws (400) when the callback query is too old — i.e. the user tapped
+  // a button on an older message. That must never crash the handler before it renders the next
+  // screen, so make it best-effort for every handler in one place.
+  bot.use(async (ctx, next) => {
+    if (ctx.callbackQuery) {
+      const answer = ctx.answerCallbackQuery.bind(ctx);
+      ctx.answerCallbackQuery = ((...args: Parameters<typeof answer>) =>
+        answer(...args).catch(() => undefined)) as typeof ctx.answerCallbackQuery;
+    }
+    return next();
+  });
+
   bot.use(
     session({
       initial: (): SessionData => ({}),
