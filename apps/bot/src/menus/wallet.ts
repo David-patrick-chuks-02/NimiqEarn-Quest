@@ -142,7 +142,7 @@ export function registerWalletHandlers(bot: Bot<BotContext>, api: ApiClient) {
 
   // Withdraw NIM to an external address (multi-step conversation).
   bot.callbackQuery(WALLET_CALLBACKS.withdraw, async (ctx) => {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch(() => undefined);
     if (hasActiveConversation(ctx)) {
       await ctx.reply(messages.errors.rateLimited);
       return;

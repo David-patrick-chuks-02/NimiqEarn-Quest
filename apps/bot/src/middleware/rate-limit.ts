@@ -41,7 +41,7 @@ export function rateLimitMiddleware(limiter: RateLimiter, logger: Logger) {
     if (!result.allowed) {
       logger.warn({ userId: ctx.from.id }, "rate limit hit on sensitive flow");
       if (ctx.callbackQuery) {
-        await ctx.answerCallbackQuery({ text: messages.errors.rateLimited });
+        await ctx.answerCallbackQuery({ text: messages.errors.rateLimited }).catch(() => undefined);
       } else {
         await ctx.reply(messages.errors.rateLimited);
       }
