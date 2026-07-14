@@ -105,36 +105,38 @@ export function createCaptchaGuard(api: ApiClient) {
     const incomingId = ctx.message?.message_id;
 
     if (pending && text && !text.startsWith("/")) {
-      // The typed answer is verification noise either way — remove it from the chat.
-      await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
+      const noticeId = ctx.session.captchaNoticeId;
 
       if (text.toUpperCase() === pending.answer) {
         ctx.session.captchaVerified = true;
         ctx.session.captcha = undefined;
-        // Clear the challenge image and any lingering "incorrect" notice so nothing from
-        // the verification step is left above the welcome flow.
-        await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
-        await deleteMessageSafe(ctx, ctx.chat?.id, ctx.session.captchaNoticeId);
         ctx.session.captchaNoticeId = undefined;
+        // Show the next screen FIRST, then clear the challenge + the user's answer, so the
+        // chat is never left empty between the two.
         await runStart(ctx, api, pending.startPayload ?? "");
+        await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
+        await deleteMessageSafe(ctx, ctx.chat?.id, noticeId);
+        await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
         return;
       }
 
-      // Wrong: drop the old challenge + previous notice, then reissue a single fresh pair.
-      await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
-      await deleteMessageSafe(ctx, ctx.chat?.id, ctx.session.captchaNoticeId);
+      // Wrong: reissue a fresh challenge FIRST, then clear the old challenge + the answer.
       const notice = await ctx.reply(messages.captcha.incorrect);
       ctx.session.captchaNoticeId = notice.message_id;
       await sendCaptcha(ctx, pending.startPayload);
+      await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
+      await deleteMessageSafe(ctx, ctx.chat?.id, noticeId);
+      await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
       return;
     }
 
-    // First contact (or a command / non-text while unverified) → issue a challenge.
-    // Remove whatever the user sent (e.g. /start) so the chat starts clean, and clear any
-    // existing challenge first so there's only ever a single live CAPTCHA.
+    // First contact (or a command / non-text while unverified) → issue a challenge. Send the
+    // CAPTCHA FIRST, then remove whatever the user sent (e.g. /start) so the chat is never
+    // momentarily empty. Clear any existing challenge so there's only ever one live CAPTCHA.
     if (ctx.callbackQuery) await ctx.answerCallbackQuery().catch(() => undefined);
-    await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
-    if (pending) await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
+    const previousChallenge = pending?.messageId;
     await sendCaptcha(ctx, startPayloadFromText(text) ?? pending?.startPayload);
+    if (previousChallenge) await deleteMessageSafe(ctx, ctx.chat?.id, previousChallenge);
+    await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
   };
 }

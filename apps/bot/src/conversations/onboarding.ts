@@ -16,14 +16,18 @@ function displayNameFromUser(from: NonNullable<BotContext["from"]>) {
 
 async function waitForTermsAgreement(
   conversation: Conversation<BotContext, BotContext>,
-  ctx: BotContext,
   stepChat: StepChat,
 ) {
   while (true) {
     const termsUpdate = await conversation.waitFor("callback_query:data", {
       maxMilliseconds: TERMS_WAIT_MS,
-      otherwise: async () => {
-        const hint = await ctx.reply(messages.errors.useButtons);
+      otherwise: async (octx) => {
+        // Ignore service/system updates (e.g. the pinned security-notice's "pinned a message")
+        // — only nudge when the user actually sent something instead of tapping the button.
+        if (!octx.message || octx.message.pinned_message) return;
+        const hint = await octx.reply(messages.onboarding.termsWrongButton, {
+          parse_mode: "Markdown",
+        });
         stepChat.track(hint.message_id);
       },
     });
@@ -69,7 +73,7 @@ export function createOnboardingConversation(api: ApiClient) {
       reply_markup: termsKeyboard,
     });
 
-    const termsUpdate = await waitForTermsAgreement(conversation, ctx, stepChat);
+    const termsUpdate = await waitForTermsAgreement(conversation, stepChat);
     if (!termsUpdate) return;
 
     const profile = {
