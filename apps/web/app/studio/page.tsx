@@ -127,6 +127,7 @@ export default function StudioPage() {
     promotionFeeNim: number;
   }>({ feePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
   const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [faucetBusy, setFaucetBusy] = useState(false);
   const initDataRef = useRef<string>("");
 
   // Reward pool the creator funds = reward per completion × number of taskers, plus the
@@ -269,6 +270,21 @@ export default function StudioPage() {
       setRefreshing(false);
     }
   }, [loadQuests, refreshDashboard, loadBalance]);
+
+  const requestFaucet = useCallback(async () => {
+    setFaucetBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/api/studio/faucet", { method: "POST" });
+      setNotice("Requested test NIM successfully! It should arrive in a few seconds.");
+      setTimeout(() => void refreshAll(), 5000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setFaucetBusy(false);
+    }
+  }, [api, refreshAll]);
 
   const boot = useCallback(async () => {
     const tg = window.Telegram?.WebApp;
@@ -569,7 +585,7 @@ export default function StudioPage() {
               {tab === "home" && (
                 <>
                   <StatRow dashboard={dashboard} />
-                  <WalletCard balance={balance} />
+                  <WalletCard balance={balance} onRequestFaucet={requestFaucet} faucetBusy={faucetBusy} />
                   <button onClick={() => setTab("create")} className={`${primaryBtn} w-full`}>
                     Create a quest
                   </button>
@@ -1355,34 +1371,66 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
 
 // Creator's on-chain wallet balance, surfaced up front so they know their funding
 // headroom before drafting — the publish modal re-checks it against the reward.
-function WalletCard({ balance }: { balance: { nim: number | null; reachable: boolean } }) {
+function WalletCard({
+  balance,
+  onRequestFaucet,
+  faucetBusy,
+}: {
+  balance: { nim: number | null; reachable: boolean };
+  onRequestFaucet: () => void;
+  faucetBusy: boolean;
+}) {
   const known = balance.reachable && balance.nim !== null;
+  const isTestnet = process.env.NEXT_PUBLIC_HUB_URL?.includes("testnet");
+
   return (
-    <div className="glass flex items-center justify-between rounded-2xl px-5 py-4">
-      <div>
-        <p className="eyebrow">Wallet balance</p>
-        {known ? (
-          <p className="mt-1 text-xl font-bold text-white">
-            {balance.nim!.toLocaleString()}{" "}
-            <span className="text-sm font-semibold text-[var(--brand-muted)]">NIM</span>
+    <div className="glass flex flex-col justify-between rounded-2xl px-5 py-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="eyebrow flex items-center gap-2">
+            Wallet balance
+            {isTestnet && (
+              <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-blue-400">
+                TESTNET
+              </span>
+            )}
           </p>
-        ) : (
-          <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
-        )}
+          {known ? (
+            <p className="mt-1 text-xl font-bold text-white">
+              {balance.nim!.toLocaleString()}{" "}
+              <span className="text-sm font-semibold text-[var(--brand-muted)]">NIM</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
+          )}
+        </div>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-6 w-6 text-[var(--brand-muted)]"
+          aria-hidden
+        >
+          <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <path d="M16 12h.01M3 9h18" />
+        </svg>
       </div>
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="h-6 w-6 text-[var(--brand-muted)]"
-        aria-hidden
-      >
-        <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-        <path d="M16 12h.01M3 9h18" />
-      </svg>
+      {isTestnet && (
+        <div className="border-t border-white/10 pt-3 flex justify-between items-center">
+          <p className="text-xs text-[var(--brand-muted)]">DevTool: Faucet</p>
+          <button 
+            onClick={onRequestFaucet} 
+            disabled={faucetBusy} 
+            type="button"
+            className="rounded-lg bg-[var(--brand-navy-700)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[var(--brand-gold)] hover:text-black disabled:opacity-50"
+          >
+            {faucetBusy ? "Requesting..." : "Get Free NIM"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

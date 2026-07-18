@@ -275,4 +275,60 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       }
     },
   );
+
+  // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet
+  app.post("/api/studio/faucet", async (request, reply) => {
+    try {
+      if (process.env.NIMIQ_NETWORK !== "testnet") {
+        return reply.code(400).send({ error: "Faucet is only available on testnet." });
+      }
+
+      const user = await app.db.user.findUnique({
+        where: { telegramId: telegramId(request) },
+        include: { walletProfiles: true },
+      });
+      const wallet = user?.walletProfiles.find((w) => w.keyCiphertext) ?? null;
+      if (!wallet || !wallet.nimiqAddress) {
+        return reply.code(400).send({ error: "No custodial wallet found to fund." });
+      }
+
+      let privateKeyHex = process.env.FAUCET_ADMIN_PRIVATE_KEY;
+      
+      // Fallback for local development if it's not yet in .env
+      if (!privateKeyHex) {
+        try {
+          const fs = await import("fs/promises");
+          const adminWalletJson = await fs.readFile("admin-wallet.json", "utf-8");
+          privateKeyHex = JSON.parse(adminWalletJson).privateKeyHex;
+        } catch (e) {
+          return reply.code(500).send({ error: "Admin test wallet not configured. Please set FAUCET_ADMIN_PRIVATE_KEY." });
+        }
+      }
+
+      const nimiqCore = await import("@nimiqearn/nimiq");
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      
+      const blockNumber = await nimiqCore.getRpcBlockNumber(rpcUrl);
+      if (!blockNumber) {
+        return reply.code(500).send({ error: "Failed to get block number from RPC." });
+      }
+
+      const tx = nimiqCore.buildBasicTransaction({
+        privateKeyHex: privateKeyHex!,
+        recipient: wallet.nimiqAddress,
+        valueLuna: 500n * 100000n, // 500 NIM
+        validityStartHeight: blockNumber,
+        networkId: nimiqCore.networkIdFor("testnet"),
+      });
+
+      const result = await nimiqCore.sendRawTransaction(rpcUrl, tx.hex);
+      if (result.error) {
+        return reply.code(500).send({ error: result.error });
+      }
+
+      return { ok: true, hash: result.hash };
+    } catch (error) {
+      return sendStudioError(reply, error);
+    }
+  });
 };
