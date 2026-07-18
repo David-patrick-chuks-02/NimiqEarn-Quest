@@ -6,7 +6,7 @@ import { cache } from "react";
 
 // Server-side base (not the browser proxy) so metadata + render share one fetch.
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
-const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL ?? "https://t.me/Nimbottybot";
+const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL ?? "https://t.me/NimiqEarnBot";
 
 interface PublicQuest {
   id: string;
