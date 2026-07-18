@@ -40,6 +40,7 @@ interface StudioRouteOptions {
   escrow?: EscrowService;
   fees?: PlatformFees;
   notifier?: TelegramNotifier;
+  network?: string;
 }
 
 function sendStudioError(reply: FastifyReply, error: unknown) {
@@ -279,7 +280,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
   // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet
   app.post("/api/studio/faucet", async (request, reply) => {
     try {
-      if (process.env.NIMIQ_NETWORK !== "testnet") {
+      if (opts.network !== "testnet") {
         return reply.code(400).send({ error: "Faucet is only available on testnet." });
       }
 

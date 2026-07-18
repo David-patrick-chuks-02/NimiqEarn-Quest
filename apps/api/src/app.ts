@@ -102,7 +102,13 @@ export async function buildServer() {
     notifier,
     apiSharedSecret: env.API_SHARED_SECRET,
   });
-  await app.register(studioRoutes, { botToken: env.BOT_TOKEN, escrow, fees, notifier });
+  await app.register(studioRoutes, { 
+    botToken: env.BOT_TOKEN, 
+    escrow, 
+    fees, 
+    notifier,
+    network: env.NIMIQ_NETWORK 
+  });
   await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
 
