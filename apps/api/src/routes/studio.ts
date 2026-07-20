@@ -112,7 +112,7 @@ async function loadFaucetPrivateKey(): Promise<string | null> {
 /** Fixed drip size per faucet request (testnet DevTool). */
 const FAUCET_DRIP_NIM = 500;
 /** Lifetime ceiling: a wallet may not hold more than this USD-value of NIM via faucet top-ups. */
-const FAUCET_MAX_USD = 1000;
+const FAUCET_MAX_USD = 500;
 const LUNA_PER_NIM = 100_000;
 
 function roundUsd(n: number): number {
@@ -121,7 +121,7 @@ function roundUsd(n: number): number {
 
 /**
  * Build a faucet quote for the modal + POST enforcement: how much we'll send, current
- * balance, and remaining headroom under the $1000 / wallet cap.
+ * balance, and remaining headroom under the $500 / wallet cap.
  */
 async function buildFaucetQuote(address: string, rpcUrl: string) {
   const nimiqCore = await import("@nimiqearn/nimiq");
@@ -372,7 +372,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     },
   );
 
-  // DevTool Faucet quote — powers the confirm modal (amount, USD, remaining $1000 cap).
+  // DevTool Faucet quote — powers the confirm modal (amount, USD, remaining $500 cap).
   app.get("/api/studio/faucet", async (request, reply) => {
     try {
       if (opts.network !== "testnet") {
@@ -396,7 +396,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
   });
 
   // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet.
-  // Caps wallet balance at $1000 USD-value of NIM (CoinGecko price).
+  // Caps wallet balance at $500 USD-value of NIM (CoinGecko price).
   app.post("/api/studio/faucet", async (request, reply) => {
     try {
       if (opts.network !== "testnet") {

@@ -98,7 +98,7 @@ describe("studio routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       dripNim: 500,
-      maxUsd: 1000,
+      maxUsd: 500,
       amountNim: 500,
       amountUsd: 0.5,
       balanceNim: 0,
@@ -161,7 +161,7 @@ describe("studio routes", () => {
     await app.close();
   });
 
-  it("POST /api/studio/faucet rejects wallets at the $1000 USD cap", async () => {
+  it("POST /api/studio/faucet rejects wallets at the $500 USD cap", async () => {
     verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
     findUnique.mockResolvedValue({
       id: "user-1",
@@ -173,11 +173,11 @@ describe("studio routes", () => {
         },
       ],
     });
-    // $1000 at $0.001/NIM = 1_000_000 NIM
+    // $500 at $0.001/NIM = 500_000 NIM
     fetchNimiqAccount.mockResolvedValue({
       reachable: true,
-      balanceLuna: 1_000_000 * 100_000,
-      balanceNim: 1_000_000,
+      balanceLuna: 500_000 * 100_000,
+      balanceNim: 500_000,
     });
     getNimUsdPrice.mockResolvedValue(0.001);
 

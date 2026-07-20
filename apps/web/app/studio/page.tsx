@@ -1448,7 +1448,7 @@ function WalletCard({
         >
           <div>
             <p className="text-sm font-semibold text-[var(--brand-gold)]">Get free testnet NIM</p>
-            <p className="mt-0.5 text-xs text-[var(--brand-muted)]">Instant top-up · up to $1,000 / wallet</p>
+            <p className="mt-0.5 text-xs text-[var(--brand-muted)]">Instant top-up · up to $500 / wallet</p>
           </div>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-gold)] text-[var(--brand-ink)]">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-4 w-4" aria-hidden>
@@ -1672,7 +1672,7 @@ function FaucetModal({
                   </div>
                   <p className="mt-2 text-xs text-[var(--brand-muted)]">
                     {quote.capped
-                      ? "This wallet has hit the $1,000 cap."
+                      ? `This wallet has hit the $${quote.maxUsd.toLocaleString()} cap.`
                       : `${formatUsd(quote.remainingUsd)} left before the per-wallet cap.`}
                   </p>
                 </div>
