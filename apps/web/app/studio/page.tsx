@@ -1663,7 +1663,9 @@ function AnimatedNimBalance({
   className?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  const [display, setDisplay] = useState(value ?? 0);
+  // Important UX: when bump is present, we must start rendering from bump.from
+  // (the current balance), not from `value` (which is often the new balance).
+  const [display, setDisplay] = useState(() => bump?.from ?? value ?? 0);
   const animRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -1671,6 +1673,8 @@ function AnimatedNimBalance({
       if (animRef.current) cancelAnimationFrame(animRef.current);
       const from = bump.from;
       const to = bump.to;
+      // Set immediately so the first paint starts at the "current" balance.
+      setDisplay(from);
       const start = performance.now();
       const duration = 1400;
       const step = (now: number) => {
