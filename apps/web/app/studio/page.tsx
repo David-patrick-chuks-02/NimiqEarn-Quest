@@ -128,6 +128,8 @@ export default function StudioPage() {
   }>({ feePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [faucetOpen, setFaucetOpen] = useState(false);
+  const [balanceAnim, setBalanceAnim] = useState<{ from: number; to: number } | null>(null);
+  const [walletTxOpen, setWalletTxOpen] = useState(false);
   const initDataRef = useRef<string>("");
 
   // Reward pool the creator funds = reward per completion × number of taskers, plus the
@@ -272,13 +274,31 @@ export default function StudioPage() {
   }, [loadQuests, refreshDashboard, loadBalance]);
 
   const onFaucetSuccess = useCallback(
-    (message: string) => {
-      setNotice(message);
+    (detail: { from: number; to: number }) => {
       setFaucetOpen(false);
-      setTimeout(() => void refreshAll(), 4000);
+      setBalanceAnim({ from: detail.from, to: detail.to });
+      setBalance((b) => ({ ...b, nim: detail.to, reachable: true }));
+      window.setTimeout(() => setBalanceAnim(null), 1600);
+      void loadBalance();
+      window.setTimeout(() => void loadBalance(), 3000);
+      window.setTimeout(() => void refreshAll(), 6000);
     },
-    [refreshAll],
+    [loadBalance, refreshAll],
   );
+
+  // Quest/action notices auto-dismiss so they don't linger across tabs.
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(""), 5000);
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  // Keep wallet balance fresh while Creator Studio is open.
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const id = window.setInterval(() => void loadBalance(), 10_000);
+    return () => window.clearInterval(id);
+  }, [phase, loadBalance]);
 
   const boot = useCallback(async () => {
     const tg = window.Telegram?.WebApp;
@@ -565,7 +585,13 @@ export default function StudioPage() {
         {phase === "ready" && dashboard && (
           <>
             <div className="mt-5 space-y-5 pb-28">
-              {!analyticsFor && TAB_META[tab] && (
+              {!analyticsFor && tab === "wallet" && walletTxOpen && (
+                <div>
+                  <h1 className="text-2xl font-bold text-white">Transactions</h1>
+                  <p className="mt-1 text-sm text-[var(--brand-muted)]">On-chain history for your wallet.</p>
+                </div>
+              )}
+              {!analyticsFor && TAB_META[tab] && !(tab === "wallet" && walletTxOpen) && (
                 <div>
                   <h1 className="text-2xl font-bold text-white">{TAB_META[tab]!.title}</h1>
                   <p className="mt-1 text-sm text-[var(--brand-muted)]">{TAB_META[tab]!.subtitle}</p>
@@ -573,9 +599,19 @@ export default function StudioPage() {
               )}
 
               {notice && (
-                <p className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5 text-sm text-[var(--brand-gold)]">
-                  {notice}
-                </p>
+                <div className="flex items-start gap-2 rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold)]/10 px-3.5 py-2.5">
+                  <p className="flex-1 text-sm text-[var(--brand-gold)]">{notice}</p>
+                  <button
+                    type="button"
+                    onClick={() => setNotice("")}
+                    aria-label="Dismiss"
+                    className="shrink-0 text-[var(--brand-gold)]/70 transition hover:text-[var(--brand-gold)]"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4" aria-hidden>
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               )}
               {error && (
                 <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
@@ -588,6 +624,7 @@ export default function StudioPage() {
                   <StatRow dashboard={dashboard} />
                   <WalletCard
                     balance={balance}
+                    balanceAnim={balanceAnim}
                     onRequestFaucet={() => {
                       setNotice("");
                       setFaucetOpen(true);
@@ -833,7 +870,9 @@ export default function StudioPage() {
               {tab === "wallet" && (
                 <WalletTab
                   balance={balance}
+                  balanceAnim={balanceAnim}
                   api={api}
+                  onTxViewChange={setWalletTxOpen}
                   onRequestFaucet={() => {
                     setNotice("");
                     setFaucetOpen(true);
@@ -954,18 +993,242 @@ interface WalletTx {
   explorerUrl: string;
 }
 
+function WalletTxRow({ t }: { t: WalletTx }) {
+  return (
+    <li className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white">
+          {t.direction === "in" ? "Received" : "Sent"}
+        </p>
+        <a
+          href={t.explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-[var(--brand-muted)] transition hover:text-[var(--brand-gold)]"
+        >
+          {t.hash.slice(0, 8)}…{t.hash.slice(-6)}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3" aria-hidden>
+            <path d="M14 5h5v5M19 5l-9 9M12 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </a>
+      </div>
+      <div className="shrink-0 text-right">
+        <p
+          className={`text-sm font-bold ${
+            t.direction === "in" ? "text-emerald-400" : "text-white"
+          }`}
+        >
+          {t.direction === "in" ? "+" : "−"}
+          {t.amountNim.toLocaleString()} NIM
+        </p>
+        {t.timestamp && (
+          <p className="text-[0.7rem] text-[var(--brand-muted)]">
+            {new Date(t.timestamp).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+type TxDirectionFilter = "all" | "in" | "out";
+const TX_PAGE_SIZE = 10;
+const TX_PREVIEW_COUNT = 4;
+
+function WalletTransactionsPanel({
+  txs,
+  txSupported,
+  onBack,
+}: {
+  txs: WalletTx[] | null;
+  txSupported: boolean;
+  onBack: () => void;
+}) {
+  const [filter, setFilter] = useState<TxDirectionFilter>("all");
+  const [page, setPage] = useState(0);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const filtered = (txs ?? []).filter((t) => {
+    if (filter === "in") return t.direction === "in";
+    if (filter === "out") return t.direction === "out";
+    return true;
+  });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / TX_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageItems = filtered.slice(
+    safePage * TX_PAGE_SIZE,
+    safePage * TX_PAGE_SIZE + TX_PAGE_SIZE,
+  );
+  const activeFilters = filter !== "all" ? 1 : 0;
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-sm font-semibold text-[var(--brand-gold)] transition hover:text-white"
+      >
+        ← Back to wallet
+      </button>
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-[var(--brand-muted)]">
+          {filtered.length} {filtered.length === 1 ? "transaction" : "transactions"}
+        </p>
+        <button
+          type="button"
+          onClick={() => setFilterOpen(true)}
+          className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-white/25"
+        >
+          <FilterIcon />
+          Filter
+          {activeFilters > 0 && (
+            <span className="rounded-full bg-[var(--brand-gold)] px-1.5 text-[0.65rem] font-bold text-[var(--brand-ink)]">
+              {activeFilters}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {txs === null ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-11 animate-pulse rounded-lg bg-white/10" />
+          ))}
+        </div>
+      ) : !txSupported ? (
+        <p className="text-sm text-[var(--brand-muted)]">
+          Transaction history isn&apos;t available right now.
+        </p>
+      ) : filtered.length === 0 ? (
+        <div className="glass rounded-2xl p-6 text-center text-sm text-[var(--brand-muted)]">
+          No transactions match these filters.
+        </div>
+      ) : (
+        <>
+          <ul className="glass divide-y divide-white/5 rounded-2xl px-5">
+            {pageItems.map((t) => (
+              <WalletTxRow key={t.hash} t={t} />
+            ))}
+          </ul>
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                disabled={safePage === 0}
+                onClick={() => setPage(safePage - 1)}
+                className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+              >
+                Prev
+              </button>
+              <span className="text-sm text-[var(--brand-muted)]">
+                Page {safePage + 1} of {pageCount}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage(safePage + 1)}
+                className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {filterOpen && (
+        <TxFilterModal
+          filter={filter}
+          onApply={(f) => {
+            setFilter(f);
+            setPage(0);
+            setFilterOpen(false);
+          }}
+          onClose={() => setFilterOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TxFilterModal({
+  filter,
+  onApply,
+  onClose,
+}: {
+  filter: TxDirectionFilter;
+  onApply: (f: TxDirectionFilter) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(filter);
+  const options: { value: TxDirectionFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "in", label: "Received" },
+    { value: "out", label: "Sent" },
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:px-5"
+      onClick={onClose}
+    >
+      <div
+        className="glass w-full max-w-sm rounded-t-2xl p-5 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-base font-bold text-white">Filter transactions</h2>
+        <p className="eyebrow mt-4">Direction</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {options.map((o) => {
+            const on = draft === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setDraft(o.value)}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+                  on
+                    ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
+                    : "border border-white/10 text-white hover:border-white/25"
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" onClick={() => onApply(draft)} className={`${primaryBtn} mt-5 w-full`}>
+          Apply
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-2 w-full py-2 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WalletTab({
   balance,
+  balanceAnim,
   api,
+  onTxViewChange,
   onRequestFaucet,
 }: {
   balance: { nim: number | null; reachable: boolean; address: string | null };
+  balanceAnim?: { from: number; to: number } | null;
   api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
+  onTxViewChange?: (open: boolean) => void;
   onRequestFaucet: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [txs, setTxs] = useState<WalletTx[] | null>(null); // null = loading
+  const [txs, setTxs] = useState<WalletTx[] | null>(null);
   const [txSupported, setTxSupported] = useState(true);
+  const [showAllTx, setShowAllTx] = useState(false);
   const known = balance.reachable && balance.nim !== null;
   const isTestnet = process.env.NEXT_PUBLIC_HUB_URL?.includes("testnet");
 
@@ -999,15 +1262,30 @@ function WalletTab({
     }
   };
 
+  useEffect(() => {
+    onTxViewChange?.(showAllTx);
+  }, [showAllTx, onTxViewChange]);
+
+  if (showAllTx) {
+    return (
+      <WalletTransactionsPanel
+        txs={txs}
+        txSupported={txSupported}
+        onBack={() => setShowAllTx(false)}
+      />
+    );
+  }
+
+  const previewTxs = txs?.slice(0, TX_PREVIEW_COUNT) ?? [];
+
   return (
     <div className="space-y-4">
       <div className="glass rounded-2xl p-6 text-center">
         <p className="eyebrow">Available balance</p>
         {known ? (
-          <p className="mt-2 text-4xl font-bold tracking-tight">
-            <span className="text-gradient-gold">{balance.nim!.toLocaleString()}</span>
-            <span className="ml-2 text-lg font-semibold text-[var(--brand-muted)]">NIM</span>
-          </p>
+          <div className="mt-2">
+            <AnimatedNimBalance value={balance.nim} bump={balanceAnim} size="lg" />
+          </div>
         ) : (
           <p className="mt-2 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
         )}
@@ -1035,9 +1313,20 @@ function WalletTab({
       )}
 
       <div className="glass rounded-2xl p-5">
-        <div className="flex items-center justify-between">
-          <p className="eyebrow">Transaction history</p>
-          <span className="text-[0.7rem] text-[var(--brand-muted)]">on-chain · verifiable</span>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="eyebrow">Transaction history</p>
+            <span className="text-[0.7rem] text-[var(--brand-muted)]">on-chain · verifiable</span>
+          </div>
+          {txs && txs.length > TX_PREVIEW_COUNT && (
+            <button
+              type="button"
+              onClick={() => setShowAllTx(true)}
+              className="shrink-0 text-sm font-semibold text-[var(--brand-gold)] transition hover:text-white"
+            >
+              View all
+            </button>
+          )}
         </div>
 
         {txs === null ? (
@@ -1054,40 +1343,8 @@ function WalletTab({
           <p className="mt-3 text-sm text-[var(--brand-muted)]">No transactions yet.</p>
         ) : (
           <ul className="mt-3 divide-y divide-white/5">
-            {txs.map((t) => (
-              <li key={t.hash} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">
-                    {t.direction === "in" ? "Received" : "Sent"}
-                  </p>
-                  <a
-                    href={t.explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-[var(--brand-muted)] transition hover:text-[var(--brand-gold)]"
-                  >
-                    {t.hash.slice(0, 8)}…{t.hash.slice(-6)}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3" aria-hidden>
-                      <path d="M14 5h5v5M19 5l-9 9M12 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </a>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p
-                    className={`text-sm font-bold ${
-                      t.direction === "in" ? "text-emerald-400" : "text-white"
-                    }`}
-                  >
-                    {t.direction === "in" ? "+" : "−"}
-                    {t.amountNim.toLocaleString()} NIM
-                  </p>
-                  {t.timestamp && (
-                    <p className="text-[0.7rem] text-[var(--brand-muted)]">
-                      {new Date(t.timestamp).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              </li>
+            {previewTxs.map((t) => (
+              <WalletTxRow key={t.hash} t={t} />
             ))}
           </ul>
         )}
@@ -1393,13 +1650,68 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
   );
 }
 
+// Smooth count-up when balance increases (e.g. after faucet credit lands).
+function AnimatedNimBalance({
+  value,
+  bump,
+  className = "",
+  size = "md",
+}: {
+  value: number | null;
+  bump?: { from: number; to: number } | null;
+  className?: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  const [display, setDisplay] = useState(value ?? 0);
+  const animRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (bump) {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      const from = bump.from;
+      const to = bump.to;
+      const start = performance.now();
+      const duration = 1400;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setDisplay(from + (to - from) * eased);
+        if (t < 1) animRef.current = requestAnimationFrame(step);
+        else animRef.current = null;
+      };
+      animRef.current = requestAnimationFrame(step);
+      return () => {
+        if (animRef.current) cancelAnimationFrame(animRef.current);
+      };
+    }
+    if (value != null) setDisplay(value);
+  }, [value, bump]);
+
+  const sizeClass =
+    size === "lg" ? "text-4xl" : size === "sm" ? "text-xl" : "text-4xl";
+  const nimClass = size === "sm" ? "text-sm" : "text-lg";
+
+  if (value == null && !bump) {
+    return <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>;
+  }
+
+  return (
+    <p className={`font-bold tracking-tight ${sizeClass} ${className}`}>
+      <span className="text-gradient-gold">{display.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+      <span className={`ml-2 font-semibold text-[var(--brand-muted)] ${nimClass}`}>NIM</span>
+    </p>
+  );
+}
+
 // Creator's on-chain wallet balance, surfaced up front so they know their funding
 // headroom before drafting — the publish modal re-checks it against the reward.
 function WalletCard({
   balance,
+  balanceAnim,
   onRequestFaucet,
 }: {
   balance: { nim: number | null; reachable: boolean };
+  balanceAnim?: { from: number; to: number } | null;
   onRequestFaucet: () => void;
 }) {
   const known = balance.reachable && balance.nim !== null;
@@ -1418,10 +1730,9 @@ function WalletCard({
             )}
           </p>
           {known ? (
-            <p className="mt-1 text-xl font-bold text-white">
-              {balance.nim!.toLocaleString()}{" "}
-              <span className="text-sm font-semibold text-[var(--brand-muted)]">NIM</span>
-            </p>
+            <div className="mt-1">
+              <AnimatedNimBalance value={balance.nim} bump={balanceAnim} size="sm" />
+            </div>
           ) : (
             <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>
           )}
@@ -1448,7 +1759,7 @@ function WalletCard({
         >
           <div>
             <p className="text-sm font-semibold text-[var(--brand-gold)]">Get free testnet NIM</p>
-            <p className="mt-0.5 text-xs text-[var(--brand-muted)]">Instant top-up · up to $500 / wallet</p>
+            <p className="mt-0.5 text-xs text-[var(--brand-muted)]">Instant top-up · up to 1M NIM / wallet</p>
           </div>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--brand-gold)] text-[var(--brand-ink)]">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-4 w-4" aria-hidden>
@@ -1462,29 +1773,27 @@ function WalletCard({
 }
 
 interface FaucetQuote {
-  dripNim: number;
-  maxUsd: number;
-  nimUsdPrice: number | null;
+  presets: number[];
+  defaultNim: number;
+  maxNim: number;
   balanceNim: number | null;
-  balanceUsd: number | null;
-  remainingUsd: number | null;
   remainingNim: number | null;
+  requestedNim: number;
   amountNim: number;
-  amountUsd: number | null;
   canRequest: boolean;
   capped: boolean;
   reachable: boolean;
 }
 
-function formatUsd(n: number | null | undefined): string {
+function formatNim(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
-  if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return n.toLocaleString();
 }
 
+const FAUCET_PRESETS_UI = [100, 500, 1000, 5000, 10_000];
+
 /**
- * Bottom-sheet faucet flow: load quote → confirm drip → brief success.
- * Solid opaque panel (not glass) so home content never bleeds through in Telegram WebViews.
+ * Bottom-sheet faucet flow: pick amount → confirm → success with balance count-up.
  */
 function FaucetModal({
   api,
@@ -1493,29 +1802,44 @@ function FaucetModal({
 }: {
   api: (path: string, init?: RequestInit) => Promise<unknown>;
   onClose: () => void;
-  onSuccess: (message: string) => void;
+  onSuccess: (detail: { from: number; to: number }) => void;
 }) {
   const [quote, setQuote] = useState<FaucetQuote | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "sending" | "done" | "error">("loading");
   const [error, setError] = useState("");
-  const [sent, setSent] = useState<{ nim: number; usd: number | null } | null>(null);
+  const [selectedNim, setSelectedNim] = useState(500);
+  const [customNim, setCustomNim] = useState("");
+  const [sent, setSent] = useState<{ nim: number; from: number; to: number } | null>(null);
 
-  const loadQuote = useCallback(async () => {
-    setPhase("loading");
-    setError("");
-    try {
-      const q = (await api("/api/studio/faucet")) as FaucetQuote;
-      setQuote(q);
-      setPhase("ready");
-    } catch (e) {
-      setError((e as Error).message || "Couldn't load faucet details.");
-      setPhase("error");
-    }
-  }, [api]);
+  const loadQuote = useCallback(
+    async (amountNim: number, opts?: { silent?: boolean }) => {
+      if (!opts?.silent) {
+        setPhase("loading");
+        setError("");
+      }
+      try {
+        const q = (await api(`/api/studio/faucet?amountNim=${amountNim}`)) as FaucetQuote;
+        setQuote(q);
+        setPhase((p) => (p === "sending" || p === "done" ? p : "ready"));
+      } catch (e) {
+        if (!opts?.silent) {
+          setError((e as Error).message || "Couldn't load faucet details.");
+          setPhase("error");
+        }
+      }
+    },
+    [api],
+  );
 
   useEffect(() => {
-    void loadQuote();
-  }, [loadQuote]);
+    void loadQuote(selectedNim);
+  }, [selectedNim, loadQuote]);
+
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const id = window.setInterval(() => void loadQuote(selectedNim, { silent: true }), 4000);
+    return () => window.clearInterval(id);
+  }, [phase, selectedNim, loadQuote]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -1536,38 +1860,58 @@ function FaucetModal({
   useEffect(() => {
     if (phase !== "done" || !sent) return;
     const t = window.setTimeout(() => {
-      const usd = sent.usd != null ? ` (~${formatUsd(sent.usd)})` : "";
-      onSuccess(`${sent.nim.toLocaleString()} NIM${usd} is on the way.`);
-    }, 1100);
+      onSuccess({ from: sent.from, to: sent.to });
+    }, 1400);
     return () => window.clearTimeout(t);
   }, [phase, sent, onSuccess]);
+
+  const pickPreset = (n: number) => {
+    setSelectedNim(n);
+    setCustomNim("");
+  };
+
+  const applyCustom = () => {
+    const n = Math.floor(Number(customNim));
+    if (!Number.isFinite(n) || n <= 0) {
+      setError("Enter a positive NIM amount.");
+      return;
+    }
+    setError("");
+    setSelectedNim(n);
+  };
 
   const request = async () => {
     if (!quote?.canRequest || phase === "sending") return;
     setPhase("sending");
     setError("");
     try {
-      const result = (await api("/api/studio/faucet", { method: "POST" })) as {
+      const result = (await api("/api/studio/faucet", {
+        method: "POST",
+        body: JSON.stringify({ amountNim: quote.amountNim }),
+      })) as {
         amountNim?: number;
-        amountUsd?: number | null;
+        balanceBeforeNim?: number | null;
+        balanceAfterNim?: number | null;
       };
-      setSent({
-        nim: result.amountNim ?? quote.amountNim,
-        usd: result.amountUsd ?? quote.amountUsd,
-      });
+      const nim = result.amountNim ?? quote.amountNim;
+      const from = result.balanceBeforeNim ?? quote.balanceNim ?? 0;
+      const to = result.balanceAfterNim ?? from + nim;
+      setSent({ nim, from, to });
       setPhase("done");
     } catch (e) {
       setError((e as Error).message);
       setPhase("ready");
+      void loadQuote(selectedNim, { silent: true });
     }
   };
 
   const usedPct =
-    quote?.balanceUsd != null && quote.maxUsd > 0
-      ? Math.min(100, Math.max(0, (quote.balanceUsd / quote.maxUsd) * 100))
+    quote?.balanceNim != null && quote.maxNim > 0
+      ? Math.min(100, Math.max(0, (quote.balanceNim / quote.maxNim) * 100))
       : 0;
   const canSend = phase === "ready" && Boolean(quote?.canRequest);
   const dismissable = phase !== "sending" && phase !== "done";
+  const presets = quote?.presets ?? FAUCET_PRESETS_UI;
 
   return (
     <div
@@ -1598,10 +1942,16 @@ function FaucetModal({
                 +{sent.nim.toLocaleString()}{" "}
                 <span className="text-base font-semibold text-[var(--brand-muted)]">NIM</span>
               </p>
-              {sent.usd != null && (
-                <p className="mt-1 text-sm text-[var(--brand-muted)]">≈ {formatUsd(sent.usd)}</p>
-              )}
-              <p className="mt-3 text-xs text-[var(--brand-muted)]">Arriving on-chain in a few seconds…</p>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-4">
+                <p className="text-xs text-[var(--brand-muted)]">New balance</p>
+                <AnimatedNimBalance
+                  value={sent.to}
+                  bump={{ from: sent.from, to: sent.to }}
+                  size="md"
+                  className="mt-1 justify-center"
+                />
+              </div>
+              <p className="mt-3 text-xs text-[var(--brand-muted)]">Confirming on-chain…</p>
             </div>
           ) : (
             <>
@@ -1614,7 +1964,7 @@ function FaucetModal({
                     Top up your wallet
                   </h3>
                   <p className="mt-1 text-sm text-[var(--brand-muted)]">
-                    Free NIM for publishing quests on testnet.
+                    Cap: {formatNim(quote?.maxNim ?? 1_000_000)} NIM per wallet
                   </p>
                 </div>
                 {dismissable && (
@@ -1636,10 +1986,8 @@ function FaucetModal({
                   <div className="rounded-2xl bg-[var(--brand-navy-900)] px-4 py-5 text-center">
                     <div className="mx-auto h-3 w-20 animate-pulse rounded bg-white/10" />
                     <div className="mx-auto mt-3 h-9 w-36 animate-pulse rounded-lg bg-white/10" />
-                    <div className="mx-auto mt-2 h-3 w-16 animate-pulse rounded bg-white/10" />
                   </div>
                   <div className="h-2 animate-pulse rounded-full bg-white/10" />
-                  <div className="h-11 animate-pulse rounded-full bg-white/10" />
                 </div>
               )}
 
@@ -1648,7 +1996,7 @@ function FaucetModal({
                   <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
                     {error}
                   </p>
-                  <button type="button" onClick={() => void loadQuote()} className={`${primaryBtn} w-full`}>
+                  <button type="button" onClick={() => void loadQuote(selectedNim)} className={`${primaryBtn} w-full`}>
                     Try again
                   </button>
                 </div>
@@ -1656,22 +2004,69 @@ function FaucetModal({
 
               {quote && (phase === "ready" || phase === "sending") && (
                 <>
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-5 text-center">
+                  <div className="mt-5">
+                    <p className="text-xs font-medium text-[var(--brand-muted)]">Choose amount</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {presets.map((n) => {
+                        const on = selectedNim === n && !customNim;
+                        const disabled = quote.remainingNim != null && n > quote.remainingNim;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => pickPreset(n)}
+                            className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:opacity-40 ${
+                              on
+                                ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
+                                : "border border-white/10 text-white hover:border-white/25"
+                            }`}
+                          >
+                            {n.toLocaleString()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        placeholder="Custom amount"
+                        value={customNim}
+                        onChange={(e) => setCustomNim(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && applyCustom()}
+                        className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[var(--brand-navy-900)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-gold)] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={applyCustom}
+                        className="shrink-0 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-white/25"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-5 text-center">
                     <p className="text-xs font-medium text-[var(--brand-muted)]">You&apos;ll receive</p>
                     <p className="mt-1 text-4xl font-bold tracking-tight text-white">
                       <span className="text-gradient-gold">{quote.amountNim.toLocaleString()}</span>
                       <span className="ml-1.5 text-base font-semibold text-[var(--brand-muted)]">NIM</span>
                     </p>
-                    <p className="mt-1 text-sm text-[var(--brand-muted)]">
-                      {quote.amountUsd != null ? `≈ ${formatUsd(quote.amountUsd)}` : "USD quote unavailable"}
-                    </p>
+                    {quote.balanceNim != null && (
+                      <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                        Balance: {formatNim(quote.balanceNim)} →{" "}
+                        {formatNim(quote.balanceNim + quote.amountNim)} NIM
+                      </p>
+                    )}
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)]/60 px-4 py-3.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[var(--brand-muted)]">Faucet allowance</span>
+                      <span className="text-[var(--brand-muted)]">Faucet allowance used</span>
                       <span className="font-medium text-white">
-                        {formatUsd(quote.balanceUsd)} / {formatUsd(quote.maxUsd)}
+                        {formatNim(quote.balanceNim)} / {formatNim(quote.maxNim)} NIM
                       </span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
@@ -1684,16 +2079,9 @@ function FaucetModal({
                     </div>
                     <p className="mt-2 text-xs text-[var(--brand-muted)]">
                       {quote.capped
-                        ? `This wallet has hit the $${quote.maxUsd.toLocaleString()} cap.`
-                        : quote.remainingUsd != null
-                          ? `${formatUsd(quote.remainingUsd)} left before the per-wallet cap.`
-                          : `Per-wallet cap is $${quote.maxUsd.toLocaleString()} (price check pending).`}
+                        ? `This wallet has hit the ${formatNim(quote.maxNim)} NIM cap.`
+                        : `${formatNim(quote.remainingNim)} NIM left before the cap.`}
                     </p>
-                    {quote.balanceNim != null && (
-                      <p className="mt-1 text-xs text-[var(--brand-muted)]">
-                        Current balance: {quote.balanceNim.toLocaleString()} NIM
-                      </p>
-                    )}
                   </div>
 
                   {error && (

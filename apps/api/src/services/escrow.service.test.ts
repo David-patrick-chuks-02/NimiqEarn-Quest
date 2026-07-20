@@ -34,6 +34,12 @@ describe("escrow service", () => {
     expect(funding).toMatchObject({ reachable: false, funded: false, balanceLuna: null });
   });
 
+  it("can check funding with only an RPC URL (no encryption key)", () => {
+    const escrow = createEscrowService({ rpcUrl: "https://rpc.testnet.nimiqwatch.com/" });
+    expect(escrow.enabled).toBe(false);
+    expect(escrow.canCheckFunding).toBe(true);
+  });
+
   it("cannot decrypt a key from a different secret", () => {
     const a = createEscrowService({ encryptionKey: "secret-a" });
     const b = createEscrowService({ encryptionKey: "secret-b" });

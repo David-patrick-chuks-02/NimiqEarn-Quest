@@ -43,9 +43,10 @@ export function createEscrowService(config: EscrowConfig) {
   const networkId = networkIdFor(config.network);
 
   return {
-    /** Escrow provisioning requires an encryption key; funding checks also need an RPC node. */
+    /** Escrow provisioning requires an encryption key. */
     enabled: box.enabled,
-    canCheckFunding: box.enabled && Boolean(rpcUrl),
+    /** Balance / funding reads only need an RPC node — not the encryption key. */
+    canCheckFunding: Boolean(rpcUrl),
 
     /**
      * Move `valueLuna` from a wallet we hold (its encrypted key) to `toAddress`, on-chain.

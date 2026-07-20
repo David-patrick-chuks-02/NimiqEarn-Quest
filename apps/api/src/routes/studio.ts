@@ -109,62 +109,51 @@ async function loadFaucetPrivateKey(): Promise<string | null> {
   return null;
 }
 
-/** Fixed drip size per faucet request (testnet DevTool). */
-const FAUCET_DRIP_NIM = 500;
-/** Lifetime ceiling: a wallet may not hold more than this USD-value of NIM via faucet top-ups. */
-const FAUCET_MAX_USD = 500;
+/** Suggested one-tap amounts in the faucet modal (testnet). */
+const FAUCET_PRESETS = [100, 500, 1000, 5000, 10_000] as const;
+/** Default selection when opening the faucet sheet. */
+const FAUCET_DEFAULT_NIM = 500;
+/** Per-wallet ceiling in NIM (balance-based; no USD / price feed). */
+const FAUCET_MAX_NIM = 1_000_000;
 const LUNA_PER_NIM = 100_000;
 
-function roundUsd(n: number): number {
-  return Math.round(n * 100) / 100;
+function parseRequestedFaucetNim(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.floor(n);
 }
 
 /**
  * Build a faucet quote for the modal + POST enforcement: how much we'll send, current
- * balance, and remaining headroom under the $500 / wallet cap.
+ * balance, and remaining headroom under the 1M NIM / wallet cap.
  */
-async function buildFaucetQuote(address: string, rpcUrl: string) {
+async function buildFaucetQuote(address: string, rpcUrl: string, requestedNim?: number) {
   const nimiqCore = await import("@nimiqearn/nimiq");
-  const { getNimUsdPrice } = await import("../services/price.js");
-  const [account, nimUsdPrice] = await Promise.all([
-    nimiqCore.fetchNimiqAccount(rpcUrl, address),
-    getNimUsdPrice(),
-  ]);
+  const account = await nimiqCore.fetchNimiqAccount(rpcUrl, address);
 
   const balanceNim = account.balanceNim;
-  const balanceUsd =
-    balanceNim !== null && nimUsdPrice !== null ? roundUsd(balanceNim * nimUsdPrice) : null;
-  const remainingUsd =
-    balanceUsd !== null ? Math.max(0, roundUsd(FAUCET_MAX_USD - balanceUsd)) : null;
   const remainingNim =
-    remainingUsd !== null && nimUsdPrice !== null && nimUsdPrice > 0
-      ? Math.floor(remainingUsd / nimUsdPrice)
-      : null;
+    balanceNim !== null ? Math.max(0, Math.floor(FAUCET_MAX_NIM - balanceNim)) : null;
 
+  const want = requestedNim ?? FAUCET_DEFAULT_NIM;
   let amountNim = 0;
-  if (remainingNim !== null) {
-    if (remainingNim > 0) amountNim = Math.min(FAUCET_DRIP_NIM, remainingNim);
-  } else if (account.reachable) {
-    // Price unavailable — still allow the fixed drip on testnet (cap enforced when price returns).
-    amountNim = FAUCET_DRIP_NIM;
+  if (remainingNim !== null && remainingNim > 0) {
+    amountNim = Math.min(Math.max(1, Math.floor(want)), remainingNim);
   }
-  const amountUsd =
-    amountNim > 0 && nimUsdPrice !== null ? roundUsd(amountNim * nimUsdPrice) : null;
 
   return {
     address,
-    dripNim: FAUCET_DRIP_NIM,
-    maxUsd: FAUCET_MAX_USD,
-    nimUsdPrice,
+    presets: [...FAUCET_PRESETS],
+    defaultNim: FAUCET_DEFAULT_NIM,
+    maxNim: FAUCET_MAX_NIM,
     balanceNim,
-    balanceUsd,
-    remainingUsd,
     remainingNim,
+    requestedNim: want,
     amountNim,
-    amountUsd,
     reachable: account.reachable,
     canRequest: account.reachable && amountNim > 0,
-    capped: remainingUsd !== null && remainingUsd <= 0,
+    capped: remainingNim !== null && remainingNim <= 0,
   };
 }
 
@@ -241,15 +230,27 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       if (!wallet) {
         return { hasWallet: false, address: null, balanceNim: null, reachable: false };
       }
-      if (!opts.escrow?.canCheckFunding) {
-        return { hasWallet: true, address: wallet.nimiqAddress, balanceNim: null, reachable: false };
+
+      // Prefer escrow helper when it can talk to RPC; otherwise hit RPC directly so Studio
+      // still shows a balance even if escrow encryption isn't configured.
+      if (opts.escrow?.canCheckFunding) {
+        const funding = await opts.escrow.getFunding(wallet.nimiqAddress, 0);
+        return {
+          hasWallet: true,
+          address: wallet.nimiqAddress,
+          balanceNim: funding.balanceNim,
+          reachable: funding.reachable,
+        };
       }
-      const funding = await opts.escrow.getFunding(wallet.nimiqAddress, 0);
+
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      const nimiqCore = await import("@nimiqearn/nimiq");
+      const account = await nimiqCore.fetchNimiqAccount(rpcUrl, wallet.nimiqAddress);
       return {
         hasWallet: true,
         address: wallet.nimiqAddress,
-        balanceNim: funding.balanceNim,
-        reachable: funding.reachable,
+        balanceNim: account.balanceNim,
+        reachable: account.reachable,
       };
     } catch (error) {
       return sendStudioError(reply, error);
@@ -375,8 +376,8 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     },
   );
 
-  // DevTool Faucet quote — powers the confirm modal (amount, USD, remaining $500 cap).
-  app.get("/api/studio/faucet", async (request, reply) => {
+  // DevTool Faucet quote — powers the confirm modal (amount + remaining 1M NIM cap).
+  app.get<{ Querystring: { amountNim?: string } }>("/api/studio/faucet", async (request, reply) => {
     try {
       if (opts.network !== "testnet") {
         return reply.code(400).send({ error: "Faucet is only available on testnet." });
@@ -392,15 +393,16 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       }
 
       const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
-      return await buildFaucetQuote(wallet.nimiqAddress, rpcUrl);
+      const requested = parseRequestedFaucetNim(request.query.amountNim);
+      return await buildFaucetQuote(wallet.nimiqAddress, rpcUrl, requested);
     } catch (error) {
       return sendStudioError(reply, error);
     }
   });
 
   // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet.
-  // Caps wallet balance at $500 USD-value of NIM (CoinGecko price).
-  app.post("/api/studio/faucet", async (request, reply) => {
+  // Caps wallet balance at 1,000,000 NIM. Body: { amountNim?: number }.
+  app.post<{ Body: { amountNim?: number } }>("/api/studio/faucet", async (request, reply) => {
     try {
       if (opts.network !== "testnet") {
         return reply.code(400).send({ error: "Faucet is only available on testnet." });
@@ -424,7 +426,8 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
 
       const nimiqCore = await import("@nimiqearn/nimiq");
       const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
-      const quote = await buildFaucetQuote(wallet.nimiqAddress, rpcUrl);
+      const requested = parseRequestedFaucetNim(request.body?.amountNim);
+      const quote = await buildFaucetQuote(wallet.nimiqAddress, rpcUrl, requested);
 
       if (!quote.reachable) {
         return reply
@@ -433,7 +436,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       }
       if (quote.capped || quote.amountNim <= 0) {
         return reply.code(400).send({
-          error: `This wallet has reached the faucet cap of $${FAUCET_MAX_USD} USD in NIM.`,
+          error: `This wallet has reached the faucet cap of ${FAUCET_MAX_NIM.toLocaleString()} NIM.`,
           quote,
         });
       }
@@ -460,7 +463,9 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         ok: true,
         hash: result.hash,
         amountNim: quote.amountNim,
-        amountUsd: quote.amountUsd,
+        balanceBeforeNim: quote.balanceNim,
+        balanceAfterNim:
+          quote.balanceNim !== null ? quote.balanceNim + quote.amountNim : null,
         quote,
       };
     } catch (error) {

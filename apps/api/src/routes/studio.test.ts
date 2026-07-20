@@ -38,14 +38,6 @@ vi.mock("@nimiqearn/nimiq", () => ({
   networkIdFor: vi.fn().mockReturnValue(1),
 }));
 
-const { getNimUsdPrice } = vi.hoisted(() => ({
-  getNimUsdPrice: vi.fn(),
-}));
-
-vi.mock("../services/price.js", () => ({
-  getNimUsdPrice,
-}));
-
 describe("studio routes", () => {
   beforeEach(() => {
     process.env.DATABASE_URL ??= "postgresql://nimiqearn:nimiqearn@localhost:5432/nimiqearn";
@@ -62,14 +54,13 @@ describe("studio routes", () => {
     buildBasicTransaction.mockReset();
     sendRawTransaction.mockReset();
     fetchNimiqAccount.mockReset();
-    getNimUsdPrice.mockReset();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("GET /api/studio/faucet returns quote with USD values", async () => {
+  it("GET /api/studio/faucet returns quote with NIM cap values", async () => {
     verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
     findUnique.mockResolvedValue({
       id: "user-1",
@@ -86,30 +77,29 @@ describe("studio routes", () => {
       balanceLuna: 0,
       balanceNim: 0,
     });
-    getNimUsdPrice.mockResolvedValue(0.001);
 
     const { app } = await buildServer();
     const response = await app.inject({
       method: "GET",
-      url: "/api/studio/faucet",
+      url: "/api/studio/faucet?amountNim=1000",
       headers: { "x-telegram-init-data": "mock-init-data" },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      dripNim: 500,
-      maxUsd: 500,
-      amountNim: 500,
-      amountUsd: 0.5,
+      presets: [100, 500, 1000, 5000, 10_000],
+      maxNim: 1_000_000,
+      amountNim: 1000,
+      requestedNim: 1000,
       balanceNim: 0,
-      balanceUsd: 0,
+      remainingNim: 1_000_000,
       canRequest: true,
       capped: false,
     });
     await app.close();
   });
 
-  it("POST /api/studio/faucet dispenses NIM to creator wallet", async () => {
+  it("POST /api/studio/faucet dispenses requested NIM to creator wallet", async () => {
     verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
 
     findUnique.mockResolvedValue({
@@ -128,7 +118,6 @@ describe("studio routes", () => {
       balanceLuna: 0,
       balanceNim: 0,
     });
-    getNimUsdPrice.mockResolvedValue(0.001);
     getRpcBlockNumber.mockResolvedValue(12345);
     buildBasicTransaction.mockReturnValue({ hex: "mock-tx-hex" });
     sendRawTransaction.mockResolvedValue({ hash: "mock-tx-hash" });
@@ -139,21 +128,24 @@ describe("studio routes", () => {
       url: "/api/studio/faucet",
       headers: {
         "x-telegram-init-data": "mock-init-data",
+        "content-type": "application/json",
       },
+      payload: { amountNim: 1000 },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       ok: true,
       hash: "mock-tx-hash",
-      amountNim: 500,
-      amountUsd: 0.5,
+      amountNim: 1000,
+      balanceBeforeNim: 0,
+      balanceAfterNim: 1000,
     });
 
     expect(buildBasicTransaction).toHaveBeenCalledWith({
       privateKeyHex: "dummy-private-key",
       recipient: "NQ00 TEST ADDRESS",
-      valueLuna: 500n * 100000n,
+      valueLuna: 1000n * 100000n,
       validityStartHeight: 12345,
       networkId: 1,
     });
@@ -161,7 +153,7 @@ describe("studio routes", () => {
     await app.close();
   });
 
-  it("POST /api/studio/faucet rejects wallets at the $500 USD cap", async () => {
+  it("POST /api/studio/faucet rejects wallets at the 1M NIM cap", async () => {
     verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
     findUnique.mockResolvedValue({
       id: "user-1",
@@ -173,19 +165,21 @@ describe("studio routes", () => {
         },
       ],
     });
-    // $500 at $0.001/NIM = 500_000 NIM
     fetchNimiqAccount.mockResolvedValue({
       reachable: true,
-      balanceLuna: 500_000 * 100_000,
-      balanceNim: 500_000,
+      balanceLuna: 1_000_000 * 100_000,
+      balanceNim: 1_000_000,
     });
-    getNimUsdPrice.mockResolvedValue(0.001);
 
     const { app } = await buildServer();
     const response = await app.inject({
       method: "POST",
       url: "/api/studio/faucet",
-      headers: { "x-telegram-init-data": "mock-init-data" },
+      headers: {
+        "x-telegram-init-data": "mock-init-data",
+        "content-type": "application/json",
+      },
+      payload: { amountNim: 500 },
     });
 
     expect(response.statusCode).toBe(400);
