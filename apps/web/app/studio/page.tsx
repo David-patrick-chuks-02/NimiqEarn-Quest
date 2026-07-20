@@ -1484,7 +1484,7 @@ function formatUsd(n: number | null | undefined): string {
 
 /**
  * Bottom-sheet faucet flow: load quote → confirm drip → brief success.
- * Owns its own request lifecycle so the sheet can animate states cleanly.
+ * Solid opaque panel (not glass) so home content never bleeds through in Telegram WebViews.
  */
 function FaucetModal({
   api,
@@ -1516,6 +1516,14 @@ function FaucetModal({
   useEffect(() => {
     void loadQuote();
   }, [loadQuote]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1563,156 +1571,192 @@ function FaucetModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 sm:items-center sm:px-5"
+      className="fixed inset-0 z-[100] flex flex-col justify-end bg-[var(--brand-navy-900)]/95 sm:items-center sm:justify-center sm:px-5"
       role="dialog"
       aria-modal="true"
       aria-labelledby="faucet-title"
       onClick={dismissable ? onClose : undefined}
     >
       <div
-        className="glass animate-slide-up w-full max-w-sm rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl"
+        className="animate-slide-up relative z-[101] flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[var(--brand-navy-800)] shadow-[0_-12px_40px_rgba(0,0,0,0.55)] sm:max-h-[85vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden />
+        <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-white/25 sm:hidden" aria-hidden />
 
-        {phase === "done" && sent ? (
-          <div className="py-6 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} className="h-7 w-7" aria-hidden>
-                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <h3 id="faucet-title" className="mt-4 text-lg font-bold text-white">
-              Sent!
-            </h3>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-[var(--brand-gold)]">
-              +{sent.nim.toLocaleString()}{" "}
-              <span className="text-base font-semibold text-[var(--brand-muted)]">NIM</span>
-            </p>
-            {sent.usd != null && (
-              <p className="mt-1 text-sm text-[var(--brand-muted)]">≈ {formatUsd(sent.usd)}</p>
-            )}
-            <p className="mt-3 text-xs text-[var(--brand-muted)]">Arriving on-chain in a few seconds…</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                  Testnet faucet
-                </p>
-                <h3 id="faucet-title" className="mt-1 text-lg font-bold text-white">
-                  Top up your wallet
-                </h3>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-2 pt-3">
+          {phase === "done" && sent ? (
+            <div className="py-8 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} className="h-7 w-7" aria-hidden>
+                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </div>
-              {dismissable && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Close"
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--brand-muted)] transition hover:bg-white/10 hover:text-white"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4" aria-hidden>
-                    <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-                  </svg>
-                </button>
+              <h3 id="faucet-title" className="mt-4 text-lg font-bold text-white">
+                Sent!
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight text-[var(--brand-gold)]">
+                +{sent.nim.toLocaleString()}{" "}
+                <span className="text-base font-semibold text-[var(--brand-muted)]">NIM</span>
+              </p>
+              {sent.usd != null && (
+                <p className="mt-1 text-sm text-[var(--brand-muted)]">≈ {formatUsd(sent.usd)}</p>
               )}
+              <p className="mt-3 text-xs text-[var(--brand-muted)]">Arriving on-chain in a few seconds…</p>
             </div>
-
-            {phase === "loading" && (
-              <div className="mt-5 space-y-4" aria-busy="true" aria-label="Loading faucet quote">
-                <div className="rounded-2xl bg-black/25 px-4 py-5 text-center">
-                  <div className="mx-auto h-3 w-20 animate-pulse rounded bg-white/10" />
-                  <div className="mx-auto mt-3 h-9 w-36 animate-pulse rounded-lg bg-white/10" />
-                  <div className="mx-auto mt-2 h-3 w-16 animate-pulse rounded bg-white/10" />
-                </div>
-                <div className="h-2 animate-pulse rounded-full bg-white/10" />
-                <div className="h-11 animate-pulse rounded-full bg-white/10" />
-              </div>
-            )}
-
-            {phase === "error" && (
-              <div className="mt-5 space-y-4">
-                <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
-                  {error}
-                </p>
-                <button type="button" onClick={() => void loadQuote()} className={`${primaryBtn} w-full`}>
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {quote && (phase === "ready" || phase === "sending") && (
-              <>
-                <div className="mt-5 rounded-2xl border border-white/8 bg-black/25 px-4 py-5 text-center">
-                  <p className="text-xs font-medium text-[var(--brand-muted)]">You&apos;ll receive</p>
-                  <p className="mt-1 text-4xl font-bold tracking-tight text-white">
-                    <span className="text-gradient-gold">{quote.amountNim.toLocaleString()}</span>
-                    <span className="ml-1.5 text-base font-semibold text-[var(--brand-muted)]">NIM</span>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                    Testnet faucet
                   </p>
+                  <h3 id="faucet-title" className="mt-1 text-lg font-bold text-white">
+                    Top up your wallet
+                  </h3>
                   <p className="mt-1 text-sm text-[var(--brand-muted)]">
-                    ≈ {formatUsd(quote.amountUsd)}
+                    Free NIM for publishing quests on testnet.
                   </p>
                 </div>
+                {dismissable && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-[var(--brand-muted)] transition hover:bg-white/10 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4" aria-hidden>
+                      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
 
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--brand-muted)]">Faucet allowance</span>
-                    <span className="font-medium text-white">
-                      {formatUsd(quote.balanceUsd)} / {formatUsd(quote.maxUsd)}
-                    </span>
+              {phase === "loading" && (
+                <div className="mt-5 space-y-4" aria-busy="true" aria-label="Loading faucet quote">
+                  <div className="rounded-2xl bg-[var(--brand-navy-900)] px-4 py-5 text-center">
+                    <div className="mx-auto h-3 w-20 animate-pulse rounded bg-white/10" />
+                    <div className="mx-auto mt-3 h-9 w-36 animate-pulse rounded-lg bg-white/10" />
+                    <div className="mx-auto mt-2 h-3 w-16 animate-pulse rounded bg-white/10" />
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        quote.capped ? "bg-amber-400" : "bg-[var(--brand-gold)]"
-                      }`}
-                      style={{ width: `${usedPct}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-[var(--brand-muted)]">
-                    {quote.capped
-                      ? `This wallet has hit the $${quote.maxUsd.toLocaleString()} cap.`
-                      : `${formatUsd(quote.remainingUsd)} left before the per-wallet cap.`}
-                  </p>
+                  <div className="h-2 animate-pulse rounded-full bg-white/10" />
+                  <div className="h-11 animate-pulse rounded-full bg-white/10" />
                 </div>
+              )}
 
-                {error && (
-                  <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+              {phase === "error" && (
+                <div className="mt-5 space-y-4">
+                  <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
                     {error}
                   </p>
-                )}
+                  <button type="button" onClick={() => void loadQuote()} className={`${primaryBtn} w-full`}>
+                    Try again
+                  </button>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => void request()}
-                  disabled={!canSend}
-                  className={`${primaryBtn} mt-5 w-full gap-2 disabled:opacity-50`}
-                >
-                  {phase === "sending" ? (
-                    <>
-                      <Spinner />
-                      Sending…
-                    </>
-                  ) : quote.capped ? (
-                    "Cap reached"
-                  ) : quote.canRequest ? (
-                    `Receive ${quote.amountNim.toLocaleString()} NIM`
-                  ) : (
-                    "Unavailable"
+              {quote && (phase === "ready" || phase === "sending") && (
+                <>
+                  <div className="mt-5 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-5 text-center">
+                    <p className="text-xs font-medium text-[var(--brand-muted)]">You&apos;ll receive</p>
+                    <p className="mt-1 text-4xl font-bold tracking-tight text-white">
+                      <span className="text-gradient-gold">{quote.amountNim.toLocaleString()}</span>
+                      <span className="ml-1.5 text-base font-semibold text-[var(--brand-muted)]">NIM</span>
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--brand-muted)]">
+                      {quote.amountUsd != null ? `≈ ${formatUsd(quote.amountUsd)}` : "USD quote unavailable"}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)]/60 px-4 py-3.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--brand-muted)]">Faucet allowance</span>
+                      <span className="font-medium text-white">
+                        {formatUsd(quote.balanceUsd)} / {formatUsd(quote.maxUsd)}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          quote.capped ? "bg-amber-400" : "bg-[var(--brand-gold)]"
+                        }`}
+                        style={{ width: `${usedPct}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                      {quote.capped
+                        ? `This wallet has hit the $${quote.maxUsd.toLocaleString()} cap.`
+                        : quote.remainingUsd != null
+                          ? `${formatUsd(quote.remainingUsd)} left before the per-wallet cap.`
+                          : `Per-wallet cap is $${quote.maxUsd.toLocaleString()} (price check pending).`}
+                    </p>
+                    {quote.balanceNim != null && (
+                      <p className="mt-1 text-xs text-[var(--brand-muted)]">
+                        Current balance: {quote.balanceNim.toLocaleString()} NIM
+                      </p>
+                    )}
+                  </div>
+
+                  {error && (
+                    <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+                      {error}
+                    </p>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={phase === "sending"}
-                  className="mt-2 w-full py-2 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white disabled:opacity-50"
-                >
-                  Not now
-                </button>
-              </>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {phase !== "done" && phase !== "loading" && phase !== "error" && quote && (
+          <div
+            className="shrink-0 border-t border-white/10 bg-[var(--brand-navy-800)] px-5 pt-3"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          >
+            <button
+              type="button"
+              onClick={() => void request()}
+              disabled={!canSend}
+              className={`${primaryBtn} w-full gap-2 disabled:opacity-50`}
+            >
+              {phase === "sending" ? (
+                <>
+                  <Spinner />
+                  Sending…
+                </>
+              ) : quote.capped ? (
+                "Cap reached"
+              ) : quote.canRequest ? (
+                `Receive ${quote.amountNim.toLocaleString()} NIM`
+              ) : (
+                "Unavailable"
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={phase === "sending"}
+              className="mt-1 w-full py-2.5 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white disabled:opacity-50"
+            >
+              Not now
+            </button>
+          </div>
+        )}
+
+        {(phase === "loading" || phase === "error") && (
+          <div
+            className="shrink-0 px-5"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          >
+            {phase === "error" ? null : (
+              <button
+                type="button"
+                onClick={onClose}
+                className="mb-1 w-full py-2.5 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
+              >
+                Not now
+              </button>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

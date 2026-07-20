@@ -142,8 +142,11 @@ async function buildFaucetQuote(address: string, rpcUrl: string) {
       : null;
 
   let amountNim = 0;
-  if (remainingNim !== null && remainingNim > 0) {
-    amountNim = Math.min(FAUCET_DRIP_NIM, remainingNim);
+  if (remainingNim !== null) {
+    if (remainingNim > 0) amountNim = Math.min(FAUCET_DRIP_NIM, remainingNim);
+  } else if (account.reachable) {
+    // Price unavailable — still allow the fixed drip on testnet (cap enforced when price returns).
+    amountNim = FAUCET_DRIP_NIM;
   }
   const amountUsd =
     amountNim > 0 && nimUsdPrice !== null ? roundUsd(amountNim * nimUsdPrice) : null;
@@ -160,7 +163,7 @@ async function buildFaucetQuote(address: string, rpcUrl: string) {
     amountNim,
     amountUsd,
     reachable: account.reachable,
-    canRequest: account.reachable && amountNim > 0 && nimUsdPrice !== null,
+    canRequest: account.reachable && amountNim > 0,
     capped: remainingUsd !== null && remainingUsd <= 0,
   };
 }
@@ -423,10 +426,10 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
       const quote = await buildFaucetQuote(wallet.nimiqAddress, rpcUrl);
 
-      if (!quote.reachable || quote.nimUsdPrice === null) {
+      if (!quote.reachable) {
         return reply
           .code(503)
-          .send({ error: "Couldn't check balance or NIM price. Please try again shortly." });
+          .send({ error: "Couldn't check wallet balance. Please try again shortly." });
       }
       if (quote.capped || quote.amountNim <= 0) {
         return reply.code(400).send({
