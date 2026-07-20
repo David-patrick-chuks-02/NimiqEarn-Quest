@@ -71,6 +71,101 @@ function readInitData(request: FastifyRequest): string | null {
 }
 
 /**
+ * Resolve the faucet funding key. Prefer FAUCET_ADMIN_PRIVATE_KEY; otherwise walk up
+ * from cwd and this module looking for repo-root `admin-wallet.json` (pnpm runs the API
+ * with cwd=apps/api, so a plain relative read misses the file).
+ */
+async function loadFaucetPrivateKey(): Promise<string | null> {
+  const fromEnv = process.env.FAUCET_ADMIN_PRIVATE_KEY?.trim();
+  if (fromEnv) return fromEnv;
+
+  const { existsSync } = await import("node:fs");
+  const { readFile } = await import("node:fs/promises");
+  const { dirname, resolve } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const candidates = new Set<string>();
+  for (const start of [process.cwd(), dirname(fileURLToPath(import.meta.url))]) {
+    let dir = start;
+    while (true) {
+      candidates.add(resolve(dir, "admin-wallet.json"));
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    try {
+      const parsed = JSON.parse(await readFile(path, "utf-8")) as { privateKeyHex?: unknown };
+      if (typeof parsed.privateKeyHex === "string" && parsed.privateKeyHex.length > 0) {
+        return parsed.privateKeyHex;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+/** Fixed drip size per faucet request (testnet DevTool). */
+const FAUCET_DRIP_NIM = 500;
+/** Lifetime ceiling: a wallet may not hold more than this USD-value of NIM via faucet top-ups. */
+const FAUCET_MAX_USD = 1000;
+const LUNA_PER_NIM = 100_000;
+
+function roundUsd(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Build a faucet quote for the modal + POST enforcement: how much we'll send, current
+ * balance, and remaining headroom under the $1000 / wallet cap.
+ */
+async function buildFaucetQuote(address: string, rpcUrl: string) {
+  const nimiqCore = await import("@nimiqearn/nimiq");
+  const { getNimUsdPrice } = await import("../services/price.js");
+  const [account, nimUsdPrice] = await Promise.all([
+    nimiqCore.fetchNimiqAccount(rpcUrl, address),
+    getNimUsdPrice(),
+  ]);
+
+  const balanceNim = account.balanceNim;
+  const balanceUsd =
+    balanceNim !== null && nimUsdPrice !== null ? roundUsd(balanceNim * nimUsdPrice) : null;
+  const remainingUsd =
+    balanceUsd !== null ? Math.max(0, roundUsd(FAUCET_MAX_USD - balanceUsd)) : null;
+  const remainingNim =
+    remainingUsd !== null && nimUsdPrice !== null && nimUsdPrice > 0
+      ? Math.floor(remainingUsd / nimUsdPrice)
+      : null;
+
+  let amountNim = 0;
+  if (remainingNim !== null && remainingNim > 0) {
+    amountNim = Math.min(FAUCET_DRIP_NIM, remainingNim);
+  }
+  const amountUsd =
+    amountNim > 0 && nimUsdPrice !== null ? roundUsd(amountNim * nimUsdPrice) : null;
+
+  return {
+    address,
+    dripNim: FAUCET_DRIP_NIM,
+    maxUsd: FAUCET_MAX_USD,
+    nimUsdPrice,
+    balanceNim,
+    balanceUsd,
+    remainingUsd,
+    remainingNim,
+    amountNim,
+    amountUsd,
+    reachable: account.reachable,
+    canRequest: account.reachable && amountNim > 0 && nimUsdPrice !== null,
+    capped: remainingUsd !== null && remainingUsd <= 0,
+  };
+}
+
+/**
  * Creator Studio API — the Telegram Mini App backend. Every route authenticates with
  * verified Mini App initData (not the bot↔API shared secret), so it's exempt from that
  * gate in app.ts. All actions reuse the same quest/creator services as the bot.
@@ -277,7 +372,31 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     },
   );
 
-  // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet
+  // DevTool Faucet quote — powers the confirm modal (amount, USD, remaining $1000 cap).
+  app.get("/api/studio/faucet", async (request, reply) => {
+    try {
+      if (opts.network !== "testnet") {
+        return reply.code(400).send({ error: "Faucet is only available on testnet." });
+      }
+
+      const user = await app.db.user.findUnique({
+        where: { telegramId: telegramId(request) },
+        include: { walletProfiles: true },
+      });
+      const wallet = user?.walletProfiles.find((w) => w.keyCiphertext) ?? null;
+      if (!wallet?.nimiqAddress) {
+        return reply.code(400).send({ error: "No custodial wallet found to fund." });
+      }
+
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      return await buildFaucetQuote(wallet.nimiqAddress, rpcUrl);
+    } catch (error) {
+      return sendStudioError(reply, error);
+    }
+  });
+
+  // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet.
+  // Caps wallet balance at $1000 USD-value of NIM (CoinGecko price).
   app.post("/api/studio/faucet", async (request, reply) => {
     try {
       if (opts.network !== "testnet") {
@@ -293,31 +412,38 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         return reply.code(400).send({ error: "No custodial wallet found to fund." });
       }
 
-      let privateKeyHex = process.env.FAUCET_ADMIN_PRIVATE_KEY;
-      
-      // Fallback for local development if it's not yet in .env
+      const privateKeyHex = await loadFaucetPrivateKey();
       if (!privateKeyHex) {
-        try {
-          const fs = await import("fs/promises");
-          const adminWalletJson = await fs.readFile("admin-wallet.json", "utf-8");
-          privateKeyHex = JSON.parse(adminWalletJson).privateKeyHex;
-        } catch (e) {
-          return reply.code(500).send({ error: "Admin test wallet not configured. Please set FAUCET_ADMIN_PRIVATE_KEY." });
-        }
+        return reply.code(500).send({
+          error: "Admin test wallet not configured. Please set FAUCET_ADMIN_PRIVATE_KEY.",
+        });
       }
 
       const nimiqCore = await import("@nimiqearn/nimiq");
       const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
-      
+      const quote = await buildFaucetQuote(wallet.nimiqAddress, rpcUrl);
+
+      if (!quote.reachable || quote.nimUsdPrice === null) {
+        return reply
+          .code(503)
+          .send({ error: "Couldn't check balance or NIM price. Please try again shortly." });
+      }
+      if (quote.capped || quote.amountNim <= 0) {
+        return reply.code(400).send({
+          error: `This wallet has reached the faucet cap of $${FAUCET_MAX_USD} USD in NIM.`,
+          quote,
+        });
+      }
+
       const blockNumber = await nimiqCore.getRpcBlockNumber(rpcUrl);
       if (!blockNumber) {
         return reply.code(500).send({ error: "Failed to get block number from RPC." });
       }
 
       const tx = nimiqCore.buildBasicTransaction({
-        privateKeyHex: privateKeyHex!,
+        privateKeyHex,
         recipient: wallet.nimiqAddress,
-        valueLuna: 500n * 100000n, // 500 NIM
+        valueLuna: BigInt(quote.amountNim) * BigInt(LUNA_PER_NIM),
         validityStartHeight: blockNumber,
         networkId: nimiqCore.networkIdFor("testnet"),
       });
@@ -327,7 +453,13 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         return reply.code(500).send({ error: result.error });
       }
 
-      return { ok: true, hash: result.hash };
+      return {
+        ok: true,
+        hash: result.hash,
+        amountNim: quote.amountNim,
+        amountUsd: quote.amountUsd,
+        quote,
+      };
     } catch (error) {
       return sendStudioError(reply, error);
     }

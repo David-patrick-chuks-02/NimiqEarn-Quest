@@ -132,4 +132,22 @@ h3 {
   html {
     scroll-behavior: auto;
   }
+  .animate-slide-up {
+    animation: none;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.28s ease-out both;
 }

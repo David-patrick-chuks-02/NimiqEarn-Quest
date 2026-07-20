@@ -18,17 +18,32 @@ vi.mock("../telegram-auth.js", () => ({
   verifyInitData: verifyInitDataMock,
 }));
 
-const { getRpcBlockNumber, buildBasicTransaction, sendRawTransaction } = vi.hoisted(() => ({
+const {
+  getRpcBlockNumber,
+  buildBasicTransaction,
+  sendRawTransaction,
+  fetchNimiqAccount,
+} = vi.hoisted(() => ({
   getRpcBlockNumber: vi.fn(),
   buildBasicTransaction: vi.fn(),
   sendRawTransaction: vi.fn(),
+  fetchNimiqAccount: vi.fn(),
 }));
 
 vi.mock("@nimiqearn/nimiq", () => ({
   getRpcBlockNumber,
   buildBasicTransaction,
   sendRawTransaction,
+  fetchNimiqAccount,
   networkIdFor: vi.fn().mockReturnValue(1),
+}));
+
+const { getNimUsdPrice } = vi.hoisted(() => ({
+  getNimUsdPrice: vi.fn(),
+}));
+
+vi.mock("../services/price.js", () => ({
+  getNimUsdPrice,
 }));
 
 describe("studio routes", () => {
@@ -46,10 +61,52 @@ describe("studio routes", () => {
     getRpcBlockNumber.mockReset();
     buildBasicTransaction.mockReset();
     sendRawTransaction.mockReset();
+    fetchNimiqAccount.mockReset();
+    getNimUsdPrice.mockReset();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("GET /api/studio/faucet returns quote with USD values", async () => {
+    verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
+    findUnique.mockResolvedValue({
+      id: "user-1",
+      telegramId: "test-user-123",
+      walletProfiles: [
+        {
+          keyCiphertext: "mock-cipher",
+          nimiqAddress: "NQ00 TEST ADDRESS",
+        },
+      ],
+    });
+    fetchNimiqAccount.mockResolvedValue({
+      reachable: true,
+      balanceLuna: 0,
+      balanceNim: 0,
+    });
+    getNimUsdPrice.mockResolvedValue(0.001);
+
+    const { app } = await buildServer();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/studio/faucet",
+      headers: { "x-telegram-init-data": "mock-init-data" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      dripNim: 500,
+      maxUsd: 1000,
+      amountNim: 500,
+      amountUsd: 0.5,
+      balanceNim: 0,
+      balanceUsd: 0,
+      canRequest: true,
+      capped: false,
+    });
+    await app.close();
   });
 
   it("POST /api/studio/faucet dispenses NIM to creator wallet", async () => {
@@ -66,6 +123,12 @@ describe("studio routes", () => {
       ],
     });
 
+    fetchNimiqAccount.mockResolvedValue({
+      reachable: true,
+      balanceLuna: 0,
+      balanceNim: 0,
+    });
+    getNimUsdPrice.mockResolvedValue(0.001);
     getRpcBlockNumber.mockResolvedValue(12345);
     buildBasicTransaction.mockReturnValue({ hex: "mock-tx-hex" });
     sendRawTransaction.mockResolvedValue({ hash: "mock-tx-hash" });
@@ -80,7 +143,12 @@ describe("studio routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true, hash: "mock-tx-hash" });
+    expect(response.json()).toMatchObject({
+      ok: true,
+      hash: "mock-tx-hash",
+      amountNim: 500,
+      amountUsd: 0.5,
+    });
 
     expect(buildBasicTransaction).toHaveBeenCalledWith({
       privateKeyHex: "dummy-private-key",
@@ -90,6 +158,39 @@ describe("studio routes", () => {
       networkId: 1,
     });
 
+    await app.close();
+  });
+
+  it("POST /api/studio/faucet rejects wallets at the $1000 USD cap", async () => {
+    verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
+    findUnique.mockResolvedValue({
+      id: "user-1",
+      telegramId: "test-user-123",
+      walletProfiles: [
+        {
+          keyCiphertext: "mock-cipher",
+          nimiqAddress: "NQ00 TEST ADDRESS",
+        },
+      ],
+    });
+    // $1000 at $0.001/NIM = 1_000_000 NIM
+    fetchNimiqAccount.mockResolvedValue({
+      reachable: true,
+      balanceLuna: 1_000_000 * 100_000,
+      balanceNim: 1_000_000,
+    });
+    getNimUsdPrice.mockResolvedValue(0.001);
+
+    const { app } = await buildServer();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/studio/faucet",
+      headers: { "x-telegram-init-data": "mock-init-data" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/faucet cap/i);
+    expect(buildBasicTransaction).not.toHaveBeenCalled();
     await app.close();
   });
 
