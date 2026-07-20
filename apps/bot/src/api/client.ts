@@ -50,6 +50,36 @@ export interface ApiUser {
   wallets: ApiWalletListItem[];
 }
 
+/** Render free-tier API services can return 502/503/504 while cold-starting. */
+async function fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  const idempotent = !init?.method || init.method.toUpperCase() === "GET";
+  const maxAttempts = idempotent ? 4 : 2;
+  let lastGatewayStatus = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await fetch(url, init);
+      if (
+        (response.status === 502 || response.status === 503 || response.status === 504) &&
+        attempt < maxAttempts - 1
+      ) {
+        lastGatewayStatus = response.status;
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (idempotent && attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(`API unavailable (${lastGatewayStatus || "network"})`);
+}
+
 export function createApiClient(baseUrl: string, sharedSecret?: string) {
   const normalizedBase = baseUrl.replace(/\/$/, "");
   const authHeaders: Record<string, string> = sharedSecret
@@ -59,7 +89,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
   return {
     async upsertUser(input: CreateUserInput): Promise<ApiUser> {
-      const response = await fetch(`${normalizedBase}/api/users/upsert`, {
+      const response = await fetchWithRetry(`${normalizedBase}/api/users/upsert`, {
         method: "POST",
         headers: jsonHeaders,
         body: JSON.stringify(input),
@@ -74,7 +104,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async getUserByTelegramId(telegramId: string): Promise<ApiUser | null> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}`,
         { headers: authHeaders },
       );
@@ -95,7 +125,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     async createCustodialWallet(
       telegramId: string,
     ): Promise<{ nimiqAddress: string; privateKey: string; created: boolean }> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/custodial`,
         { method: "POST", headers: authHeaders },
       );
@@ -121,7 +151,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       balanceUsd: number | null;
       reachable: boolean;
     } | null> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/balance`,
         { headers: authHeaders },
       );
@@ -136,7 +166,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     /** Whether the user has a secure-action password set. */
     async getSecurityStatus(telegramId: string): Promise<{ passwordSet: boolean }> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security`,
         { headers: authHeaders },
       );
@@ -151,7 +181,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       password: string,
       currentPassword?: string,
     ): Promise<void> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security/password`,
         { method: "POST", headers: jsonHeaders, body: JSON.stringify({ password, currentPassword }) },
       );
@@ -163,7 +193,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     /** Remove the secure-action password (requires the current one). */
     async clearSecurityPassword(telegramId: string, password: string): Promise<void> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/security/password`,
         { method: "DELETE", headers: jsonHeaders, body: JSON.stringify({ password }) },
       );
@@ -178,7 +208,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       telegramId: string,
       password?: string,
     ): Promise<{ nimiqAddress: string; privateKey: string }> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/export`,
         { method: "POST", headers: jsonHeaders, body: JSON.stringify({ password }) },
       );
@@ -194,7 +224,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     /** Update the user's preferred bot language. */
     async setLanguage(telegramId: string, code: string): Promise<void> {
-      await fetch(`${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/language`, {
+      await fetchWithRetry(`${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/language`, {
         method: "POST",
         headers: jsonHeaders,
         body: JSON.stringify({ code }),
@@ -208,7 +238,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       amount: number | "all",
       password?: string,
     ): Promise<{ hash: string; sentNim: number; recipient: string }> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/withdraw`,
         {
           method: "POST",
@@ -239,7 +269,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       // Sent with the shared secret (authHeaders) so the API personalizes the list.
       if (opts.telegramId) params.set("telegramId", opts.telegramId);
       const query = params.toString();
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/quests${query ? `?${query}` : ""}`,
         { headers: authHeaders },
       );
@@ -256,7 +286,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     /** A worker's submission history + total NIM earned. */
     async getWorkerSubmissions(telegramId: string): Promise<WorkerEarnings> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/submissions`,
         { headers: authHeaders },
       );
@@ -271,7 +301,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async getPublicQuest(questId: string): Promise<PublicQuest | null> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/quests/${encodeURIComponent(questId)}`,
         { headers: authHeaders },
       );
@@ -281,7 +311,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async registerCreator(telegramId: string): Promise<ApiUser> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/register`,
         { method: "POST", headers: authHeaders },
       );
@@ -296,7 +326,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async getCreatorDashboard(telegramId: string): Promise<CreatorDashboard> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/creator/dashboard`,
         { headers: authHeaders },
       );
@@ -315,7 +345,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async createQuest(telegramId: string, input: CreateQuestInput): Promise<ApiQuest> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests`,
         {
           method: "POST",
@@ -340,7 +370,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     ): Promise<ApiQuest> {
       const body: Record<string, unknown> = { ...input };
 
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}`,
         {
           method: "PATCH",
@@ -360,7 +390,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
 
     async listCreatorQuests(telegramId: string, status?: string): Promise<ApiQuest[]> {
       const query = status ? `?status=${encodeURIComponent(status)}` : "";
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests${query}`,
         { headers: authHeaders },
       );
@@ -375,7 +405,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
     },
 
     async publishQuest(telegramId: string, questId: string): Promise<ApiQuest> {
-      const response = await fetch(
+      const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests/${encodeURIComponent(questId)}/publish`,
         { method: "POST", headers: authHeaders },
       );

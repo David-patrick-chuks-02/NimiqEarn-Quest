@@ -4,6 +4,7 @@ import { createApiClient } from "./client.js";
 describe("createApiClient", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("upserts a user via POST /api/users/upsert", async () => {
@@ -49,6 +50,43 @@ describe("createApiClient", () => {
 
     expect(user).toBeNull();
   });
+
+  it(
+    "retries profile lookup while the API cold-starts",
+    async () => {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response("{}", { status: 502 }))
+        .mockResolvedValueOnce(new Response("{}", { status: 502 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              user: {
+                id: "uuid-1",
+                telegramId: "123",
+                telegramUsername: "worker",
+                displayName: "Worker",
+                role: "WORKER",
+                status: "ACTIVE",
+                reputationScore: 0,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                wallet: null,
+                wallets: [],
+              },
+            }),
+            { status: 200 },
+          ),
+        );
+
+      const client = createApiClient("http://localhost:3001");
+      const user = await client.getUserByTelegramId("123");
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(user?.telegramId).toBe("123");
+    },
+    10_000,
+  );
 
   it("throws on unexpected API errors", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 500 }));
