@@ -2,7 +2,7 @@
 
 import Script from "next/script";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsDetail, AnalyticsSkeleton, type Analytics } from "./_analytics";
 
 const CATEGORIES = [
@@ -532,6 +532,7 @@ export default function StudioPage() {
       {faucetOpen && (
         <FaucetModal
           api={api}
+          initialBalance={{ nim: balance.nim, reachable: balance.reachable }}
           onClose={() => setFaucetOpen(false)}
           onSuccess={onFaucetSuccess}
         />
@@ -1790,56 +1791,158 @@ function formatNim(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
-const FAUCET_PRESETS_UI = [100, 500, 1000, 5000, 10_000];
+/** Lightweight canvas confetti — no extra dependency. */
+function ConfettiBurst({ active }: { active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w;
+    canvas.height = h;
+
+    const colors = ["#F5C518", "#FFD966", "#34D399", "#60A5FA", "#F472B6", "#FFFFFF"];
+    const particles = Array.from({ length: 140 }, () => ({
+      x: w * (0.3 + Math.random() * 0.4),
+      y: h * 0.28 + (Math.random() - 0.5) * 40,
+      vx: (Math.random() - 0.5) * 10,
+      vy: Math.random() * -14 - 5,
+      w: Math.random() * 9 + 4,
+      h: Math.random() * 7 + 3,
+      rot: Math.random() * 360,
+      vr: (Math.random() - 0.5) * 12,
+      color: colors[Math.floor(Math.random() * colors.length)]!,
+      opacity: 1,
+    }));
+
+    let frame = 0;
+    const maxFrames = 130;
+    let raf = 0;
+
+    const tick = () => {
+      ctx.clearRect(0, 0, w, h);
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.28;
+        p.vx *= 0.985;
+        p.rot += p.vr;
+        if (frame > maxFrames * 0.55) p.opacity -= 0.025;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      frame++;
+      if (frame < maxFrames) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+
+  if (!active) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none fixed inset-0 z-[105]"
+      aria-hidden
+    />
+  );
+}
+
+const FAUCET_PRESETS_UI = [100, 500, 1000, 5000, 10_000] as const;
+const FAUCET_DEFAULT_NIM = 500;
+const FAUCET_MAX_NIM_UI = 1_000_000;
+
+function buildFaucetQuoteClient(
+  balanceNim: number | null,
+  reachable: boolean,
+  requestedNim: number,
+): FaucetQuote {
+  const remainingNim =
+    balanceNim !== null ? Math.max(0, Math.floor(FAUCET_MAX_NIM_UI - balanceNim)) : null;
+  const want = Math.max(1, Math.floor(requestedNim));
+  let amountNim = 0;
+  if (remainingNim !== null && remainingNim > 0) {
+    amountNim = Math.min(want, remainingNim);
+  }
+  return {
+    presets: [...FAUCET_PRESETS_UI],
+    defaultNim: FAUCET_DEFAULT_NIM,
+    maxNim: FAUCET_MAX_NIM_UI,
+    balanceNim,
+    remainingNim,
+    requestedNim: want,
+    amountNim,
+    reachable,
+    canRequest: reachable && amountNim > 0,
+    capped: remainingNim !== null && remainingNim <= 0,
+  };
+}
 
 /**
  * Bottom-sheet faucet flow: pick amount → confirm → success with balance count-up.
+ * Amounts update instantly client-side; only balance/cap refresh hits the API in the background.
  */
 function FaucetModal({
   api,
+  initialBalance,
   onClose,
   onSuccess,
 }: {
   api: (path: string, init?: RequestInit) => Promise<unknown>;
+  initialBalance: { nim: number | null; reachable: boolean };
   onClose: () => void;
   onSuccess: (detail: { from: number; to: number }) => void;
 }) {
-  const [quote, setQuote] = useState<FaucetQuote | null>(null);
-  const [phase, setPhase] = useState<"loading" | "ready" | "sending" | "done" | "error">("loading");
+  const [baseBalance, setBaseBalance] = useState(initialBalance);
+  const [phase, setPhase] = useState<"ready" | "sending" | "done">("ready");
   const [error, setError] = useState("");
-  const [selectedNim, setSelectedNim] = useState(500);
+  const [selectedNim, setSelectedNim] = useState(FAUCET_DEFAULT_NIM);
   const [customNim, setCustomNim] = useState("");
   const [sent, setSent] = useState<{ nim: number; from: number; to: number } | null>(null);
 
-  const loadQuote = useCallback(
-    async (amountNim: number, opts?: { silent?: boolean }) => {
-      if (!opts?.silent) {
-        setPhase("loading");
-        setError("");
-      }
-      try {
-        const q = (await api(`/api/studio/faucet?amountNim=${amountNim}`)) as FaucetQuote;
-        setQuote(q);
-        setPhase((p) => (p === "sending" || p === "done" ? p : "ready"));
-      } catch (e) {
-        if (!opts?.silent) {
-          setError((e as Error).message || "Couldn't load faucet details.");
-          setPhase("error");
-        }
-      }
-    },
-    [api],
+  const customParsed = customNim.trim() ? Math.floor(Number(customNim.trim())) : null;
+  const customValid =
+    customParsed !== null && Number.isFinite(customParsed) && customParsed > 0;
+  const effectiveNim = customValid ? customParsed! : selectedNim;
+
+  const quote = useMemo(
+    () => buildFaucetQuoteClient(baseBalance.nim, baseBalance.reachable, effectiveNim),
+    [baseBalance.nim, baseBalance.reachable, effectiveNim],
   );
 
-  useEffect(() => {
-    void loadQuote(selectedNim);
-  }, [selectedNim, loadQuote]);
+  const refreshBalance = useCallback(async () => {
+    try {
+      const q = (await api(
+        `/api/studio/faucet?amountNim=${FAUCET_DEFAULT_NIM}`,
+      )) as FaucetQuote;
+      setBaseBalance({ nim: q.balanceNim, reachable: q.reachable });
+    } catch {
+      // Keep showing the last known balance — non-fatal for the modal.
+    }
+  }, [api]);
 
   useEffect(() => {
-    if (phase !== "ready") return;
-    const id = window.setInterval(() => void loadQuote(selectedNim, { silent: true }), 4000);
+    void refreshBalance();
+  }, [refreshBalance]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void refreshBalance(), 4000);
     return () => window.clearInterval(id);
-  }, [phase, selectedNim, loadQuote]);
+  }, [refreshBalance]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -1868,20 +1971,11 @@ function FaucetModal({
   const pickPreset = (n: number) => {
     setSelectedNim(n);
     setCustomNim("");
-  };
-
-  const applyCustom = () => {
-    const n = Math.floor(Number(customNim));
-    if (!Number.isFinite(n) || n <= 0) {
-      setError("Enter a positive NIM amount.");
-      return;
-    }
     setError("");
-    setSelectedNim(n);
   };
 
   const request = async () => {
-    if (!quote?.canRequest || phase === "sending") return;
+    if (!quote.canRequest || phase === "sending" || (customNim.trim() && !customValid)) return;
     setPhase("sending");
     setError("");
     try {
@@ -1901,17 +1995,20 @@ function FaucetModal({
     } catch (e) {
       setError((e as Error).message);
       setPhase("ready");
-      void loadQuote(selectedNim, { silent: true });
+      void refreshBalance();
     }
   };
 
   const usedPct =
-    quote?.balanceNim != null && quote.maxNim > 0
+    quote.balanceNim != null && quote.maxNim > 0
       ? Math.min(100, Math.max(0, (quote.balanceNim / quote.maxNim) * 100))
       : 0;
-  const canSend = phase === "ready" && Boolean(quote?.canRequest);
+  const canSend =
+    phase === "ready" &&
+    quote.canRequest &&
+    (!customNim.trim() || customValid);
   const dismissable = phase !== "sending" && phase !== "done";
-  const presets = quote?.presets ?? FAUCET_PRESETS_UI;
+  const presets = quote.presets;
 
   return (
     <div
@@ -1921,6 +2018,7 @@ function FaucetModal({
       aria-labelledby="faucet-title"
       onClick={dismissable ? onClose : undefined}
     >
+      <ConfettiBurst active={phase === "done"} />
       <div
         className="animate-slide-up relative z-[101] flex max-h-[min(92dvh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[var(--brand-navy-800)] shadow-[0_-12px_40px_rgba(0,0,0,0.55)] sm:max-h-[85vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -1935,10 +2033,13 @@ function FaucetModal({
                   <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <h3 id="faucet-title" className="mt-4 text-lg font-bold text-white">
-                Sent!
+              <h3 id="faucet-title" className="mt-4 text-xl font-bold text-white">
+                Wallet topped up!
               </h3>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-[var(--brand-gold)]">
+              <p className="mt-2 text-sm text-[var(--brand-muted)]">
+                {sent.nim.toLocaleString()} NIM was added to your wallet
+              </p>
+              <p className="mt-3 text-3xl font-bold tracking-tight text-[var(--brand-gold)]">
                 +{sent.nim.toLocaleString()}{" "}
                 <span className="text-base font-semibold text-[var(--brand-muted)]">NIM</span>
               </p>
@@ -1951,7 +2052,9 @@ function FaucetModal({
                   className="mt-1 justify-center"
                 />
               </div>
-              <p className="mt-3 text-xs text-[var(--brand-muted)]">Confirming on-chain…</p>
+              <p className="mt-3 text-xs font-medium text-emerald-400/90">
+                You&apos;re ready to fund quests
+              </p>
             </div>
           ) : (
             <>
@@ -1964,7 +2067,7 @@ function FaucetModal({
                     Top up your wallet
                   </h3>
                   <p className="mt-1 text-sm text-[var(--brand-muted)]">
-                    Cap: {formatNim(quote?.maxNim ?? 1_000_000)} NIM per wallet
+                    Cap: {formatNim(quote.maxNim)} NIM per wallet
                   </p>
                 </div>
                 {dismissable && (
@@ -1981,121 +2084,92 @@ function FaucetModal({
                 )}
               </div>
 
-              {phase === "loading" && (
-                <div className="mt-5 space-y-4" aria-busy="true" aria-label="Loading faucet quote">
-                  <div className="rounded-2xl bg-[var(--brand-navy-900)] px-4 py-5 text-center">
-                    <div className="mx-auto h-3 w-20 animate-pulse rounded bg-white/10" />
-                    <div className="mx-auto mt-3 h-9 w-36 animate-pulse rounded-lg bg-white/10" />
-                  </div>
-                  <div className="h-2 animate-pulse rounded-full bg-white/10" />
-                </div>
-              )}
-
-              {phase === "error" && (
-                <div className="mt-5 space-y-4">
-                  <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
-                    {error}
-                  </p>
-                  <button type="button" onClick={() => void loadQuote(selectedNim)} className={`${primaryBtn} w-full`}>
-                    Try again
-                  </button>
-                </div>
-              )}
-
-              {quote && (phase === "ready" || phase === "sending") && (
-                <>
-                  <div className="mt-5">
-                    <p className="text-xs font-medium text-[var(--brand-muted)]">Choose amount</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {presets.map((n) => {
-                        const on = selectedNim === n && !customNim;
-                        const disabled = quote.remainingNim != null && n > quote.remainingNim;
-                        return (
-                          <button
-                            key={n}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => pickPreset(n)}
-                            className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:opacity-40 ${
-                              on
-                                ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
-                                : "border border-white/10 text-white hover:border-white/25"
-                            }`}
-                          >
-                            {n.toLocaleString()}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        inputMode="numeric"
-                        placeholder="Custom amount"
-                        value={customNim}
-                        onChange={(e) => setCustomNim(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && applyCustom()}
-                        className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[var(--brand-navy-900)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-gold)] focus:outline-none"
-                      />
+              <div className="mt-5">
+                <p className="text-xs font-medium text-[var(--brand-muted)]">Choose amount</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {presets.map((n) => {
+                    const on = effectiveNim === n && !customNim.trim();
+                    const disabled = quote.remainingNim != null && n > quote.remainingNim;
+                    return (
                       <button
+                        key={n}
                         type="button"
-                        onClick={applyCustom}
-                        className="shrink-0 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-white/25"
-                      >
-                        Set
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-5 text-center">
-                    <p className="text-xs font-medium text-[var(--brand-muted)]">You&apos;ll receive</p>
-                    <p className="mt-1 text-4xl font-bold tracking-tight text-white">
-                      <span className="text-gradient-gold">{quote.amountNim.toLocaleString()}</span>
-                      <span className="ml-1.5 text-base font-semibold text-[var(--brand-muted)]">NIM</span>
-                    </p>
-                    {quote.balanceNim != null && (
-                      <p className="mt-2 text-xs text-[var(--brand-muted)]">
-                        Balance: {formatNim(quote.balanceNim)} →{" "}
-                        {formatNim(quote.balanceNim + quote.amountNim)} NIM
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)]/60 px-4 py-3.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[var(--brand-muted)]">Faucet allowance used</span>
-                      <span className="font-medium text-white">
-                        {formatNim(quote.balanceNim)} / {formatNim(quote.maxNim)} NIM
-                      </span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          quote.capped ? "bg-amber-400" : "bg-[var(--brand-gold)]"
+                        disabled={disabled}
+                        onClick={() => pickPreset(n)}
+                        className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:opacity-40 ${
+                          on
+                            ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
+                            : "border border-white/10 text-white hover:border-white/25"
                         }`}
-                        style={{ width: `${usedPct}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-[var(--brand-muted)]">
-                      {quote.capped
-                        ? `This wallet has hit the ${formatNim(quote.maxNim)} NIM cap.`
-                        : `${formatNim(quote.remainingNim)} NIM left before the cap.`}
-                    </p>
-                  </div>
+                      >
+                        {n.toLocaleString()}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  placeholder="Or enter custom amount"
+                  value={customNim}
+                  onChange={(e) => {
+                    setCustomNim(e.target.value);
+                    setError("");
+                  }}
+                  className="mt-3 w-full rounded-xl border border-white/10 bg-[var(--brand-navy-900)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-gold)] focus:outline-none"
+                />
+                {customNim.trim() && !customValid && (
+                  <p className="mt-1.5 text-xs text-red-400">Enter a positive NIM amount.</p>
+                )}
+              </div>
 
-                  {error && (
-                    <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
-                      {error}
-                    </p>
-                  )}
-                </>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-5 text-center">
+                <p className="text-xs font-medium text-[var(--brand-muted)]">You&apos;ll receive</p>
+                <p className="mt-1 text-4xl font-bold tracking-tight text-white transition-all duration-150">
+                  <span className="text-gradient-gold">{quote.amountNim.toLocaleString()}</span>
+                  <span className="ml-1.5 text-base font-semibold text-[var(--brand-muted)]">NIM</span>
+                </p>
+                {quote.balanceNim != null && (
+                  <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                    Balance: {formatNim(quote.balanceNim)} →{" "}
+                    {formatNim(quote.balanceNim + quote.amountNim)} NIM
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)]/60 px-4 py-3.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--brand-muted)]">Faucet allowance used</span>
+                  <span className="font-medium text-white">
+                    {formatNim(quote.balanceNim)} / {formatNim(quote.maxNim)} NIM
+                  </span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      quote.capped ? "bg-amber-400" : "bg-[var(--brand-gold)]"
+                    }`}
+                    style={{ width: `${usedPct}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                  {quote.capped
+                    ? `This wallet has hit the ${formatNim(quote.maxNim)} NIM cap.`
+                    : `${formatNim(quote.remainingNim)} NIM left before the cap.`}
+                </p>
+              </div>
+
+              {error && (
+                <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-400">
+                  {error}
+                </p>
               )}
             </>
           )}
         </div>
 
-        {phase !== "done" && phase !== "loading" && phase !== "error" && quote && (
+        {phase !== "done" && (
           <div
             className="shrink-0 border-t border-white/10 bg-[var(--brand-navy-800)] px-5 pt-3"
             style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
@@ -2127,23 +2201,6 @@ function FaucetModal({
             >
               Not now
             </button>
-          </div>
-        )}
-
-        {(phase === "loading" || phase === "error") && (
-          <div
-            className="shrink-0 px-5"
-            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
-          >
-            {phase === "error" ? null : (
-              <button
-                type="button"
-                onClick={onClose}
-                className="mb-1 w-full py-2.5 text-sm font-semibold text-[var(--brand-muted)] transition hover:text-white"
-              >
-                Not now
-              </button>
-            )}
           </div>
         )}
       </div>
