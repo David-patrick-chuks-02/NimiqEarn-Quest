@@ -15,11 +15,17 @@ function mockDb(overrides: Record<string, unknown> = {}) {
     },
     user: {
       findFirst: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       ...(overrides.user as object),
     },
     walletProfile: {
       count: vi.fn().mockResolvedValue(0),
       ...(overrides.walletProfile as object),
+    },
+    referralEdge: {
+      count: vi.fn().mockResolvedValue(0),
+      upsert: vi.fn().mockResolvedValue({}),
+      ...(overrides.referralEdge as object),
     },
   } as never;
 }
@@ -51,6 +57,7 @@ describe("createVerificationService", () => {
     });
 
     expect(result.decision.outcome).toBe("MANUAL_REVIEW");
+    expect(result.moderationQueue).toBe("PLATFORM");
     expect(result.aiResult).toBeNull();
     expect(update).toHaveBeenCalled();
     expect(moderationCreate).toHaveBeenCalledWith(

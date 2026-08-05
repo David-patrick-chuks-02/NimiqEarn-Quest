@@ -10,6 +10,7 @@ import {
 } from "./verification.service.js";
 import { createReputationService } from "./reputation.service.js";
 import { enqueuePayout, isPayoutQueueEnabled } from "./payout-queue.js";
+import { hashIp } from "./verification-enrichment.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -69,6 +70,18 @@ function normalizeSubmissionProof(proof: string, proofType: string): string {
         );
       }
       return trimmed;
+    case "UPLOADED_MEDIA": {
+      const mediaOk =
+        /^data:(image\/(jpeg|jpg|png|webp)|video\/(mp4|webm|quicktime));base64,/i.test(trimmed) &&
+        trimmed.length <= 2_500_000;
+      if (!mediaOk) {
+        throw new QuestServiceError(
+          "This quest needs an image or video upload (JPEG/PNG/WebP/MP4/WebM).",
+          "INVALID_PROOF",
+        );
+      }
+      return trimmed;
+    }
     case "LINK":
       if (trimmed.startsWith("data:")) {
         throw new QuestServiceError("This quest needs a link, not an image.", "INVALID_PROOF");
@@ -88,11 +101,31 @@ function normalizeSubmissionProof(proof: string, proofType: string): string {
         throw new QuestServiceError("Enter a valid transaction hash.", "INVALID_PROOF");
       }
       return trimmed;
+    case "WALLET_INTERACTION":
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (
+          typeof parsed.message !== "string" ||
+          typeof parsed.publicKey !== "string" ||
+          typeof parsed.signature !== "string"
+        ) {
+          throw new Error("bad shape");
+        }
+      } catch {
+        throw new QuestServiceError(
+          'Wallet proof must be JSON with message, publicKey, and signature.',
+          "INVALID_PROOF",
+        );
+      }
+      if (trimmed.length > 8_000) {
+        throw new QuestServiceError("Wallet proof is too large.", "INVALID_PROOF");
+      }
+      return trimmed;
     case "TEXT":
     case "REFERRAL_EVENT":
     default:
-      if (trimmed.startsWith("data:image/")) {
-        throw new QuestServiceError("This quest needs text proof, not an image.", "INVALID_PROOF");
+      if (trimmed.startsWith("data:image/") || trimmed.startsWith("data:video/")) {
+        throw new QuestServiceError("This quest needs text proof, not media.", "INVALID_PROOF");
       }
       if (trimmed.length > 2000) {
         throw new QuestServiceError(
@@ -637,13 +670,14 @@ export function createQuestService(
 
     /**
      * Record a worker's proof, reserve a slot, then run the hybrid verification pipeline
-     * (deterministic rules → AI → decision). Auto-approve pays immediately; light/manual
-     * review stay PENDING for the creator; reject frees the slot.
+     * (deterministic rules → AI → decision). Auto-approve pays immediately; LIGHT_REVIEW
+     * stays PENDING for the creator; MANUAL_REVIEW goes to the platform moderator queue.
      */
     async submitQuest(
       telegramId: string,
       questId: string,
       proof: string,
+      opts: { clientFingerprint?: string; clientIp?: string } = {},
     ): Promise<{
       status: "PENDING" | "ACCEPTED" | "REJECTED";
       outcome: string | null;
@@ -699,7 +733,14 @@ export function createQuestService(
       try {
         submissionId = await db.$transaction(async (tx) => {
           const submission = await tx.questSubmission.create({
-            data: { questId, userId: user.id, proof: trimmed, status: "PENDING" },
+            data: {
+              questId,
+              userId: user.id,
+              proof: trimmed,
+              status: "PENDING",
+              clientFingerprint: opts.clientFingerprint?.slice(0, 128) ?? null,
+              ipHash: opts.clientIp ? hashIp(opts.clientIp) : null,
+            },
           });
           const reserved = await tx.quest.updateMany({
             where: { id: questId, filledSlots: { lt: quest.totalSlots } },
@@ -719,19 +760,50 @@ export function createQuestService(
       }
 
       const repProfile = await reputation.getProfile(user.id);
-      const { decision } = await verification.verifySubmission({
+      const { decision, aiResult } = await verification.verifySubmission({
         submissionId,
         userId: user.id,
         workerTelegramId: user.telegramId,
+        workerAddress: workerWallet?.nimiqAddress ?? null,
         proofType: quest.proofType,
         proof: trimmed,
         proofInstructions: quest.proofInstructions,
         title: quest.title,
+        sampleEvidence: quest.sampleEvidence,
+        questCategory: quest.category,
         reputationScore: repProfile.score,
         acceptanceRate: repProfile.acceptanceRate,
         ageDays: repProfile.ageDays,
+        violationCount: repProfile.violationCount,
+        categoryConsistency: repProfile.categoryConsistency,
         verificationConfig: quest.verificationConfig,
+        clientFingerprint: opts.clientFingerprint,
+        clientIp: opts.clientIp,
       });
+
+      // Extra reputation hits for high-confidence fraud signals.
+      if (aiResult?.signals) {
+        const sig = aiResult.signals as Record<string, unknown>;
+        const dup = Number(sig.duplicateProbability ?? 0);
+        const tamper = Number(sig.editLikelihood ?? 0);
+        if (dup >= 0.9) {
+          await reputation
+            .recordViolation(user.id, "DUP", {
+              submissionId,
+              questCategory: quest.category,
+              duplicateProbability: dup,
+            })
+            .catch(() => undefined);
+        } else if (tamper >= 0.85) {
+          await reputation
+            .recordViolation(user.id, "TAMPER", {
+              submissionId,
+              questCategory: quest.category,
+              editLikelihood: tamper,
+            })
+            .catch(() => undefined);
+        }
+      }
 
       if (decision.outcome === "REJECT") {
         await db.$transaction(async (tx) => {
@@ -744,7 +816,7 @@ export function createQuestService(
             data: { filledSlots: { decrement: 1 } },
           });
         });
-        await reputation.applyOutcome(user.id, "REJECT");
+        await reputation.applyOutcome(user.id, "REJECT", { questCategory: quest.category });
         void notifier?.notify(
           user.telegramId,
           `Your submission for "${quest.title}" was rejected by verification. You can try another quest.`,
@@ -821,11 +893,18 @@ export function createQuestService(
         return { status: "ACCEPTED", outcome: decision.outcome, txHash, txUrl };
       }
 
-      // LIGHT_REVIEW / MANUAL_REVIEW — stay PENDING for creator.
-      void notifier?.notify(
-        user.telegramId,
-        `Thanks — your submission for "${quest.title}" is pending review. You'll be paid if it's accepted.`,
-      );
+      // LIGHT_REVIEW → creator Studio; MANUAL_REVIEW → platform moderator queue.
+      if (decision.outcome === "MANUAL_REVIEW") {
+        void notifier?.notify(
+          user.telegramId,
+          `Thanks — your submission for "${quest.title}" was flagged for platform moderation. You'll hear back soon.`,
+        );
+      } else {
+        void notifier?.notify(
+          user.telegramId,
+          `Thanks — your submission for "${quest.title}" is pending creator review. You'll be paid if it's accepted.`,
+        );
+      }
       return {
         status: "PENDING",
         outcome: decision.outcome,
@@ -861,6 +940,11 @@ export function createQuestService(
           verificationOutcome: s.verificationOutcome,
           confidenceScore: s.confidenceScore,
           verificationSignals: s.verificationSignals,
+          moderationQueue: s.moderationQueue,
+          creatorCanReview:
+            s.status === "PENDING" &&
+            s.moderationQueue !== "PLATFORM" &&
+            s.verificationOutcome !== "MANUAL_REVIEW",
           payoutTxHash: s.payoutTxHash,
           payoutTxUrl: s.payoutTxHash && escrow ? escrow.explorerTxUrl(s.payoutTxHash) : null,
           paidAt: s.paidAt?.toISOString() ?? null,
@@ -897,6 +981,15 @@ export function createQuestService(
       });
       if (!submission || submission.quest.creatorId !== user.id) {
         throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
+      }
+      if (
+        submission.verificationOutcome === "MANUAL_REVIEW" ||
+        submission.moderationQueue === "PLATFORM"
+      ) {
+        throw new QuestServiceError(
+          "This submission is in the platform moderator queue and can't be accepted in Studio.",
+          "NOT_PENDING",
+        );
       }
       if (submission.status === "REJECTED") {
         throw new QuestServiceError("This submission was already rejected.", "ALREADY_REVIEWED");
@@ -989,6 +1082,15 @@ export function createQuestService(
       if (!submission || submission.quest.creatorId !== user.id) {
         throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
       }
+      if (
+        submission.verificationOutcome === "MANUAL_REVIEW" ||
+        submission.moderationQueue === "PLATFORM"
+      ) {
+        throw new QuestServiceError(
+          "This submission is in the platform moderator queue and can't be rejected in Studio.",
+          "NOT_PENDING",
+        );
+      }
       if (submission.status !== "PENDING") {
         throw new QuestServiceError("Only pending submissions can be rejected.", "NOT_PENDING");
       }
@@ -1011,6 +1113,153 @@ export function createQuestService(
       void notifier?.notify(
         submission.user.telegramId,
         `Your submission for "${submission.quest.title}" was not accepted. The slot has been freed.`,
+      );
+    },
+
+    /**
+     * Platform moderator accept for MANUAL_REVIEW queue (admin API).
+     */
+    async platformAcceptSubmission(
+      submissionId: string,
+    ): Promise<{ txHash: string | null; txUrl: string | null }> {
+      const submission = await db.questSubmission.findUnique({
+        where: { id: submissionId },
+        include: {
+          quest: true,
+          user: { include: { walletProfiles: true } },
+        },
+      });
+      if (!submission) {
+        throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
+      }
+      if (submission.status !== "PENDING") {
+        throw new QuestServiceError("Only pending submissions can be accepted.", "NOT_PENDING");
+      }
+      if (
+        submission.moderationQueue !== "PLATFORM" &&
+        submission.verificationOutcome !== "MANUAL_REVIEW"
+      ) {
+        throw new QuestServiceError(
+          "Submission is not in the platform moderator queue.",
+          "NOT_PENDING",
+        );
+      }
+
+      const claimed = await db.questSubmission.updateMany({
+        where: { id: submissionId, status: "PENDING" },
+        data: { status: "ACCEPTED", moderationQueue: null },
+      });
+      if (claimed.count === 0) {
+        throw new QuestServiceError("This submission is no longer pending.", "NOT_PENDING");
+      }
+
+      const quest = submission.quest;
+      const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
+      const workerWallet =
+        submission.user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
+
+      let txHash: string | null = null;
+      let txUrl: string | null = null;
+      if (willPay) {
+        if (!workerWallet) {
+          throw new QuestServiceError("Worker has no wallet for payout.", "NO_WALLET");
+        }
+        const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+        if (isPayoutQueueEnabled()) {
+          await enqueuePayout({
+            submissionId,
+            questId: quest.id,
+            toAddress: workerWallet.nimiqAddress,
+            valueLuna: rewardLuna.toString(),
+            fromKeyCiphertext: quest.escrowKeyCiphertext!,
+          });
+        } else {
+          const result = await escrow!.transfer({
+            fromKeyCiphertext: quest.escrowKeyCiphertext!,
+            toAddress: workerWallet.nimiqAddress,
+            valueLuna: rewardLuna,
+          });
+          if (!result.hash) {
+            throw new QuestServiceError(
+              result.error ?? "Payout failed.",
+              "PAYOUT_FAILED",
+            );
+          }
+          txHash = result.hash;
+          txUrl = escrow!.explorerTxUrl(txHash);
+          await db.questSubmission.update({
+            where: { id: submissionId },
+            data: { payoutTxHash: txHash, paidAt: new Date() },
+          });
+        }
+      }
+
+      await reputation.applyOutcome(submission.userId, "CREATOR_ACCEPT");
+      await db.moderationEvent.create({
+        data: {
+          submissionId,
+          userId: submission.userId,
+          flagType: "PLATFORM_REVIEW",
+          resolution: "ACCEPTED",
+          detail: { source: "admin" },
+        },
+      });
+      await db.questEvent.create({ data: { questId: quest.id, type: "FILL" } }).catch(() => undefined);
+      void notifier?.notify(
+        submission.user.telegramId,
+        `Platform moderation accepted your submission for "${quest.title}".`,
+      );
+      return { txHash, txUrl };
+    },
+
+    async platformRejectSubmission(submissionId: string): Promise<void> {
+      const submission = await db.questSubmission.findUnique({
+        where: { id: submissionId },
+        include: { quest: true, user: true },
+      });
+      if (!submission) {
+        throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
+      }
+      if (submission.status !== "PENDING") {
+        throw new QuestServiceError("Only pending submissions can be rejected.", "NOT_PENDING");
+      }
+      if (
+        submission.moderationQueue !== "PLATFORM" &&
+        submission.verificationOutcome !== "MANUAL_REVIEW"
+      ) {
+        throw new QuestServiceError(
+          "Submission is not in the platform moderator queue.",
+          "NOT_PENDING",
+        );
+      }
+
+      await db.$transaction(async (tx) => {
+        const rejected = await tx.questSubmission.updateMany({
+          where: { id: submissionId, status: "PENDING" },
+          data: { status: "REJECTED", moderationQueue: null },
+        });
+        if (rejected.count === 0) {
+          throw new QuestServiceError("Only pending submissions can be rejected.", "NOT_PENDING");
+        }
+        await tx.quest.updateMany({
+          where: { id: submission.questId, filledSlots: { gt: 0 } },
+          data: { filledSlots: { decrement: 1 } },
+        });
+      });
+
+      await reputation.applyOutcome(submission.userId, "CREATOR_REJECT");
+      await db.moderationEvent.create({
+        data: {
+          submissionId,
+          userId: submission.userId,
+          flagType: "PLATFORM_REVIEW",
+          resolution: "REJECTED",
+          detail: { source: "admin" },
+        },
+      });
+      void notifier?.notify(
+        submission.user.telegramId,
+        `Platform moderation rejected your submission for "${submission.quest.title}".`,
       );
     },
 

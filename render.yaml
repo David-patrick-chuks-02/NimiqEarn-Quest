@@ -80,9 +80,40 @@ services:
       - key: VERIFIER_SHARED_SECRET
         sync: false # must match nimiqearn-verifier
       - key: PAYOUT_QUEUE_ENABLED
-        value: "0" # set to 1 + run payout worker when enabling BullMQ payouts
+        value: "1"
       - key: SENTRY_DSN
         sync: false # optional: enables Sentry error monitoring for the API
+
+  # ------------------------------------------------------------------------------- Payout worker (BullMQ)
+  - type: worker
+    name: nimiqearn-payout-worker
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm db:generate && pnpm build:packages && pnpm --filter @nimiqearn/api build
+    startCommand: node apps/api/dist/workers/payout-worker.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: PAYOUT_QUEUE_ENABLED
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nimiqearn-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: nimiqearn-redis
+          property: connectionString
+      - key: NIMIQ_NETWORK
+        value: mainnet
+      - key: NIMIQ_RPC_URL
+        sync: false
+      - key: ESCROW_ENCRYPTION_KEY
+        sync: false # must match nimiqearn-api ESCROW_ENCRYPTION_KEY
 
   # ------------------------------------------------------------------------------- Bot (grammY, poll)
   - type: worker

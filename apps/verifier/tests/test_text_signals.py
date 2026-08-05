@@ -51,3 +51,14 @@ def test_text_clone_probability_detects_near_duplicates():
 def test_ai_generated_likelihood_flags_phrases():
     text = "As an AI language model, it is important to note that we leverage a robust solution."
     assert ai_generated_likelihood(text) >= 0.5
+
+
+def test_semantic_relevance_rewards_specific_answers():
+    from app.text_signals import semantic_relevance
+
+    score = semantic_relevance(
+        "The wallet balance count-up animation starts at zero and feels smooth on mobile.",
+        "Write feedback about the wallet balance animation",
+        "Wallet UX",
+    )
+    assert score > 0.3

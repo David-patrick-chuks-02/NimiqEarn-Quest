@@ -5,9 +5,18 @@ import {
   clampOffset,
   createAdminService,
 } from "../services/admin.service.js";
+import { createQuestService, QuestServiceError } from "../services/quest.service.js";
+import type { EscrowService } from "../services/escrow.service.js";
+import type { TelegramNotifier } from "../services/telegram-notify.js";
+import type { VerifierConfig } from "../services/verification.service.js";
+import type { PlatformFees } from "../services/quest.service.js";
 
 interface AdminRouteOptions {
   adminApiKey?: string;
+  escrow?: EscrowService;
+  fees?: PlatformFees;
+  notifier?: TelegramNotifier;
+  verifier?: VerifierConfig;
 }
 
 type ListQuery = { limit?: string; offset?: string };
@@ -21,9 +30,15 @@ function parsePaging(query: ListQuery) {
 
 export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, opts) => {
   const admin = createAdminService(app.db);
+  const quests = createQuestService(
+    app.db,
+    opts.escrow,
+    opts.fees,
+    opts.notifier,
+    opts.verifier,
+  );
   const adminApiKey = opts.adminApiKey;
 
-  // Admin endpoints are read-only but expose platform-wide data, so they require a key.
   app.addHook("preHandler", async (request, reply) => {
     if (!adminApiKey) {
       return reply
@@ -50,10 +65,13 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
     return admin.listQuests(limit, offset);
   });
 
-  app.get<{ Querystring: ListQuery & { outcome?: string } }>(
+  app.get<{ Querystring: ListQuery & { outcome?: string; queue?: string } }>(
     "/api/admin/submissions",
     async (request) => {
       const { limit, offset } = parsePaging(request.query);
+      if (request.query.queue === "PLATFORM") {
+        return admin.listPlatformQueue(limit, offset);
+      }
       return admin.listSubmissions(limit, offset, request.query.outcome);
     },
   );
@@ -77,4 +95,34 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
       return reply.code(404).send({ error: "User not found" });
     }
   });
+
+  app.post<{ Params: { id: string } }>(
+    "/api/admin/submissions/:id/accept",
+    async (request, reply) => {
+      try {
+        const result = await quests.platformAcceptSubmission(request.params.id);
+        return { ok: true, ...result };
+      } catch (error) {
+        if (error instanceof QuestServiceError) {
+          return reply.code(400).send({ error: error.message, code: error.code });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/admin/submissions/:id/reject",
+    async (request, reply) => {
+      try {
+        await quests.platformRejectSubmission(request.params.id);
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof QuestServiceError) {
+          return reply.code(400).send({ error: error.message, code: error.code });
+        }
+        throw error;
+      }
+    },
+  );
 };

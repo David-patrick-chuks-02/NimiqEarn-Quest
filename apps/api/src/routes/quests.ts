@@ -147,7 +147,14 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
         return reply.code(400).send({ error: "proof is required" });
       }
       try {
-        const result = await quests.submitQuest(telegramId, request.params.id, proof);
+        const fingerprint =
+          typeof request.headers["x-device-fingerprint"] === "string"
+            ? request.headers["x-device-fingerprint"]
+            : undefined;
+        const result = await quests.submitQuest(telegramId, request.params.id, proof, {
+          clientFingerprint: fingerprint,
+          clientIp: request.ip,
+        });
         return {
           ok: true,
           status: result.status,

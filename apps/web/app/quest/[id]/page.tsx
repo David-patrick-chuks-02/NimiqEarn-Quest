@@ -52,13 +52,49 @@ const CATEGORY_LABELS: Record<string, string> = {
   OTHER: "Quest",
 };
 
-const PROOF_META: Record<string, { label: string; placeholder: string; multiline: boolean; upload?: boolean }> = {
+const PROOF_META: Record<string, { label: string; placeholder: string; multiline: boolean; upload?: boolean; accept?: string }> = {
   TEXT: { label: "Your response", placeholder: "Write your response here…", multiline: true },
   LINK: { label: "Your link", placeholder: "https://…", multiline: false },
-  SCREENSHOT: { label: "Upload screenshot", placeholder: "", multiline: false, upload: true },
+  SCREENSHOT: {
+    label: "Upload screenshot",
+    placeholder: "",
+    multiline: false,
+    upload: true,
+    accept: "image/jpeg,image/png,image/webp",
+  },
+  UPLOADED_MEDIA: {
+    label: "Upload image or video",
+    placeholder: "",
+    multiline: false,
+    upload: true,
+    accept: "image/jpeg,image/png,image/webp,video/mp4,video/webm",
+  },
   TRANSACTION_HASH: { label: "Transaction hash", placeholder: "e.g. a1b2c3…", multiline: false },
+  WALLET_INTERACTION: {
+    label: "Signed message JSON",
+    placeholder: '{"message":"…","publicKey":"…","signature":"…","address":"NQ…"}',
+    multiline: true,
+  },
   REFERRAL_EVENT: { label: "Referral details", placeholder: "Who did you refer?", multiline: true },
 };
+
+function deviceFingerprint(): string {
+  try {
+    const raw = [
+      navigator.userAgent,
+      navigator.language,
+      String(screen.width),
+      String(screen.height),
+      String(screen.colorDepth),
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ].join("|");
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0;
+    return `fp_${(h >>> 0).toString(16)}`;
+  } catch {
+    return "fp_unknown";
+  }
+}
 
 /** Compress an uploaded image to a JPEG data URL (max ~1000px) for inline storage. */
 async function compressImage(file: File): Promise<string> {
@@ -181,10 +217,11 @@ export default function DoQuestPage() {
   }, [boot]);
 
   const submit = useCallback(async () => {
-    const isScreenshot = view?.quest.proofType === "SCREENSHOT";
-    const payload = isScreenshot ? proofImage : proof.trim();
+    const isUpload =
+      view?.quest.proofType === "SCREENSHOT" || view?.quest.proofType === "UPLOADED_MEDIA";
+    const payload = isUpload ? proofImage : proof.trim();
     if (!payload) {
-      setError(isScreenshot ? "Upload a screenshot before submitting." : "Please enter your proof before submitting.");
+      setError(isUpload ? "Upload proof before submitting." : "Please enter your proof before submitting.");
       return;
     }
     setSubmitting(true);
@@ -192,6 +229,7 @@ export default function DoQuestPage() {
     try {
       const res = (await api(`/api/quests/${questId}/submit`, {
         method: "POST",
+        headers: { "x-device-fingerprint": deviceFingerprint() },
         body: JSON.stringify({ proof: payload }),
       })) as { txUrl?: string | null; status?: string; outcome?: string | null };
       setTxUrl(res.txUrl ?? null);
@@ -215,6 +253,20 @@ export default function DoQuestPage() {
     setProofBusy(true);
     setError("");
     try {
+      if (file.type.startsWith("video/")) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error("Couldn't read that file."));
+          reader.readAsDataURL(file);
+        });
+        if (dataUrl.length > 2_500_000) {
+          setError("That video is too large. Try a shorter clip or a screenshot.");
+          return;
+        }
+        setProofImage(dataUrl);
+        return;
+      }
       const compressed = await compressImage(file);
       if (compressed.length > 700_000) {
         setError("That image is too large even after compression. Try a smaller screenshot.");
@@ -394,16 +446,18 @@ export default function DoQuestPage() {
                       <label className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/20 px-4 py-8 transition hover:border-[var(--brand-gold)]/50 hover:bg-black/30">
                         <input
                           type="file"
-                          accept="image/*"
+                          accept={proofMeta.accept ?? "image/*"}
                           className="hidden"
                           disabled={proofBusy || submitting}
                           onChange={(e) => void onProofImage(e.target.files?.[0] ?? null)}
                         />
                         <span className="text-sm font-semibold text-white">
-                          {proofBusy ? "Processing…" : "Tap to upload screenshot"}
+                          {proofBusy ? "Processing…" : "Tap to upload proof"}
                         </span>
                         <span className="mt-1 text-xs text-[var(--brand-muted)]">
-                          PNG or JPG from your gallery
+                          {proofMeta.accept?.includes("video")
+                            ? "Image or short video from your gallery"
+                            : "PNG or JPG from your gallery"}
                         </span>
                       </label>
                     )}

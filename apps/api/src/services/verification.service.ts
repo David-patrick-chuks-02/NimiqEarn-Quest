@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@nimiqearn/database";
 import {
   aiVerifyResponseSchema,
@@ -8,7 +9,9 @@ import {
 import {
   appendRuleChecks,
   decide,
+  hardCheck,
   runRuleEngine,
+  softCheck,
   type DecisionResult,
   type RuleResult,
 } from "@nimiqearn/verification";
@@ -17,8 +20,11 @@ import {
   enrichOnChainChecks,
   enrichReferralChecks,
   enrichSocialChecks,
+  enrichWalletInteractionChecks,
+  hashIp,
   parseVerificationConfig,
 } from "./verification-enrichment.js";
+import { fetchSocialPost } from "./social-fetch.js";
 
 export interface VerifierConfig {
   url?: string;
@@ -30,20 +36,29 @@ export interface VerifySubmissionInput {
   submissionId: string;
   userId: string;
   workerTelegramId: string;
+  workerAddress?: string | null;
   proofType: string;
   proof: string;
   proofInstructions: string;
   title: string;
+  sampleEvidence?: string | null;
+  questCategory?: string;
   reputationScore: number;
   acceptanceRate?: number;
   ageDays?: number;
+  violationCount?: number;
+  categoryConsistency?: number;
   verificationConfig?: VerificationConfig | unknown;
+  clientFingerprint?: string | null;
+  clientIp?: string | null;
 }
 
 export interface VerifySubmissionResult {
   ruleResult: RuleResult;
   aiResult: AiVerifyResponse | null;
   decision: DecisionResult;
+  contentHash: string | null;
+  moderationQueue: "CREATOR" | "PLATFORM" | null;
 }
 
 async function callAiVerifier(
@@ -83,12 +98,12 @@ async function callAiVerifier(
   }
 }
 
+function textContentHash(proof: string): string {
+  return createHash("sha256").update(proof.trim().toLowerCase()).digest("hex").slice(0, 32);
+}
+
 export function createVerificationService(db: PrismaClient, config: VerifierConfig = {}) {
   return {
-    /**
-     * Run deterministic rules → enrichers → AI verifier → decision engine.
-     * Persists verification fields + a ModerationEvent.
-     */
     async verifySubmission(input: VerifySubmissionInput): Promise<VerifySubmissionResult> {
       let ruleResult = runRuleEngine({
         proofType: input.proofType,
@@ -96,6 +111,7 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
       });
 
       const vcfg = parseVerificationConfig(input.verificationConfig);
+      let livePostText = "";
 
       if (ruleResult.passed) {
         if (input.proofType === "TRANSACTION_HASH") {
@@ -105,33 +121,76 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               proof: input.proof,
               rpcUrl: config.rpcUrl,
               config: vcfg,
+              workerAddress: input.workerAddress,
+            }),
+          );
+        } else if (input.proofType === "WALLET_INTERACTION") {
+          ruleResult = appendRuleChecks(
+            ruleResult,
+            enrichWalletInteractionChecks({
+              proof: input.proof,
+              config: vcfg,
+              workerAddress: input.workerAddress,
             }),
           );
         } else if (input.proofType === "LINK") {
-          ruleResult = appendRuleChecks(
-            ruleResult,
-            await enrichSocialChecks({
-              proof: input.proof,
-              proofInstructions: input.proofInstructions,
-              config: vcfg,
-            }),
-          );
+          const social = await enrichSocialChecks({
+            proof: input.proof,
+            proofInstructions: input.proofInstructions,
+            config: vcfg,
+          });
+          ruleResult = appendRuleChecks(ruleResult, social.checks);
+          livePostText = social.livePostText;
         } else if (input.proofType === "REFERRAL_EVENT") {
           const raw = input.proof.trim().replace(/^@/, "");
           const referred = await db.user.findFirst({
             where: {
               OR: [{ telegramId: raw }, { telegramUsername: raw.replace(/^@/, "") }],
             },
-            select: { id: true, telegramId: true, status: true },
+            select: { id: true, telegramId: true, status: true, referredById: true },
           });
           let referredHasActivity = false;
+          let referredCompletedQuest = false;
+          let farmingClusterSize = 0;
+          let inboundReferralCount = 0;
+          let sharedDeviceWithReferrer = false;
           if (referred) {
-            const [subs, wallets] = await Promise.all([
-              db.questSubmission.count({ where: { userId: referred.id } }),
-              db.walletProfile.count({ where: { userId: referred.id } }),
-            ]);
+            const [subs, wallets, accepted, cluster, inbound, referredSubs, referrerSubs] =
+              await Promise.all([
+                db.questSubmission.count({ where: { userId: referred.id } }),
+                db.walletProfile.count({ where: { userId: referred.id } }),
+                db.questSubmission.count({
+                  where: { userId: referred.id, status: "ACCEPTED" },
+                }),
+                db.referralEdge.count({ where: { referrerId: input.userId } }),
+                db.referralEdge.count({ where: { referredId: referred.id } }),
+                input.clientFingerprint
+                  ? db.questSubmission.findFirst({
+                      where: {
+                        userId: referred.id,
+                        clientFingerprint: input.clientFingerprint,
+                      },
+                      select: { id: true },
+                    })
+                  : Promise.resolve(null),
+                input.clientFingerprint
+                  ? db.questSubmission.findFirst({
+                      where: {
+                        userId: input.userId,
+                        clientFingerprint: input.clientFingerprint,
+                      },
+                      select: { id: true },
+                    })
+                  : Promise.resolve(null),
+              ]);
             referredHasActivity = subs + wallets > 0;
+            referredCompletedQuest = accepted > 0;
+            farmingClusterSize = cluster;
+            inboundReferralCount = inbound;
+            sharedDeviceWithReferrer = Boolean(referredSubs && referrerSubs);
           }
+          const requireFirst =
+            vcfg?.requireFirstQuest ?? input.questCategory === "REFERRAL";
           ruleResult = appendRuleChecks(
             ruleResult,
             enrichReferralChecks({
@@ -139,66 +198,174 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               proof: input.proof,
               referred,
               referredHasActivity,
+              referredCompletedQuest,
+              requireFirstQuest: requireFirst,
+              farmingClusterSize,
+              sharedDeviceWithReferrer,
+              inboundReferralCount,
             }),
           );
+
+          if (referred && ruleResult.passed) {
+            await db.referralEdge
+              .upsert({
+                where: {
+                  referrerId_referredId: {
+                    referrerId: input.userId,
+                    referredId: referred.id,
+                  },
+                },
+                create: {
+                  referrerId: input.userId,
+                  referredId: referred.id,
+                },
+                update: {},
+              })
+              .catch(() => undefined);
+            if (!referred.telegramId) {
+              /* noop */
+            }
+            await db.user
+              .updateMany({
+                where: { id: referred.id, referredById: null },
+                data: { referredById: input.userId },
+              })
+              .catch(() => undefined);
+          }
+        }
+
+        // Screenshot ↔ live post consistency when livePostUrl configured.
+        if (
+          (input.proofType === "SCREENSHOT" || input.proofType === "UPLOADED_MEDIA") &&
+          vcfg?.livePostUrl
+        ) {
+          const snap = await fetchSocialPost(vcfg.livePostUrl);
+          livePostText = snap.text;
+          ruleResult = appendRuleChecks(ruleResult, [
+            softCheck(
+              "live_post_available",
+              snap.exists && !snap.deleted,
+              snap.exists
+                ? "Live post fetched for screenshot match."
+                : "Could not fetch live post for screenshot match.",
+            ),
+          ]);
+        }
+
+        if (vcfg?.deadlineAt && input.proofType !== "TRANSACTION_HASH") {
+          const ok = Date.now() <= vcfg.deadlineAt.getTime();
+          ruleResult = appendRuleChecks(ruleResult, [
+            hardCheck(
+              "campaign_deadline",
+              ok,
+              ok ? "Within campaign deadline." : "Campaign deadline has passed.",
+            ),
+          ]);
         }
       }
 
       const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const [submissionsLastHour, submissionsLastDay, hourRows] = await Promise.all([
-        db.questSubmission.count({
-          where: { userId: input.userId, createdAt: { gte: hourAgo } },
-        }),
-        db.questSubmission.count({
-          where: { userId: input.userId, createdAt: { gte: dayAgo } },
-        }),
-        db.questSubmission.findMany({
-          where: { userId: input.userId, createdAt: { gte: hourAgo } },
-          select: { questId: true },
-        }),
-      ]);
+      const ipHash = input.clientIp ? hashIp(input.clientIp) : null;
+      const fingerprint = input.clientFingerprint?.slice(0, 128) || null;
+
+      const [submissionsLastHour, submissionsLastDay, hourRows, sharedFp, sharedIp] =
+        await Promise.all([
+          db.questSubmission.count({
+            where: { userId: input.userId, createdAt: { gte: hourAgo } },
+          }),
+          db.questSubmission.count({
+            where: { userId: input.userId, createdAt: { gte: dayAgo } },
+          }),
+          db.questSubmission.findMany({
+            where: { userId: input.userId, createdAt: { gte: hourAgo } },
+            select: { questId: true },
+          }),
+          fingerprint
+            ? db.questSubmission.findMany({
+                where: {
+                  clientFingerprint: fingerprint,
+                  userId: { not: input.userId },
+                  createdAt: { gte: dayAgo },
+                },
+                select: { userId: true },
+                take: 50,
+              })
+            : Promise.resolve([]),
+          ipHash
+            ? db.questSubmission.findMany({
+                where: {
+                  ipHash,
+                  userId: { not: input.userId },
+                  createdAt: { gte: dayAgo },
+                },
+                select: { userId: true },
+                take: 50,
+              })
+            : Promise.resolve([]),
+        ]);
+
       const distinctQuestsLastHour = new Set(hourRows.map((r) => r.questId)).size;
-      const { risk: behavioralRisk, checks: behaviorChecks } = behavioralRiskFromCounts({
-        submissionsLastHour,
-        submissionsLastDay,
-        distinctQuestsLastHour,
-      });
-      if (ruleResult.passed) {
-        ruleResult = appendRuleChecks(ruleResult, behaviorChecks);
-      }
+      const sharedFingerprintUsers = new Set(sharedFp.map((r) => r.userId)).size;
+      const sharedIpUsers = new Set(sharedIp.map((r) => r.userId)).size;
 
       let recentImageHashes: string[] = [];
       let recentTextProofs: string[] = [];
-      if (ruleResult.passed && input.proofType === "SCREENSHOT") {
+      let contentClusterUsers = 0;
+      let provisionalContentHash: string | null = null;
+
+      if (ruleResult.passed && (input.proofType === "SCREENSHOT" || input.proofType === "UPLOADED_MEDIA")) {
         const recent = await db.questSubmission.findMany({
           where: {
             id: { not: input.submissionId },
-            quest: { proofType: "SCREENSHOT" },
+            OR: [
+              { quest: { proofType: "SCREENSHOT" } },
+              { quest: { proofType: "UPLOADED_MEDIA" } },
+              { contentHash: { not: null } },
+            ],
           },
           orderBy: { createdAt: "desc" },
-          take: 80,
-          select: { verificationSignals: true },
+          take: 200,
+          select: { verificationSignals: true, contentHash: true, userId: true },
         });
         recentImageHashes = recent
           .map((r) => {
             const s = r.verificationSignals as { imageHash?: string } | null;
-            return s?.imageHash;
+            return s?.imageHash ?? r.contentHash ?? undefined;
           })
           .filter((h): h is string => typeof h === "string" && h.length > 0);
       }
-      if (ruleResult.passed && input.proofType === "TEXT") {
+
+      if (ruleResult.passed && (input.proofType === "TEXT" || input.proofType === "REFERRAL_EVENT")) {
+        provisionalContentHash = textContentHash(input.proof);
         const recent = await db.questSubmission.findMany({
           where: {
             id: { not: input.submissionId },
-            quest: { proofType: "TEXT" },
             createdAt: { gte: dayAgo },
+            OR: [{ contentHash: provisionalContentHash }, { quest: { proofType: "TEXT" } }],
           },
           orderBy: { createdAt: "desc" },
-          take: 40,
-          select: { proof: true },
+          take: 80,
+          select: { proof: true, contentHash: true, userId: true },
         });
         recentTextProofs = recent.map((r) => r.proof).filter((p) => p.length < 2000);
+        contentClusterUsers = new Set(
+          recent
+            .filter((r) => r.contentHash === provisionalContentHash)
+            .map((r) => r.userId),
+        ).size;
+      }
+
+      const { risk: behavioralRisk, checks: behaviorChecks } = behavioralRiskFromCounts({
+        submissionsLastHour,
+        submissionsLastDay,
+        distinctQuestsLastHour,
+        sharedFingerprintUsers,
+        sharedIpUsers,
+        contentClusterUsers,
+      });
+      if (ruleResult.passed) {
+        ruleResult = appendRuleChecks(ruleResult, behaviorChecks);
       }
 
       const aiResult = ruleResult.passed
@@ -211,6 +378,8 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
             recentImageHashes,
             recentTextProofs,
             behavioralRisk,
+            sampleEvidence: input.sampleEvidence ?? undefined,
+            livePostText: livePostText || undefined,
           })
         : null;
 
@@ -221,9 +390,42 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
           score: input.reputationScore,
           acceptanceRate: input.acceptanceRate,
           ageDays: input.ageDays,
+          violationCount: input.violationCount,
+          categoryConsistency: input.categoryConsistency,
         },
         behavioralRisk,
       });
+
+      const contentHash =
+        aiResult?.imageHash ??
+        provisionalContentHash ??
+        (typeof (aiResult?.signals as { imageHash?: string } | undefined)?.imageHash === "string"
+          ? (aiResult!.signals as { imageHash: string }).imageHash
+          : null);
+
+      // Cross-account image cluster after we know the hash.
+      if (contentHash && ruleResult.passed) {
+        const cluster = await db.questSubmission.findMany({
+          where: {
+            contentHash,
+            userId: { not: input.userId },
+            id: { not: input.submissionId },
+          },
+          select: { userId: true },
+          take: 100,
+        });
+        const clusterUsers = new Set(cluster.map((c) => c.userId)).size;
+        if (clusterUsers >= 5 && decision.outcome === "AUTO_APPROVE") {
+          decision.outcome = "MANUAL_REVIEW";
+          decision.reasons.push(
+            `Cross-account content cluster (${clusterUsers} users) — platform review.`,
+          );
+        }
+      }
+
+      let moderationQueue: "CREATOR" | "PLATFORM" | null = null;
+      if (decision.outcome === "LIGHT_REVIEW") moderationQueue = "CREATOR";
+      if (decision.outcome === "MANUAL_REVIEW") moderationQueue = "PLATFORM";
 
       const signals = {
         rules: ruleResult.checks,
@@ -233,6 +435,10 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
         imageHash: aiResult?.imageHash ?? null,
         behavioralRisk,
         verificationConfig: vcfg ?? null,
+        livePostPreview: livePostText.slice(0, 280) || null,
+        sharedFingerprintUsers,
+        sharedIpUsers,
+        contentClusterUsers,
       };
 
       await db.questSubmission.update({
@@ -242,6 +448,10 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
           confidenceScore: decision.confidence,
           verificationSignals: JSON.parse(JSON.stringify(signals)),
           verifiedAt: new Date(),
+          contentHash,
+          clientFingerprint: fingerprint,
+          ipHash,
+          moderationQueue,
         },
       });
 
@@ -258,12 +468,13 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               rulePassed: ruleResult.passed,
               aiAvailable: Boolean(aiResult),
               behavioralRisk,
+              moderationQueue,
             }),
           ),
         },
       });
 
-      return { ruleResult, aiResult, decision };
+      return { ruleResult, aiResult, decision, contentHash, moderationQueue };
     },
   };
 }

@@ -181,6 +181,7 @@ describe("createQuestService", () => {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
           reputationScore: 0,
           createdAt: new Date(),
+          reputationDecayedAt: new Date(),
         }),
       },
       quest: { findFirst },
@@ -188,7 +189,9 @@ describe("createQuestService", () => {
         update: submissionUpdate,
         findMany: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue({ createdAt: new Date() }),
       },
+      reputationEvent: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
       moderationEvent: { create: moderationCreate },
       $transaction: transaction,
     } as never);
@@ -203,7 +206,14 @@ describe("createQuestService", () => {
       txUrl: null,
     });
     expect(submissionCreate).toHaveBeenCalledWith({
-      data: { questId: "quest-1", userId: "worker-9", proof: "here is my proof", status: "PENDING" },
+      data: {
+        questId: "quest-1",
+        userId: "worker-9",
+        proof: "here is my proof",
+        status: "PENDING",
+        clientFingerprint: null,
+        ipHash: null,
+      },
     });
     expect(questUpdateMany).toHaveBeenCalledWith({
       where: { id: "quest-1", filledSlots: { lt: 5 } },
@@ -277,6 +287,12 @@ describe("createQuestService", () => {
           update: submissionUpdate,
         },
         questEvent: { create: vi.fn().mockResolvedValue({}) },
+        reputationEvent: { create: vi.fn().mockResolvedValue({}) },
+        $transaction: vi.fn(async (ops: unknown) => {
+          if (Array.isArray(ops)) return Promise.all(ops);
+          if (typeof ops === "function") return (ops as (tx: unknown) => unknown)({});
+          return ops;
+        }),
       } as never,
       {
         enabled: true,
@@ -355,6 +371,7 @@ describe("createQuestService", () => {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
           reputationScore: 0,
           createdAt: new Date(),
+          reputationDecayedAt: new Date(),
         }),
       },
       quest: { findFirst },
@@ -362,7 +379,9 @@ describe("createQuestService", () => {
         update: vi.fn().mockResolvedValue({}),
         findMany: vi.fn().mockResolvedValue([]),
         count: vi.fn().mockResolvedValue(0),
+        findFirst: vi.fn().mockResolvedValue({ createdAt: new Date() }),
       },
+      reputationEvent: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
       moderationEvent: { create: vi.fn().mockResolvedValue({}) },
       $transaction: vi.fn(async (fn) =>
         fn({

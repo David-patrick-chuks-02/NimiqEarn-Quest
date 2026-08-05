@@ -134,12 +134,71 @@ export function createAdminService(db: PrismaClient) {
           status: s.status,
           verificationOutcome: s.verificationOutcome,
           confidenceScore: s.confidenceScore,
+          moderationQueue: s.moderationQueue,
           proofType: s.quest.proofType,
           questId: s.quest.id,
           questTitle: s.quest.title,
           telegramId: s.user.telegramId,
           displayName: s.user.displayName,
           reputationScore: s.user.reputationScore,
+          proofPreview: s.proof.startsWith("data:")
+            ? `[${s.proof.slice(5, s.proof.indexOf(";")) || "media"}]`
+            : s.proof.slice(0, 280),
+          decisionReasons: (() => {
+            const sig = s.verificationSignals as { decisionReasons?: string[] } | null;
+            return Array.isArray(sig?.decisionReasons) ? sig!.decisionReasons!.slice(0, 8) : [];
+          })(),
+          createdAt: s.createdAt.toISOString(),
+          verifiedAt: s.verifiedAt?.toISOString() ?? null,
+        })),
+      };
+    },
+
+    async listPlatformQueue(limit: number, offset: number) {
+      const where = {
+        status: "PENDING" as const,
+        OR: [
+          { moderationQueue: "PLATFORM" },
+          { verificationOutcome: "MANUAL_REVIEW" as const },
+        ],
+      };
+      const [total, items] = await Promise.all([
+        db.questSubmission.count({ where }),
+        db.questSubmission.findMany({
+          where,
+          orderBy: { createdAt: "asc" },
+          skip: offset,
+          take: limit,
+          include: {
+            user: { select: { telegramId: true, displayName: true, reputationScore: true } },
+            quest: { select: { id: true, title: true, proofType: true } },
+          },
+        }),
+      ]);
+
+      return {
+        total,
+        limit,
+        offset,
+        items: items.map((s) => ({
+          id: s.id,
+          status: s.status,
+          verificationOutcome: s.verificationOutcome,
+          confidenceScore: s.confidenceScore,
+          moderationQueue: s.moderationQueue,
+          proofType: s.quest.proofType,
+          questId: s.quest.id,
+          questTitle: s.quest.title,
+          telegramId: s.user.telegramId,
+          displayName: s.user.displayName,
+          reputationScore: s.user.reputationScore,
+          proofPreview: s.proof.startsWith("data:")
+            ? `[${s.proof.slice(5, s.proof.indexOf(";")) || "media"}]`
+            : s.proof.slice(0, 280),
+          decisionReasons: (() => {
+            const sig = s.verificationSignals as { decisionReasons?: string[] } | null;
+            return Array.isArray(sig?.decisionReasons) ? sig!.decisionReasons!.slice(0, 8) : [];
+          })(),
           createdAt: s.createdAt.toISOString(),
           verifiedAt: s.verifiedAt?.toISOString() ?? null,
         })),

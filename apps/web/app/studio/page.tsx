@@ -20,7 +20,9 @@ const PROOF_TYPES = [
   { value: "TEXT", label: "Text response" },
   { value: "LINK", label: "Link / URL" },
   { value: "SCREENSHOT", label: "Screenshot" },
+  { value: "UPLOADED_MEDIA", label: "Image or video" },
   { value: "TRANSACTION_HASH", label: "Transaction hash" },
+  { value: "WALLET_INTERACTION", label: "Wallet signed message" },
   { value: "REFERRAL_EVENT", label: "Referral event" },
 ] as const;
 
@@ -58,6 +60,18 @@ const emptyForm = {
   proofType: "LINK",
   proofInstructions: "",
   sampleEvidence: "", // compressed image data URL, optional
+  // Optional verificationConfig (campaign rules)
+  targetAddress: "",
+  minAmountNim: "",
+  requiredHashtags: "",
+  requiredMentions: "",
+  minEngagement: "",
+  minReputation: "",
+  deadlineAt: "",
+  expectedMessage: "",
+  livePostUrl: "",
+  senderMustMatchWorker: false,
+  requireFirstQuest: false,
 };
 
 /**
@@ -415,6 +429,67 @@ export default function StudioPage() {
       }
 
       // Don't create anything yet — ask the creator whether to publish now or save a draft.
+      const verificationConfig: Record<string, unknown> = {};
+      if (form.targetAddress.trim()) verificationConfig.targetAddress = form.targetAddress.trim();
+      if (form.minAmountNim.trim()) {
+        const n = Number(form.minAmountNim);
+        if (!Number.isFinite(n) || n <= 0) {
+          setError("Min amount: enter a positive NIM amount, or leave blank.");
+          return;
+        }
+        verificationConfig.minAmountNim = n;
+      }
+      if (form.requiredHashtags.trim()) {
+        verificationConfig.requiredHashtags = form.requiredHashtags
+          .split(/[,\s]+/)
+          .map((h) => h.replace(/^#/, "").trim())
+          .filter(Boolean);
+      }
+      if (form.requiredMentions.trim()) {
+        verificationConfig.requiredMentions = form.requiredMentions
+          .split(/[,\s]+/)
+          .map((h) => h.replace(/^@/, "").trim())
+          .filter(Boolean);
+      }
+      if (form.minEngagement.trim()) {
+        const n = Number(form.minEngagement);
+        if (!Number.isInteger(n) || n < 0) {
+          setError("Min engagement: enter a whole number ≥ 0, or leave blank.");
+          return;
+        }
+        verificationConfig.minEngagement = n;
+      }
+      if (form.minReputation.trim()) {
+        const n = Number(form.minReputation);
+        if (!Number.isInteger(n) || n < 0) {
+          setError("Min reputation: enter a whole number ≥ 0, or leave blank.");
+          return;
+        }
+        verificationConfig.minReputation = n;
+      }
+      if (form.deadlineAt) {
+        const when = new Date(form.deadlineAt);
+        if (Number.isNaN(when.getTime())) {
+          setError("Deadline: pick a valid date/time, or leave blank.");
+          return;
+        }
+        verificationConfig.deadlineAt = when.toISOString();
+      }
+      if (form.expectedMessage.trim()) verificationConfig.expectedMessage = form.expectedMessage.trim();
+      if (form.livePostUrl.trim()) {
+        try {
+          // validate URL
+          // eslint-disable-next-line no-new
+          new URL(form.livePostUrl.trim());
+          verificationConfig.livePostUrl = form.livePostUrl.trim();
+        } catch {
+          setError("Live post URL: enter a valid http(s) URL, or leave blank.");
+          return;
+        }
+      }
+      if (form.senderMustMatchWorker) verificationConfig.senderMustMatchWorker = true;
+      if (form.requireFirstQuest) verificationConfig.requireFirstQuest = true;
+
       setCreateConfirm({
         payload: {
           title: form.title.trim(),
@@ -426,6 +501,9 @@ export default function StudioPage() {
           proofType: form.proofType,
           proofInstructions: form.proofInstructions.trim(),
           ...(form.sampleEvidence ? { sampleEvidence: form.sampleEvidence } : {}),
+          ...(Object.keys(verificationConfig).length
+            ? { verificationConfig }
+            : {}),
         },
       });
     },
@@ -783,6 +861,124 @@ export default function StudioPage() {
                     required
                   />
                 </div>
+
+                <details className="rounded-lg border border-white/10 bg-[var(--brand-navy-800)]/60 p-3">
+                  <summary className="cursor-pointer text-sm text-[var(--brand-gold)]">
+                    Verification rules (optional)
+                  </summary>
+                  <p className="mt-2 text-[0.7rem] text-[var(--brand-muted)]">
+                    Campaign-specific checks used by the hybrid verifier (on-chain, social, referral,
+                    wallet).
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Target address</label>
+                      <input
+                        className={inputClass}
+                        value={form.targetAddress}
+                        onChange={(e) => setForm({ ...form, targetAddress: e.target.value })}
+                        placeholder="NQ… recipient"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Min amount (NIM)</label>
+                      <input
+                        className={inputClass}
+                        value={form.minAmountNim}
+                        onChange={(e) => setForm({ ...form, minAmountNim: e.target.value })}
+                        inputMode="decimal"
+                        placeholder="10"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Required hashtags</label>
+                      <input
+                        className={inputClass}
+                        value={form.requiredHashtags}
+                        onChange={(e) => setForm({ ...form, requiredHashtags: e.target.value })}
+                        placeholder="#nimiq #earn"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Required mentions</label>
+                      <input
+                        className={inputClass}
+                        value={form.requiredMentions}
+                        onChange={(e) => setForm({ ...form, requiredMentions: e.target.value })}
+                        placeholder="@nimiq"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Min engagement</label>
+                      <input
+                        className={inputClass}
+                        value={form.minEngagement}
+                        onChange={(e) => setForm({ ...form, minEngagement: e.target.value })}
+                        inputMode="numeric"
+                        placeholder="5"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Min reputation</label>
+                      <input
+                        className={inputClass}
+                        value={form.minReputation}
+                        onChange={(e) => setForm({ ...form, minReputation: e.target.value })}
+                        inputMode="numeric"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Deadline</label>
+                      <input
+                        type="datetime-local"
+                        className={`${inputClass} appearance-none`}
+                        value={form.deadlineAt}
+                        onChange={(e) => setForm({ ...form, deadlineAt: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Live post URL (screenshot match)</label>
+                      <input
+                        className={inputClass}
+                        value={form.livePostUrl}
+                        onChange={(e) => setForm({ ...form, livePostUrl: e.target.value })}
+                        placeholder="https://x.com/…/status/…"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className={labelClass}>Expected signed message</label>
+                    <input
+                      className={inputClass}
+                      value={form.expectedMessage}
+                      onChange={(e) => setForm({ ...form, expectedMessage: e.target.value })}
+                      placeholder="For wallet interaction quests"
+                    />
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 text-sm text-[var(--brand-muted)]">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.senderMustMatchWorker}
+                        onChange={(e) =>
+                          setForm({ ...form, senderMustMatchWorker: e.target.checked })
+                        }
+                      />
+                      Sender / signer must match worker wallet
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.requireFirstQuest}
+                        onChange={(e) =>
+                          setForm({ ...form, requireFirstQuest: e.target.checked })
+                        }
+                      />
+                      Referral must complete a first quest
+                    </label>
+                  </div>
+                </details>
 
                 <div>
                   <label className={labelClass}>Sample evidence (optional)</label>
@@ -2611,6 +2807,8 @@ type StudioSubmission = {
   verificationOutcome?: string | null;
   confidenceScore?: number | null;
   verificationSignals?: Record<string, unknown> | null;
+  moderationQueue?: string | null;
+  creatorCanReview?: boolean;
   payoutTxUrl: string | null;
   createdAt: string;
   worker: { telegramId: string; username: string | null; displayName: string | null };
@@ -2711,8 +2909,18 @@ function SubmissionsReviewModal({
                       {s.confidenceScore != null
                         ? ` · ${(s.confidenceScore * 100).toFixed(0)}% confidence`
                         : ""}
+                      {s.moderationQueue === "PLATFORM" || s.verificationOutcome === "MANUAL_REVIEW"
+                        ? " · platform queue"
+                        : ""}
                     </p>
                   )}
+                  {s.status === "PENDING" &&
+                    (s.moderationQueue === "PLATFORM" ||
+                      s.verificationOutcome === "MANUAL_REVIEW") && (
+                      <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                        Waiting on platform moderation — not reviewable in Studio.
+                      </p>
+                    )}
                   <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
                     {new Date(s.createdAt).toLocaleString()}
                   </p>
@@ -2732,7 +2940,7 @@ function SubmissionsReviewModal({
                       View payout
                     </a>
                   )}
-                  {s.status === "PENDING" && (
+                  {s.status === "PENDING" && s.creatorCanReview !== false && (
                     <div className="mt-3 flex gap-2">
                       <button
                         disabled={busyId === s.id}

@@ -6,11 +6,15 @@ export interface ReputationContext {
   acceptanceRate?: number;
   /** Days since account creation. */
   ageDays?: number;
+  /** Fraud / policy violation event count. */
+  violationCount?: number;
+  /** 0–1 consistency across campaign categories. */
+  categoryConsistency?: number;
 }
 
 /**
- * Blend raw score with acceptance rate and account longevity so trusted
- * contributors get slightly lower auto/light thresholds.
+ * Blend raw score with acceptance rate, longevity, violations, and category consistency
+ * so trusted contributors get slightly lower auto/light thresholds.
  */
 export function effectiveReputation(ctx: ReputationContext | number): number {
   if (typeof ctx === "number") return ctx;
@@ -20,6 +24,12 @@ export function effectiveReputation(ctx: ReputationContext | number): number {
   }
   if (ctx.ageDays != null && Number.isFinite(ctx.ageDays) && ctx.ageDays > 0) {
     r += Math.min(15, Math.floor(ctx.ageDays / 30));
+  }
+  if (ctx.violationCount != null && ctx.violationCount > 0) {
+    r -= Math.min(40, ctx.violationCount * 4);
+  }
+  if (ctx.categoryConsistency != null && Number.isFinite(ctx.categoryConsistency)) {
+    r += Math.round((ctx.categoryConsistency - 0.5) * 10);
   }
   return r;
 }

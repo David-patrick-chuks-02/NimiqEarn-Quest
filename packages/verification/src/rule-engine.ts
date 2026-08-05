@@ -5,7 +5,9 @@ export type ProofType =
   | "LINK"
   | "SCREENSHOT"
   | "TRANSACTION_HASH"
-  | "REFERRAL_EVENT";
+  | "REFERRAL_EVENT"
+  | "WALLET_INTERACTION"
+  | "UPLOADED_MEDIA";
 
 export interface RuleCheck {
   code: string;
@@ -23,6 +25,8 @@ export interface RuleResult {
 }
 
 const ALLOWED_IMAGE = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+const ALLOWED_MEDIA =
+  /^data:(image\/(jpeg|jpg|png|webp)|video\/(mp4|webm|quicktime));base64,/i;
 
 function check(
   code: string,
@@ -41,7 +45,6 @@ function finalize(checks: RuleCheck[]): RuleResult {
 
 /**
  * Layer 1 deterministic verification — format and objective proof checks.
- * Failures here usually mean REJECT without spending AI budget.
  */
 export function runRuleEngine(input: {
   proofType: ProofType | string;
@@ -58,13 +61,21 @@ export function runRuleEngine(input: {
 
   switch (input.proofType) {
     case "SCREENSHOT": {
-      const mimeOk = ALLOWED_IMAGE.test(proof);
       checks.push(
-        check("screenshot_mime", mimeOk, "Screenshot must be a JPEG, PNG, or WebP data URL."),
+        check("screenshot_mime", ALLOWED_IMAGE.test(proof), "Screenshot must be a JPEG, PNG, or WebP data URL."),
       );
+      checks.push(check("screenshot_size", proof.length <= 700_000, "Screenshot is too large."));
+      break;
+    }
+    case "UPLOADED_MEDIA": {
       checks.push(
-        check("screenshot_size", proof.length <= 700_000, "Screenshot is too large."),
+        check(
+          "media_mime",
+          ALLOWED_MEDIA.test(proof),
+          "Upload a JPEG/PNG/WebP image or MP4/WebM video data URL.",
+        ),
       );
+      checks.push(check("media_size", proof.length <= 2_500_000, "Media upload is too large."));
       break;
     }
     case "LINK": {
@@ -87,6 +98,29 @@ export function runRuleEngine(input: {
       checks.push(check("tx_hash_format", hexOk, "Enter a valid transaction hash."));
       checks.push(
         check("tx_not_data", !proof.startsWith("data:"), "Transaction hash cannot be an image."),
+      );
+      break;
+    }
+    case "WALLET_INTERACTION": {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(proof);
+      } catch {
+        parsed = null;
+      }
+      const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+      const hasFields =
+        !!obj &&
+        typeof obj.message === "string" &&
+        typeof obj.publicKey === "string" &&
+        typeof obj.signature === "string" &&
+        (typeof obj.address === "string" || obj.address === undefined);
+      checks.push(
+        check(
+          "wallet_json",
+          hasFields,
+          'Wallet proof must be JSON: {"message","publicKey","signature","address?"}.',
+        ),
       );
       break;
     }
@@ -130,7 +164,6 @@ export function runRuleEngine(input: {
   return finalize(checks);
 }
 
-/** Append enrichment checks (on-chain, social, referral, behavioral). */
 export function appendRuleChecks(base: RuleResult, extra: RuleCheck[]): RuleResult {
   return finalize([...base.checks, ...extra]);
 }
@@ -143,14 +176,19 @@ export function hardCheck(code: string, passed: boolean, message: string): RuleC
   return check(code, passed, message, false);
 }
 
-/** Map a hard rule failure to the architecture REJECT outcome. */
 export function ruleFailOutcome(): VerificationOutcome {
   return "REJECT";
 }
 
-/** Extract #hashtags from instructions or post body. */
 export function extractHashtags(text: string): string[] {
   const found = text.matchAll(/#([a-zA-Z0-9_]{2,64})/g);
+  const out = new Set<string>();
+  for (const m of found) out.add(m[1]!.toLowerCase());
+  return [...out];
+}
+
+export function extractMentions(text: string): string[] {
+  const found = text.matchAll(/@([a-zA-Z0-9_]{2,64})/g);
   const out = new Set<string>();
   for (const m of found) out.add(m[1]!.toLowerCase());
   return [...out];

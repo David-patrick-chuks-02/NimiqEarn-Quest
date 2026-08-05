@@ -38,7 +38,12 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 export function loadEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  // Treat empty strings as unset so optional URL/string fields don't fail Zod.
+  const cleaned: Record<string, string | undefined> = { ...process.env };
+  for (const [key, value] of Object.entries(cleaned)) {
+    if (value === "") delete cleaned[key];
+  }
+  const parsed = envSchema.safeParse(cleaned);
   if (!parsed.success) {
     console.error("Invalid environment variables:", parsed.error.flatten().fieldErrors);
     throw new Error("Environment validation failed");

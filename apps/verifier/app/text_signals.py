@@ -94,3 +94,31 @@ def ai_generated_likelihood(text: str) -> float:
     unique = len(set(words)) / len(words)
     score = min(1.0, hits * 0.25 + (0.35 if unique < 0.45 and len(words) > 40 else 0.0))
     return score
+
+
+def semantic_relevance(text: str, instructions: str, title: str = "") -> float:
+    """
+    Semantic-ish relevance via unigram + bigram overlap against instructions+title.
+    """
+    corpus = f"{instructions} {title}".strip()
+    uni = keyword_overlap(text, corpus)
+    bi = bigram_overlap(text, corpus)
+    base = 0.55 * uni + 0.45 * bi
+    words = re.findall(r"\w+", text.lower())
+    if len(words) < 6:
+        return min(base, 0.35)
+    length_boost = min(0.15, max(0.0, (len(words) - 12) / 100))
+    return max(0.0, min(1.0, base + length_boost))
+
+
+def bigram_overlap(a: str, b: str) -> float:
+    def bigrams(s: str) -> set[tuple[str, str]]:
+        toks = [t for t in re.findall(r"[a-z0-9]{3,}", s.lower()) if t not in _STOP]
+        return {(toks[i], toks[i + 1]) for i in range(len(toks) - 1)}
+
+    ba, bb = bigrams(a), bigrams(b)
+    if not bb:
+        return 0.5
+    if not ba:
+        return 0.1
+    return len(ba & bb) / max(1, len(bb))

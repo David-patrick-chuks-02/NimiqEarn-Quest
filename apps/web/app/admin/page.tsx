@@ -2,17 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Tab = "submissions" | "moderation" | "users";
+type Tab = "queue" | "submissions" | "moderation" | "users";
 
 interface SubmissionRow {
   id: string;
   status: string;
   verificationOutcome: string | null;
   confidenceScore: number | null;
+  moderationQueue?: string | null;
   questTitle: string;
   telegramId: string;
   displayName: string | null;
   reputationScore: number;
+  proofPreview?: string;
+  decisionReasons?: string[];
   createdAt: string;
 }
 
@@ -52,7 +55,7 @@ async function adminFetch(path: string, key: string, init?: RequestInit) {
 
 export default function AdminPage() {
   const [key, setKey] = useState("");
-  const [tab, setTab] = useState<Tab>("submissions");
+  const [tab, setTab] = useState<Tab>("queue");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
@@ -73,7 +76,13 @@ export default function AdminPage() {
     setError(null);
     try {
       localStorage.setItem(KEY_STORAGE, key.trim());
-      if (tab === "submissions") {
+      if (tab === "queue") {
+        const data = await adminFetch(
+          "/api/admin/submissions?queue=PLATFORM&limit=50",
+          key.trim(),
+        );
+        setSubmissions(data.items ?? []);
+      } else if (tab === "submissions") {
         const data = await adminFetch("/api/admin/submissions?limit=50", key.trim());
         setSubmissions(data.items ?? []);
       } else if (tab === "moderation") {
@@ -92,7 +101,19 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (key.trim()) void load();
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps -- reload on tab only when keyed
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function resolve(id: string, action: "accept" | "reject") {
+    try {
+      await adminFetch(`/api/admin/submissions/${id}/${action}`, key.trim(), {
+        method: "POST",
+        body: "{}",
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed");
+    }
+  }
 
   async function suspendUser(userId: string, status: "SUSPENDED" | "ACTIVE") {
     try {
@@ -114,7 +135,7 @@ export default function AdminPage() {
         </p>
         <h1 className="mt-1 text-xl text-[var(--brand-text)]">Moderator console</h1>
         <p className="mt-2 max-w-xl text-sm text-[var(--brand-muted)]">
-          Review verification outcomes, moderation events, and suspend farming accounts.
+          Platform queue handles MANUAL_REVIEW. Creators still own LIGHT_REVIEW in Studio.
         </p>
       </header>
 
@@ -139,8 +160,8 @@ export default function AdminPage() {
         </button>
       </div>
 
-      <nav className="mb-4 flex gap-2 text-sm">
-        {(["submissions", "moderation", "users"] as Tab[]).map((t) => (
+      <nav className="mb-4 flex flex-wrap gap-2 text-sm">
+        {(["queue", "submissions", "moderation", "users"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -151,7 +172,7 @@ export default function AdminPage() {
                 : "rounded-md px-3 py-1.5 text-[var(--brand-muted)] hover:bg-white/5"
             }
           >
-            {t}
+            {t === "queue" ? "platform queue" : t}
           </button>
         ))}
       </nav>
@@ -162,22 +183,36 @@ export default function AdminPage() {
         </p>
       )}
 
-      {tab === "submissions" && (
+      {(tab === "queue" || tab === "submissions") && (
         <div className="overflow-x-auto rounded-lg border border-white/10">
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="w-full min-w-[44rem] text-left text-sm">
             <thead className="bg-[var(--brand-navy-800)] text-[var(--brand-muted)]">
               <tr>
                 <th className="px-3 py-2 font-medium">Quest</th>
                 <th className="px-3 py-2 font-medium">Worker</th>
                 <th className="px-3 py-2 font-medium">Outcome</th>
                 <th className="px-3 py-2 font-medium">Conf</th>
-                <th className="px-3 py-2 font-medium">Status</th>
+                {tab === "queue" && <th className="px-3 py-2 font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {submissions.map((s) => (
-                <tr key={s.id} className="border-t border-white/5">
-                  <td className="px-3 py-2">{s.questTitle}</td>
+                <tr key={s.id} className="border-t border-white/5 align-top">
+                  <td className="px-3 py-2">
+                    <div>{s.questTitle}</div>
+                    {s.proofPreview && (
+                      <p className="mt-1 max-w-xs truncate text-[0.7rem] text-[var(--brand-muted)]">
+                        {s.proofPreview}
+                      </p>
+                    )}
+                    {s.decisionReasons && s.decisionReasons.length > 0 && (
+                      <ul className="mt-1 list-disc pl-4 text-[0.65rem] text-[var(--brand-muted)]">
+                        {s.decisionReasons.slice(0, 3).map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     {s.displayName ?? s.telegramId}
                     <span className="ml-1 text-[var(--brand-muted)]">rep {s.reputationScore}</span>
@@ -186,13 +221,30 @@ export default function AdminPage() {
                   <td className="px-3 py-2">
                     {s.confidenceScore != null ? s.confidenceScore.toFixed(2) : "—"}
                   </td>
-                  <td className="px-3 py-2">{s.status}</td>
+                  {tab === "queue" && (
+                    <td className="px-3 py-2 space-x-3">
+                      <button
+                        type="button"
+                        className="text-[var(--brand-gold)] underline"
+                        onClick={() => void resolve(s.id, "accept")}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-300 underline"
+                        onClick={() => void resolve(s.id, "reject")}
+                      >
+                        Reject
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {submissions.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-[var(--brand-muted)]">
-                    No submissions yet.
+                    {tab === "queue" ? "Platform queue is empty." : "No submissions yet."}
                   </td>
                 </tr>
               )}

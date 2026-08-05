@@ -38,7 +38,7 @@ Not every campaign needs every proof type. The verification engine should adapt 
 | transaction hash | `0x9f3a...a21c` from a token transfer | transaction exists, belongs to the correct wallet, happened on the correct chain, and matches the campaign target |
 | wallet interaction | wallet connected and signed a contract call | interaction occurred with the expected contract and function, within the valid time window |
 | screenshot | screenshot of a completed signup or dashboard state | visible UI matches the expected result, text is not edited, and the screenshot is not reused |
-| social link/post | a public X or Facebook post URL | the post exists, is public if required, includes required tags or mentions, and is still accessible |
+| social link/post | a public X post URL | the post exists, is public if required, includes required tags or mentions, and is still accessible |
 | referral activity | invited user completed onboarding and first action | referral relationship is valid, the referred account is unique, and completion rules are satisfied |
 | text-based feedback | written feedback about a product test | response is relevant, not copied, not empty, and meets minimum quality requirements |
 | uploaded media | short video or image proof of participation | file is authentic, relevant, not duplicated, and consistent with the task request |

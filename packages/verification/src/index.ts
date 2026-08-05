@@ -4,6 +4,7 @@ export {
   softCheck,
   hardCheck,
   extractHashtags,
+  extractMentions,
   ruleFailOutcome,
   type ProofType,
   type RuleCheck,

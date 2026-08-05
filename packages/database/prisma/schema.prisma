@@ -42,6 +42,8 @@ enum QuestProofType {
   SCREENSHOT
   TRANSACTION_HASH
   REFERRAL_EVENT
+  WALLET_INTERACTION
+  UPLOADED_MEDIA
 }
 
 enum QuestStatus {
@@ -85,16 +87,59 @@ model User {
   securityPasswordHash String? @map("security_password_hash")
   // Preferred bot language (ISO code); defaults to English.
   languageCode     String     @default("en") @map("language_code")
+  // Referral graph: who invited this user (set on first successful referral proof or invite link).
+  referredById     String?    @map("referred_by_id") @db.Uuid
+  // Last time reputation was decayed for inactivity (idempotent daily decay).
+  reputationDecayedAt DateTime? @map("reputation_decayed_at")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
+  referredBy        User?              @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals         User[]             @relation("UserReferrals")
   walletProfiles    WalletProfile[]
   walletAudits      WalletAddressAudit[]
   quests            Quest[]
   submissions       QuestSubmission[]
   moderationEvents  ModerationEvent[]
+  referralsMade     ReferralEdge[]     @relation("ReferrerEdges")
+  referralsReceived ReferralEdge[]     @relation("ReferredEdges")
+  reputationEvents  ReputationEvent[]
 
+  @@index([referredById])
   @@map("users")
+}
+
+// Auditable reputation history: accepts, rejects, fraud flags, and decay.
+model ReputationEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  kind      String   @map("kind") @db.VarChar(32)
+  delta     Int      @default(0)
+  category  String?  @db.VarChar(64)
+  detail    Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([kind])
+  @@map("reputation_events")
+}
+
+// Explicit referrer → referred edges for farming-cluster analysis.
+model ReferralEdge {
+  id         String   @id @default(uuid()) @db.Uuid
+  referrerId String   @map("referrer_id") @db.Uuid
+  referredId String   @map("referred_id") @db.Uuid
+  questId    String?  @map("quest_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  referrer User @relation("ReferrerEdges", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred User @relation("ReferredEdges", fields: [referredId], references: [id], onDelete: Cascade)
+
+  @@unique([referrerId, referredId])
+  @@index([referredId])
+  @@map("referral_edges")
 }
 
 model WalletProfile {
@@ -202,6 +247,13 @@ model QuestSubmission {
   // payments aren't configured (dev) or a payout hasn't settled yet.
   payoutTxHash String?       @map("payout_tx_hash")
   paidAt       DateTime?     @map("paid_at")
+  // Indexed content fingerprint (image pHash / text hash) for cross-account cluster detection.
+  contentHash       String? @map("content_hash") @db.VarChar(128)
+  // Client device fingerprint + hashed IP for Sybil / farming signals.
+  clientFingerprint String? @map("client_fingerprint") @db.VarChar(128)
+  ipHash            String? @map("ip_hash") @db.VarChar(64)
+  // CREATOR = Studio light review; PLATFORM = admin moderator queue (MANUAL_REVIEW).
+  moderationQueue   String? @map("moderation_queue") @db.VarChar(16)
   createdAt DateTime         @default(now()) @map("created_at")
 
   quest            Quest             @relation(fields: [questId], references: [id], onDelete: Cascade)
@@ -210,6 +262,10 @@ model QuestSubmission {
 
   @@unique([questId, userId])
   @@index([questId])
+  @@index([contentHash])
+  @@index([ipHash])
+  @@index([clientFingerprint])
+  @@index([moderationQueue, status])
   @@map("quest_submissions")
 }
 

@@ -19,6 +19,8 @@ export const questProofTypeSchema = z.enum([
   "SCREENSHOT",
   "TRANSACTION_HASH",
   "REFERRAL_EVENT",
+  "WALLET_INTERACTION",
+  "UPLOADED_MEDIA",
 ]);
 export const questStatusSchema = z.enum(["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]);
 
@@ -42,6 +44,10 @@ export const aiVerifyRequestSchema = z.object({
   recentTextProofs: z.array(z.string().max(2000)).max(50).optional(),
   /** Sybil / farming risk hint from the API (0–1). */
   behavioralRisk: z.number().min(0).max(1).optional(),
+  /** Creator sample evidence data URL for UI template matching. */
+  sampleEvidence: z.string().max(700_000).optional(),
+  /** Live social post text (from platform API / fetch) for screenshot↔post match. */
+  livePostText: z.string().max(10_000).optional(),
 });
 
 export const aiVerifyResponseSchema = z.object({
@@ -92,10 +98,22 @@ export const verificationConfigSchema = z
     minAmountNim: z.number().positive().max(MAX_REWARD_AMOUNT).optional(),
     /** Hashtags that must appear in a fetched social post (or in instructions fallback). */
     requiredHashtags: z.array(z.string().min(1).max(64)).max(20).optional(),
+    /** @mentions that must appear in the social post. */
+    requiredMentions: z.array(z.string().min(1).max(64)).max(20).optional(),
+    /** Minimum likes+reposts (or reactions) when platform metrics are available. */
+    minEngagement: z.number().int().min(0).max(1_000_000).optional(),
     /** Minimum worker reputationScore required to submit. */
     minReputation: z.number().int().min(0).max(10_000).optional(),
-    /** Reject TRANSACTION_HASH proofs after this time (ISO date). */
+    /** Reject proofs after this time (ISO date). */
     deadlineAt: z.coerce.date().optional(),
+    /** Exact message that must be signed for WALLET_INTERACTION proofs. */
+    expectedMessage: z.string().min(1).max(2000).optional(),
+    /** Require signed address to match the worker's linked Nimiq wallet. */
+    senderMustMatchWorker: z.boolean().optional(),
+    /** Live post URL to compare against screenshot OCR (social + screenshot campaigns). */
+    livePostUrl: z.string().url().max(2000).optional(),
+    /** Referral: referred user must have completed at least one ACCEPTED quest. */
+    requireFirstQuest: z.boolean().optional(),
   })
   .strict();
 

@@ -145,7 +145,17 @@ export async function buildServer() {
     },
   });
   await app.register(settingsRoutes);
-  await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });
+  await app.register(adminRoutes, {
+    adminApiKey: env.ADMIN_API_KEY,
+    escrow,
+    fees,
+    notifier,
+    verifier: {
+      url: env.VERIFIER_URL,
+      sharedSecret: env.VERIFIER_SHARED_SECRET,
+      rpcUrl: env.NIMIQ_RPC_URL,
+    },
+  });
 
   app.get("/", async () => ({
     name: "NimiqEarn Quest API",
