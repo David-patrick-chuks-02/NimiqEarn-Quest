@@ -255,26 +255,52 @@ export async function fetchNimiqTransactions(
 
   const txs: NimiqTx[] = [];
   for (const raw of list) {
-    if (!raw || typeof raw !== "object") continue;
-    const t = raw as Record<string, unknown>;
-    const hash = typeof t.hash === "string" ? t.hash : null;
-    const from = typeof t.from === "string" ? t.from : "";
-    const to = typeof t.to === "string" ? t.to : "";
-    const valueLuna = typeof t.value === "number" ? t.value : 0;
-    if (!hash) continue;
-    txs.push({
-      hash,
-      from,
-      to,
-      valueLuna,
-      valueNim: valueLuna / LUNA_PER_NIM,
-      timestamp: typeof t.timestamp === "number" ? t.timestamp : null,
-      blockNumber: typeof t.blockNumber === "number" ? t.blockNumber : null,
-    });
+    const tx = parseTxRecord(raw);
+    if (tx) txs.push(tx);
   }
   // Newest first (nodes usually return this order already, but don't rely on it).
   txs.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
   return txs;
+}
+
+function parseTxRecord(raw: unknown): NimiqTx | null {
+  if (!raw || typeof raw !== "object") return null;
+  const t = raw as Record<string, unknown>;
+  const hash = typeof t.hash === "string" ? t.hash : null;
+  if (!hash) return null;
+  const from = typeof t.from === "string" ? t.from : "";
+  const to = typeof t.to === "string" ? t.to : "";
+  const valueLuna = typeof t.value === "number" ? t.value : 0;
+  return {
+    hash,
+    from,
+    to,
+    valueLuna,
+    valueNim: valueLuna / LUNA_PER_NIM,
+    timestamp: typeof t.timestamp === "number" ? t.timestamp : null,
+    blockNumber: typeof t.blockNumber === "number" ? t.blockNumber : null,
+  };
+}
+
+/**
+ * Look up a single transaction by hash (Albatross `getTransactionByHash`).
+ * Returns null when unreachable / unknown hash / unsupported method.
+ */
+export async function fetchNimiqTransaction(
+  rpcUrl: string,
+  hash: string,
+  timeoutMs = 8000,
+): Promise<NimiqTx | null> {
+  const cleaned = hash.trim().replace(/^0x/i, "");
+  // Prefer getTransactionByHash; some nodes expose getTransaction.
+  for (const method of ["getTransactionByHash", "getTransaction"] as const) {
+    const json = await rpcCall(rpcUrl, method, [cleaned], timeoutMs);
+    if (!json || json.error) continue;
+    const data = unwrap(json.result);
+    const tx = parseTxRecord(data);
+    if (tx) return tx;
+  }
+  return null;
 }
 
 export interface VerifySignedMessageInput {

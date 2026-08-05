@@ -1,5 +1,9 @@
 export {
   runRuleEngine,
+  appendRuleChecks,
+  softCheck,
+  hardCheck,
+  extractHashtags,
   ruleFailOutcome,
   type ProofType,
   type RuleCheck,
@@ -12,4 +16,8 @@ export {
   type DecisionResult,
 } from "./decision-engine.js";
 
-export { thresholdsFor } from "./thresholds.js";
+export {
+  thresholdsFor,
+  effectiveReputation,
+  type ReputationContext,
+} from "./thresholds.js";

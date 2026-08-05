@@ -12,6 +12,8 @@ class VerifyRequest(BaseModel):
     proofInstructions: str = ""
     title: str | None = None
     recentImageHashes: list[str] = Field(default_factory=list)
+    recentTextProofs: list[str] = Field(default_factory=list)
+    behavioralRisk: float | None = None
 
 
 class VerifyResponse(BaseModel):

@@ -89,6 +89,8 @@ export async function buildServer() {
       // Public quest reads (discovery list GET /api/quests, share pages GET /api/quests/:id)
       // and initData-authed worker routes — no shared secret needed.
       if (request.url.startsWith("/api/quests")) return;
+      // Moderator admin UI uses x-admin-key instead of the bot shared secret.
+      if (request.url.startsWith("/api/admin")) return;
       if (!safeCompare(request.headers["x-internal-key"], secret)) {
         return reply.code(401).send({ error: "Unauthorized" });
       }
@@ -127,6 +129,7 @@ export async function buildServer() {
     verifier: {
       url: env.VERIFIER_URL,
       sharedSecret: env.VERIFIER_SHARED_SECRET,
+      rpcUrl: env.NIMIQ_RPC_URL,
     },
   });
   await app.register(studioRoutes, { 
@@ -138,6 +141,7 @@ export async function buildServer() {
     verifier: {
       url: env.VERIFIER_URL,
       sharedSecret: env.VERIFIER_SHARED_SECRET,
+      rpcUrl: env.NIMIQ_RPC_URL,
     },
   });
   await app.register(settingsRoutes);

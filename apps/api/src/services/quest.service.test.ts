@@ -175,9 +175,20 @@ describe("createQuestService", () => {
     );
 
     const service = createQuestService({
-      user: { findUnique, update: vi.fn() },
+      user: {
+        findUnique,
+        update: vi.fn(),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          reputationScore: 0,
+          createdAt: new Date(),
+        }),
+      },
       quest: { findFirst },
-      questSubmission: { update: submissionUpdate, findMany: vi.fn().mockResolvedValue([]) },
+      questSubmission: {
+        update: submissionUpdate,
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      },
       moderationEvent: { create: moderationCreate },
       $transaction: transaction,
     } as never);
@@ -338,11 +349,19 @@ describe("createQuestService", () => {
     const submissionCreate = vi.fn().mockResolvedValue({ id: "sub-1" });
     const questUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = createQuestService({
-      user: { findUnique, update: vi.fn() },
+      user: {
+        findUnique,
+        update: vi.fn(),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          reputationScore: 0,
+          createdAt: new Date(),
+        }),
+      },
       quest: { findFirst },
       questSubmission: {
         update: vi.fn().mockResolvedValue({}),
         findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
       },
       moderationEvent: { create: vi.fn().mockResolvedValue({}) },
       $transaction: vi.fn(async (fn) =>

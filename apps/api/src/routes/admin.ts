@@ -49,4 +49,32 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
     const { limit, offset } = parsePaging(request.query);
     return admin.listQuests(limit, offset);
   });
+
+  app.get<{ Querystring: ListQuery & { outcome?: string } }>(
+    "/api/admin/submissions",
+    async (request) => {
+      const { limit, offset } = parsePaging(request.query);
+      return admin.listSubmissions(limit, offset, request.query.outcome);
+    },
+  );
+
+  app.get<{ Querystring: ListQuery }>("/api/admin/moderation", async (request) => {
+    const { limit, offset } = parsePaging(request.query);
+    return admin.listModerationEvents(limit, offset);
+  });
+
+  app.post<{
+    Params: { userId: string };
+    Body: { status?: string };
+  }>("/api/admin/users/:userId/status", async (request, reply) => {
+    const status = request.body?.status;
+    if (status !== "ACTIVE" && status !== "SUSPENDED" && status !== "PENDING") {
+      return reply.code(400).send({ error: "status must be ACTIVE, SUSPENDED, or PENDING" });
+    }
+    try {
+      return await admin.setUserStatus(request.params.userId, status);
+    } catch {
+      return reply.code(404).send({ error: "User not found" });
+    }
+  });
 };

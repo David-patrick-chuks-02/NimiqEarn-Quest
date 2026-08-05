@@ -9,6 +9,7 @@ import {
   type VerifierConfig,
 } from "./verification.service.js";
 import { createReputationService } from "./reputation.service.js";
+import { enqueuePayout, isPayoutQueueEnabled } from "./payout-queue.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -33,6 +34,7 @@ export class QuestServiceError extends Error {
       | "INVALID_PROOF"
       | "PAYOUT_FAILED"
       | "QUEST_NOT_STARTED"
+      | "REPUTATION_TOO_LOW"
       | "ALREADY_PROMOTED"
       | "PROMOTION_UNAVAILABLE"
       | "SUBMISSION_NOT_FOUND"
@@ -173,6 +175,9 @@ export function createQuestService(
           proofType: parsed.data.proofType,
           proofInstructions: parsed.data.proofInstructions,
           sampleEvidence: parsed.data.sampleEvidence ?? null,
+          verificationConfig: parsed.data.verificationConfig
+            ? JSON.parse(JSON.stringify(parsed.data.verificationConfig))
+            : undefined,
           status: "DRAFT",
           escrowAddress: wallet?.address ?? null,
           escrowKeyCiphertext: wallet?.keyCiphertext ?? null,
@@ -226,7 +231,16 @@ export function createQuestService(
 
       return db.quest.update({
         where: { id: quest.id },
-        data: parsed.data,
+        data: {
+          ...parsed.data,
+          ...(parsed.data.verificationConfig !== undefined
+            ? {
+                verificationConfig: parsed.data.verificationConfig
+                  ? JSON.parse(JSON.stringify(parsed.data.verificationConfig))
+                  : null,
+              }
+            : {}),
+        },
       });
     },
 
@@ -661,6 +675,17 @@ export function createQuestService(
         throw new QuestServiceError("This quest hasn't started yet.", "QUEST_NOT_STARTED");
       }
 
+      const vcfgRaw = quest.verificationConfig as { minReputation?: number } | null;
+      if (
+        typeof vcfgRaw?.minReputation === "number" &&
+        user.reputationScore < vcfgRaw.minReputation
+      ) {
+        throw new QuestServiceError(
+          `This quest requires reputation ≥ ${vcfgRaw.minReputation}.`,
+          "REPUTATION_TOO_LOW",
+        );
+      }
+
       // Fast format check before reserving a slot (full rule engine runs in verification).
       const trimmed = normalizeSubmissionProof(proof, quest.proofType);
 
@@ -693,14 +718,19 @@ export function createQuestService(
         throw error;
       }
 
+      const repProfile = await reputation.getProfile(user.id);
       const { decision } = await verification.verifySubmission({
         submissionId,
         userId: user.id,
+        workerTelegramId: user.telegramId,
         proofType: quest.proofType,
         proof: trimmed,
         proofInstructions: quest.proofInstructions,
         title: quest.title,
-        reputationScore: user.reputationScore,
+        reputationScore: repProfile.score,
+        acceptanceRate: repProfile.acceptanceRate,
+        ageDays: repProfile.ageDays,
+        verificationConfig: quest.verificationConfig,
       });
 
       if (decision.outcome === "REJECT") {
@@ -735,34 +765,51 @@ export function createQuestService(
         let txUrl: string | null = null;
         if (willPay && workerWallet) {
           const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
-          const result = await escrow!.transfer({
-            fromKeyCiphertext: quest.escrowKeyCiphertext!,
-            toAddress: workerWallet.nimiqAddress,
-            valueLuna: rewardLuna,
-          });
-          if (!result.hash) {
-            console.error("Auto-approve payout failed", {
-              questId,
+          if (isPayoutQueueEnabled()) {
+            const queued = await enqueuePayout({
               submissionId,
-              error: result.error,
+              questId,
+              toAddress: workerWallet.nimiqAddress,
+              valueLuna: rewardLuna.toString(),
+              fromKeyCiphertext: quest.escrowKeyCiphertext!,
             });
-            // Leave ACCEPTED unpaid — creator/worker can retry via accept path.
-            throw new QuestServiceError(
-              result.error ?? "We couldn't pay your reward. Please try again shortly.",
-              "PAYOUT_FAILED",
+            if (!queued) {
+              throw new QuestServiceError("Payout queue unavailable.", "PAYOUT_FAILED");
+            }
+            void notifier?.notify(
+              user.telegramId,
+              `Verified — your ${Number(quest.rewardAmount).toLocaleString()} NIM reward for "${quest.title}" is being paid out.`,
+            );
+          } else {
+            const result = await escrow!.transfer({
+              fromKeyCiphertext: quest.escrowKeyCiphertext!,
+              toAddress: workerWallet.nimiqAddress,
+              valueLuna: rewardLuna,
+            });
+            if (!result.hash) {
+              console.error("Auto-approve payout failed", {
+                questId,
+                submissionId,
+                error: result.error,
+              });
+              // Leave ACCEPTED unpaid — creator/worker can retry via accept path.
+              throw new QuestServiceError(
+                result.error ?? "We couldn't pay your reward. Please try again shortly.",
+                "PAYOUT_FAILED",
+              );
+            }
+            txHash = result.hash;
+            txUrl = escrow!.explorerTxUrl(txHash);
+            await db.questSubmission.update({
+              where: { id: submissionId },
+              data: { payoutTxHash: txHash, paidAt: new Date() },
+            });
+            const rewardNim = Number(quest.rewardAmount).toLocaleString();
+            void notifier?.notify(
+              user.telegramId,
+              `Verified — you earned ${rewardNim} NIM for "${quest.title}".\n\nView the payout: ${txUrl}`,
             );
           }
-          txHash = result.hash;
-          txUrl = escrow!.explorerTxUrl(txHash);
-          await db.questSubmission.update({
-            where: { id: submissionId },
-            data: { payoutTxHash: txHash, paidAt: new Date() },
-          });
-          const rewardNim = Number(quest.rewardAmount).toLocaleString();
-          void notifier?.notify(
-            user.telegramId,
-            `Verified — you earned ${rewardNim} NIM for "${quest.title}".\n\nView the payout: ${txUrl}`,
-          );
         } else {
           void notifier?.notify(
             user.telegramId,

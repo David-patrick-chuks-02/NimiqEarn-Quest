@@ -17,6 +17,21 @@ services:
     plan: free
     ipAllowList: [] # internal connections only
 
+  # ---------------------------------------------------------------------------------- Verifier (Python AI)
+  - type: web
+    name: nimiqearn-verifier
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/verifier/Dockerfile
+    dockerContext: ./apps/verifier
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8090"
+      - key: VERIFIER_SHARED_SECRET
+        sync: false # must match API VERIFIER_SHARED_SECRET
+
   # ---------------------------------------------------------------------------------- API (Fastify)
   - type: web
     name: nimiqearn-api
@@ -60,6 +75,12 @@ services:
         sync: false # from @BotFather — required to verify Mini App initData on studio/worker routes
       - key: ADMIN_API_KEY
         sync: false # optional: enables /api/admin/* endpoints
+      - key: VERIFIER_URL
+        value: https://nimiqearn-verifier.onrender.com
+      - key: VERIFIER_SHARED_SECRET
+        sync: false # must match nimiqearn-verifier
+      - key: PAYOUT_QUEUE_ENABLED
+        value: "0" # set to 1 + run payout worker when enabling BullMQ payouts
       - key: SENTRY_DSN
         sync: false # optional: enables Sentry error monitoring for the API
 

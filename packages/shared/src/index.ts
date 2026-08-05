@@ -38,6 +38,10 @@ export const aiVerifyRequestSchema = z.object({
   title: z.string().optional(),
   /** Recent perceptual hashes from similar quests (for duplicate detection). */
   recentImageHashes: z.array(z.string()).max(200).optional(),
+  /** Recent text proofs for cross-submission clone detection. */
+  recentTextProofs: z.array(z.string().max(2000)).max(50).optional(),
+  /** Sybil / farming risk hint from the API (0–1). */
+  behavioralRisk: z.number().min(0).max(1).optional(),
 });
 
 export const aiVerifyResponseSchema = z.object({
@@ -80,6 +84,23 @@ const rewardAmountSchema = z
     { message: "Reward supports at most 8 decimal places." },
   );
 
+export const verificationConfigSchema = z
+  .object({
+    /** Expected recipient for TRANSACTION_HASH proofs (Nimiq address). */
+    targetAddress: z.string().min(8).max(80).optional(),
+    /** Minimum transfer amount in NIM for TRANSACTION_HASH proofs. */
+    minAmountNim: z.number().positive().max(MAX_REWARD_AMOUNT).optional(),
+    /** Hashtags that must appear in a fetched social post (or in instructions fallback). */
+    requiredHashtags: z.array(z.string().min(1).max(64)).max(20).optional(),
+    /** Minimum worker reputationScore required to submit. */
+    minReputation: z.number().int().min(0).max(10_000).optional(),
+    /** Reject TRANSACTION_HASH proofs after this time (ISO date). */
+    deadlineAt: z.coerce.date().optional(),
+  })
+  .strict();
+
+export type VerificationConfig = z.infer<typeof verificationConfigSchema>;
+
 export const createQuestObjectSchema = z.object({
   title: z.string().min(3).max(100),
   category: questCategorySchema,
@@ -96,6 +117,7 @@ export const createQuestObjectSchema = z.object({
     .max(700_000)
     .refine((v) => ALLOWED_SAMPLE_MIME.test(v), "Must be a JPEG, PNG, or WebP image data URL")
     .optional(),
+  verificationConfig: verificationConfigSchema.optional(),
 });
 
 export const createQuestSchema = createQuestObjectSchema.refine(

@@ -11,12 +11,14 @@ export interface RuleCheck {
   code: string;
   passed: boolean;
   message: string;
+  /** Soft failures escalate to review instead of hard REJECT. */
+  soft?: boolean;
 }
 
 export interface RuleResult {
   passed: boolean;
   checks: RuleCheck[];
-  /** When rules fail hard, decision should REJECT without AI. */
+  /** When true, decision should REJECT without AI. */
   hardFail: boolean;
 }
 
@@ -26,8 +28,15 @@ function check(
   code: string,
   passed: boolean,
   message: string,
+  soft = false,
 ): RuleCheck {
-  return { code, passed, message };
+  return soft ? { code, passed, message, soft: true } : { code, passed, message };
+}
+
+function finalize(checks: RuleCheck[]): RuleResult {
+  const hardFail = checks.some((c) => !c.passed && !c.soft);
+  const passed = !hardFail;
+  return { passed, checks, hardFail };
 }
 
 /**
@@ -118,11 +127,31 @@ export function runRuleEngine(input: {
     }
   }
 
-  const passed = checks.every((c) => c.passed);
-  return { passed, checks, hardFail: !passed };
+  return finalize(checks);
+}
+
+/** Append enrichment checks (on-chain, social, referral, behavioral). */
+export function appendRuleChecks(base: RuleResult, extra: RuleCheck[]): RuleResult {
+  return finalize([...base.checks, ...extra]);
+}
+
+export function softCheck(code: string, passed: boolean, message: string): RuleCheck {
+  return check(code, passed, message, true);
+}
+
+export function hardCheck(code: string, passed: boolean, message: string): RuleCheck {
+  return check(code, passed, message, false);
 }
 
 /** Map a hard rule failure to the architecture REJECT outcome. */
 export function ruleFailOutcome(): VerificationOutcome {
   return "REJECT";
+}
+
+/** Extract #hashtags from instructions or post body. */
+export function extractHashtags(text: string): string[] {
+  const found = text.matchAll(/#([a-zA-Z0-9_]{2,64})/g);
+  const out = new Set<string>();
+  for (const m of found) out.add(m[1]!.toLowerCase());
+  return [...out];
 }

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.text_signals import keyword_overlap, spam_score, tokens
+from app.text_signals import (
+    ai_generated_likelihood,
+    keyword_overlap,
+    spam_score,
+    text_clone_probability,
+    tokens,
+)
 
 
 def test_tokens_filters_stopwords():
@@ -34,3 +40,14 @@ def test_spam_score_repetition():
 
 def test_spam_score_normal_text():
     assert spam_score("This is a thoughtful review of the onboarding flow.") < 0.5
+
+
+def test_text_clone_probability_detects_near_duplicates():
+    a = "I followed the account and shared the screenshot of my profile"
+    b = "I followed the account and shared the screenshot of my profile page"
+    assert text_clone_probability(a, [b]) > 0.5
+
+
+def test_ai_generated_likelihood_flags_phrases():
+    text = "As an AI language model, it is important to note that we leverage a robust solution."
+    assert ai_generated_likelihood(text) >= 0.5

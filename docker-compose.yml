@@ -29,6 +29,28 @@ services:
       timeout: 3s
       retries: 5
 
+  verifier:
+    build:
+      context: ./apps/verifier
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      PORT: "8090"
+      VERIFIER_SHARED_SECRET: ${VERIFIER_SHARED_SECRET:-dev-verifier-secret}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:

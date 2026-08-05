@@ -2,23 +2,42 @@ import type { PrismaClient } from "@nimiqearn/database";
 import {
   aiVerifyResponseSchema,
   type AiVerifyResponse,
+  type VerificationConfig,
   type VerificationOutcome,
 } from "@nimiqearn/shared";
-import { decide, runRuleEngine, type DecisionResult, type RuleResult } from "@nimiqearn/verification";
+import {
+  appendRuleChecks,
+  decide,
+  runRuleEngine,
+  type DecisionResult,
+  type RuleResult,
+} from "@nimiqearn/verification";
+import {
+  behavioralRiskFromCounts,
+  enrichOnChainChecks,
+  enrichReferralChecks,
+  enrichSocialChecks,
+  parseVerificationConfig,
+} from "./verification-enrichment.js";
 
 export interface VerifierConfig {
   url?: string;
   sharedSecret?: string;
+  rpcUrl?: string;
 }
 
 export interface VerifySubmissionInput {
   submissionId: string;
   userId: string;
+  workerTelegramId: string;
   proofType: string;
   proof: string;
   proofInstructions: string;
   title: string;
   reputationScore: number;
+  acceptanceRate?: number;
+  ageDays?: number;
+  verificationConfig?: VerificationConfig | unknown;
 }
 
 export interface VerifySubmissionResult {
@@ -67,17 +86,91 @@ async function callAiVerifier(
 export function createVerificationService(db: PrismaClient, config: VerifierConfig = {}) {
   return {
     /**
-     * Run deterministic rules → AI verifier → decision engine.
+     * Run deterministic rules → enrichers → AI verifier → decision engine.
      * Persists verification fields + a ModerationEvent.
      */
     async verifySubmission(input: VerifySubmissionInput): Promise<VerifySubmissionResult> {
-      const ruleResult = runRuleEngine({
+      let ruleResult = runRuleEngine({
         proofType: input.proofType,
         proof: input.proof,
       });
 
+      const vcfg = parseVerificationConfig(input.verificationConfig);
+
+      if (ruleResult.passed) {
+        if (input.proofType === "TRANSACTION_HASH") {
+          ruleResult = appendRuleChecks(
+            ruleResult,
+            await enrichOnChainChecks({
+              proof: input.proof,
+              rpcUrl: config.rpcUrl,
+              config: vcfg,
+            }),
+          );
+        } else if (input.proofType === "LINK") {
+          ruleResult = appendRuleChecks(
+            ruleResult,
+            await enrichSocialChecks({
+              proof: input.proof,
+              proofInstructions: input.proofInstructions,
+              config: vcfg,
+            }),
+          );
+        } else if (input.proofType === "REFERRAL_EVENT") {
+          const raw = input.proof.trim().replace(/^@/, "");
+          const referred = await db.user.findFirst({
+            where: {
+              OR: [{ telegramId: raw }, { telegramUsername: raw.replace(/^@/, "") }],
+            },
+            select: { id: true, telegramId: true, status: true },
+          });
+          let referredHasActivity = false;
+          if (referred) {
+            const [subs, wallets] = await Promise.all([
+              db.questSubmission.count({ where: { userId: referred.id } }),
+              db.walletProfile.count({ where: { userId: referred.id } }),
+            ]);
+            referredHasActivity = subs + wallets > 0;
+          }
+          ruleResult = appendRuleChecks(
+            ruleResult,
+            enrichReferralChecks({
+              workerTelegramId: input.workerTelegramId,
+              proof: input.proof,
+              referred,
+              referredHasActivity,
+            }),
+          );
+        }
+      }
+
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [submissionsLastHour, submissionsLastDay, hourRows] = await Promise.all([
+        db.questSubmission.count({
+          where: { userId: input.userId, createdAt: { gte: hourAgo } },
+        }),
+        db.questSubmission.count({
+          where: { userId: input.userId, createdAt: { gte: dayAgo } },
+        }),
+        db.questSubmission.findMany({
+          where: { userId: input.userId, createdAt: { gte: hourAgo } },
+          select: { questId: true },
+        }),
+      ]);
+      const distinctQuestsLastHour = new Set(hourRows.map((r) => r.questId)).size;
+      const { risk: behavioralRisk, checks: behaviorChecks } = behavioralRiskFromCounts({
+        submissionsLastHour,
+        submissionsLastDay,
+        distinctQuestsLastHour,
+      });
+      if (ruleResult.passed) {
+        ruleResult = appendRuleChecks(ruleResult, behaviorChecks);
+      }
+
       let recentImageHashes: string[] = [];
-      if (input.proofType === "SCREENSHOT" && ruleResult.passed) {
+      let recentTextProofs: string[] = [];
+      if (ruleResult.passed && input.proofType === "SCREENSHOT") {
         const recent = await db.questSubmission.findMany({
           where: {
             id: { not: input.submissionId },
@@ -94,6 +187,19 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
           })
           .filter((h): h is string => typeof h === "string" && h.length > 0);
       }
+      if (ruleResult.passed && input.proofType === "TEXT") {
+        const recent = await db.questSubmission.findMany({
+          where: {
+            id: { not: input.submissionId },
+            quest: { proofType: "TEXT" },
+            createdAt: { gte: dayAgo },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 40,
+          select: { proof: true },
+        });
+        recentTextProofs = recent.map((r) => r.proof).filter((p) => p.length < 2000);
+      }
 
       const aiResult = ruleResult.passed
         ? await callAiVerifier(config, {
@@ -103,13 +209,20 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
             proofInstructions: input.proofInstructions,
             title: input.title,
             recentImageHashes,
+            recentTextProofs,
+            behavioralRisk,
           })
         : null;
 
       const decision = decide({
         ruleResult,
         aiResult,
-        reputationScore: input.reputationScore,
+        reputationScore: {
+          score: input.reputationScore,
+          acceptanceRate: input.acceptanceRate,
+          ageDays: input.ageDays,
+        },
+        behavioralRisk,
       });
 
       const signals = {
@@ -118,6 +231,8 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
         decisionReasons: decision.reasons,
         aiRecommendation: aiResult?.recommendation ?? null,
         imageHash: aiResult?.imageHash ?? null,
+        behavioralRisk,
+        verificationConfig: vcfg ?? null,
       };
 
       await db.questSubmission.update({
@@ -142,6 +257,7 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               reasons: decision.reasons,
               rulePassed: ruleResult.passed,
               aiAvailable: Boolean(aiResult),
+              behavioralRisk,
             }),
           ),
         },

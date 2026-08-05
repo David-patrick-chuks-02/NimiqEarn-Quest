@@ -144,6 +144,8 @@ model Quest {
   // Optional sample-evidence image the creator uploads (a small compressed JPEG data URL)
   // to show workers an example of the proof they should submit.
   sampleEvidence     String?        @map("sample_evidence") @db.Text
+  // Optional per-quest verification overrides (target address, min amount, hashtags, etc.).
+  verificationConfig Json?          @map("verification_config")
   status             QuestStatus    @default(DRAFT)
   // Optional schedule: when set in the future, the quest is funded at publish but only goes
   // live (accepts submissions) once this time passes. Null = live immediately on publish.

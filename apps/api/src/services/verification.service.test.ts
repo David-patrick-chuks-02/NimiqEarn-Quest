@@ -1,6 +1,29 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { createVerificationService } from "./verification.service.js";
 
+function mockDb(overrides: Record<string, unknown> = {}) {
+  return {
+    questSubmission: {
+      update: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+      ...(overrides.questSubmission as object),
+    },
+    moderationEvent: {
+      create: vi.fn().mockResolvedValue({}),
+      ...(overrides.moderationEvent as object),
+    },
+    user: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      ...(overrides.user as object),
+    },
+    walletProfile: {
+      count: vi.fn().mockResolvedValue(0),
+      ...(overrides.walletProfile as object),
+    },
+  } as never;
+}
+
 describe("createVerificationService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -10,17 +33,16 @@ describe("createVerificationService", () => {
   it("fail-closes to MANUAL_REVIEW when verifier URL is unset", async () => {
     const update = vi.fn().mockResolvedValue({});
     const moderationCreate = vi.fn().mockResolvedValue({});
-    const svc = createVerificationService(
-      {
-        questSubmission: { update, findMany: vi.fn() },
-        moderationEvent: { create: moderationCreate },
-      } as never,
-      {},
-    );
+    const db = mockDb({
+      questSubmission: { update, findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+      moderationEvent: { create: moderationCreate },
+    });
+    const svc = createVerificationService(db, {});
 
     const result = await svc.verifySubmission({
       submissionId: "sub-1",
       userId: "u-1",
+      workerTelegramId: "111",
       proofType: "TEXT",
       proof: "Detailed feedback about the product experience.",
       proofInstructions: "Write product feedback",
@@ -51,18 +73,16 @@ describe("createVerificationService", () => {
       }),
     );
 
-    const update = vi.fn().mockResolvedValue({});
-    const svc = createVerificationService(
-      {
-        questSubmission: { update, findMany: vi.fn().mockResolvedValue([]) },
-        moderationEvent: { create: vi.fn().mockResolvedValue({}) },
-      } as never,
-      { url: "http://verifier.test", sharedSecret: "s" },
-    );
+    const db = mockDb();
+    const svc = createVerificationService(db, {
+      url: "http://verifier.test",
+      sharedSecret: "s",
+    });
 
     const result = await svc.verifySubmission({
       submissionId: "sub-1",
       userId: "u-1",
+      workerTelegramId: "111",
       proofType: "TEXT",
       proof: "Detailed feedback about the product experience and onboarding flow.",
       proofInstructions: "Write product feedback",
@@ -75,18 +95,13 @@ describe("createVerificationService", () => {
   });
 
   it("REJECT when deterministic rules fail", async () => {
-    const update = vi.fn().mockResolvedValue({});
-    const svc = createVerificationService(
-      {
-        questSubmission: { update, findMany: vi.fn() },
-        moderationEvent: { create: vi.fn().mockResolvedValue({}) },
-      } as never,
-      { url: "http://verifier.test" },
-    );
+    const db = mockDb();
+    const svc = createVerificationService(db, { url: "http://verifier.test" });
 
     const result = await svc.verifySubmission({
       submissionId: "sub-1",
       userId: "u-1",
+      workerTelegramId: "111",
       proofType: "LINK",
       proof: "not-a-url",
       proofInstructions: "Share your post",

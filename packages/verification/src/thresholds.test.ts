@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { thresholdsFor } from "./thresholds.js";
+import { effectiveReputation, thresholdsFor } from "./thresholds.js";
 
 describe("thresholdsFor", () => {
   it("uses baseline bands at reputation 0", () => {
@@ -17,5 +17,15 @@ describe("thresholdsFor", () => {
   it("clamps extreme reputation", () => {
     expect(thresholdsFor(10_000).auto).toBeGreaterThanOrEqual(0.7);
     expect(thresholdsFor(-10_000).auto).toBeLessThanOrEqual(0.95);
+  });
+
+  it("acceptance rate and longevity boost effective reputation", () => {
+    const plain = effectiveReputation(10);
+    const rich = effectiveReputation({
+      score: 10,
+      acceptanceRate: 0.9,
+      ageDays: 120,
+    });
+    expect(rich).toBeGreaterThan(plain);
   });
 });

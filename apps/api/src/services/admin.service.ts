@@ -105,6 +105,87 @@ export function createAdminService(db: PrismaClient) {
         })),
       };
     },
+
+    async listSubmissions(limit: number, offset: number, outcome?: string) {
+      const where =
+        outcome && outcome.length > 0
+          ? { verificationOutcome: outcome as never }
+          : {};
+      const [total, items] = await Promise.all([
+        db.questSubmission.count({ where }),
+        db.questSubmission.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip: offset,
+          take: limit,
+          include: {
+            user: { select: { telegramId: true, displayName: true, reputationScore: true } },
+            quest: { select: { id: true, title: true, proofType: true } },
+          },
+        }),
+      ]);
+
+      return {
+        total,
+        limit,
+        offset,
+        items: items.map((s) => ({
+          id: s.id,
+          status: s.status,
+          verificationOutcome: s.verificationOutcome,
+          confidenceScore: s.confidenceScore,
+          proofType: s.quest.proofType,
+          questId: s.quest.id,
+          questTitle: s.quest.title,
+          telegramId: s.user.telegramId,
+          displayName: s.user.displayName,
+          reputationScore: s.user.reputationScore,
+          createdAt: s.createdAt.toISOString(),
+          verifiedAt: s.verifiedAt?.toISOString() ?? null,
+        })),
+      };
+    },
+
+    async listModerationEvents(limit: number, offset: number) {
+      const [total, items] = await Promise.all([
+        db.moderationEvent.count(),
+        db.moderationEvent.findMany({
+          orderBy: { createdAt: "desc" },
+          skip: offset,
+          take: limit,
+        }),
+      ]);
+
+      return {
+        total,
+        limit,
+        offset,
+        items: items.map((e) => ({
+          id: e.id,
+          submissionId: e.submissionId,
+          userId: e.userId,
+          flagType: e.flagType,
+          resolution: e.resolution,
+          detail: e.detail,
+          createdAt: e.createdAt.toISOString(),
+        })),
+      };
+    },
+
+    async setUserStatus(userId: string, status: "ACTIVE" | "SUSPENDED" | "PENDING") {
+      const user = await db.user.update({
+        where: { id: userId },
+        data: { status },
+        select: {
+          id: true,
+          telegramId: true,
+          displayName: true,
+          status: true,
+          reputationScore: true,
+        },
+      });
+      return user;
+    },
   };
 }
 

@@ -18,6 +18,16 @@ try:
 except ImportError:  # pragma: no cover
     pytesseract = None  # type: ignore
 
+_EDITOR_HINTS = (
+    "photoshop",
+    "gimp",
+    "snapseed",
+    "picsart",
+    "lightroom",
+    "pixelmator",
+    "affinity",
+)
+
 
 def decode_data_url(proof: str) -> bytes | None:
     m = re.match(r"^data:image/[^;]+;base64,(.+)$", proof, re.I | re.S)
@@ -56,6 +66,31 @@ def ocr_text(image_bytes: bytes) -> str:
         return (pytesseract.image_to_string(img) or "").strip()
     except Exception:
         return ""
+
+
+def edit_likelihood(image_bytes: bytes) -> float:
+    """
+    Heuristic tamper / edit likelihood from EXIF Software tags and odd metadata.
+    Not forensic-grade — used to escalate suspicious screenshots.
+    """
+    if not Image:
+        return 0.0
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        exif = img.getexif() if hasattr(img, "getexif") else None
+        software = ""
+        if exif:
+            # 305 = Software
+            software = str(exif.get(305) or "").lower()
+        if any(h in software for h in _EDITOR_HINTS):
+            return 0.9
+        # Very small images claiming to be UI screenshots are suspicious.
+        w, h = img.size
+        if w * h < 40_000:
+            return 0.4
+        return 0.05 if software else 0.15
+    except Exception:
+        return 0.2
 
 
 def duplicate_probability(ph: str | None, recent: list[str]) -> tuple[float, int | None]:
