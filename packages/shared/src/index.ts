@@ -22,6 +22,37 @@ export const questProofTypeSchema = z.enum([
 ]);
 export const questStatusSchema = z.enum(["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]);
 
+/** Architecture decision outcomes from the hybrid verification pipeline. */
+export const verificationOutcomeSchema = z.enum([
+  "AUTO_APPROVE",
+  "LIGHT_REVIEW",
+  "MANUAL_REVIEW",
+  "REJECT",
+]);
+
+export const aiVerifyRequestSchema = z.object({
+  submissionId: z.string().min(1),
+  proofType: questProofTypeSchema,
+  proof: z.string().min(1),
+  proofInstructions: z.string().default(""),
+  title: z.string().optional(),
+  /** Recent perceptual hashes from similar quests (for duplicate detection). */
+  recentImageHashes: z.array(z.string()).max(200).optional(),
+});
+
+export const aiVerifyResponseSchema = z.object({
+  confidence: z.number().min(0).max(1),
+  signals: z.record(z.unknown()).default({}),
+  recommendation: z.enum(["approve", "review", "reject"]),
+  imageHash: z.string().optional(),
+});
+
+export type VerificationOutcome = z.infer<typeof verificationOutcomeSchema>;
+export type AiVerifyRequest = z.infer<typeof aiVerifyRequestSchema>;
+export type AiVerifyResponse = z.infer<typeof aiVerifyResponseSchema>;
+
+const ALLOWED_SAMPLE_MIME = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+
 // NOTE: `role` is intentionally NOT accepted from clients — it is assigned
 // server-side only (new users default to WORKER; creator/admin via dedicated flows).
 export const createUserSchema = z.object({
@@ -32,7 +63,9 @@ export const createUserSchema = z.object({
 
 
 // reward_amount is stored as Decimal(18, 8): max 10 integer digits, 8 fractional.
-const MAX_REWARD_AMOUNT = 1_000_000_000; // 1e9, comfortably within the Decimal range
+// Cap so reward × slots × 1e5 luna stays well inside bigint-safe product math.
+const MAX_REWARD_AMOUNT = 1_000_000; // 1e6 NIM per completion
+const MAX_TOTAL_SLOTS = 10_000;
 const rewardAmountSchema = z
   .number()
   .positive()
@@ -47,27 +80,34 @@ const rewardAmountSchema = z
     { message: "Reward supports at most 8 decimal places." },
   );
 
-export const createQuestSchema = z.object({
+export const createQuestObjectSchema = z.object({
   title: z.string().min(3).max(100),
   category: questCategorySchema,
   description: z.string().min(10).max(2000),
   rewardAmount: rewardAmountSchema,
-  totalSlots: z.number().int().positive().max(1_000_000),
+  totalSlots: z.number().int().positive().max(MAX_TOTAL_SLOTS),
   // Optional scheduled start. Omitted/null = the quest goes live as soon as it's published.
   startAt: z.coerce.date().optional(),
   proofType: questProofTypeSchema,
   proofInstructions: z.string().min(5).max(1000),
-  // Optional sample-evidence image as a compressed JPEG/PNG data URL. Capped ~700 KB of
-  // base64 (client compresses before upload) so it stays a reasonable DB text value.
+  // Optional sample-evidence image as a compressed JPEG/PNG/WebP data URL.
   sampleEvidence: z
     .string()
     .max(700_000)
-    .refine((v) => v.startsWith("data:image/"), "Must be an image data URL")
+    .refine((v) => ALLOWED_SAMPLE_MIME.test(v), "Must be a JPEG, PNG, or WebP image data URL")
     .optional(),
 });
 
+export const createQuestSchema = createQuestObjectSchema.refine(
+  (q) => q.rewardAmount * q.totalSlots <= 10_000_000,
+  {
+    message: "Reward pool (reward × slots) cannot exceed 10,000,000 NIM.",
+    path: ["totalSlots"],
+  },
+);
+
 // Editing a draft: every field is optional, but the same per-field rules apply.
-export const updateQuestSchema = createQuestSchema.partial();
+export const updateQuestSchema = createQuestObjectSchema.partial();
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type CreateQuestInput = z.infer<typeof createQuestSchema>;

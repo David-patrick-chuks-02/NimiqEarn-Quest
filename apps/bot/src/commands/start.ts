@@ -97,8 +97,18 @@ function startPayloadFromText(text: string | undefined): string | undefined {
  * Registered AFTER the conversations plugin so ctx.conversation is available for runStart.
  */
 export function createCaptchaGuard(api: ApiClient) {
+  const MAX_FAILS = 5;
+  const LOCK_MS = 60_000;
+
   return async function captchaGuard(ctx: BotContext, next: NextFunction) {
     if (ctx.session.captchaVerified) return next();
+
+    const lockedUntil = ctx.session.captchaLockedUntil ?? 0;
+    if (lockedUntil > Date.now()) {
+      if (ctx.callbackQuery) await ctx.answerCallbackQuery().catch(() => undefined);
+      await ctx.reply(messages.captcha.locked);
+      return;
+    }
 
     const pending = ctx.session.captcha;
     const text = ctx.message?.text?.trim();
@@ -111,9 +121,24 @@ export function createCaptchaGuard(api: ApiClient) {
         ctx.session.captchaVerified = true;
         ctx.session.captcha = undefined;
         ctx.session.captchaNoticeId = undefined;
+        ctx.session.captchaFails = 0;
+        ctx.session.captchaLockedUntil = undefined;
         // Show the next screen FIRST, then clear the challenge + the user's answer, so the
         // chat is never left empty between the two.
         await runStart(ctx, api, pending.startPayload ?? "");
+        await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
+        await deleteMessageSafe(ctx, ctx.chat?.id, noticeId);
+        await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);
+        return;
+      }
+
+      const fails = (ctx.session.captchaFails ?? 0) + 1;
+      ctx.session.captchaFails = fails;
+      if (fails >= MAX_FAILS) {
+        ctx.session.captchaLockedUntil = Date.now() + LOCK_MS;
+        ctx.session.captcha = undefined;
+        ctx.session.captchaFails = 0;
+        await ctx.reply(messages.captcha.locked);
         await deleteMessageSafe(ctx, ctx.chat?.id, pending.messageId);
         await deleteMessageSafe(ctx, ctx.chat?.id, noticeId);
         await deleteMessageSafe(ctx, ctx.chat?.id, incomingId);

@@ -31,11 +31,10 @@ export default function PrivacyPage() {
               ID and, if available, your username and display name.
             </li>
             <li>
-              <strong>Wallet information.</strong> The public Nimiq address(es) you choose to link,
-              and a log of address changes for a transparent, auditable payout trail. We{" "}
-              <strong>never</strong> receive or store your private keys or recovery phrase, and we{" "}
-              <strong>never take custody of your funds</strong>. Ownership is proven by a signed
-              message, not by sharing keys.
+              <strong>Wallet information.</strong> We create a custodial Nimiq wallet for your
+              account and store the private key encrypted at rest. We also store the public address,
+              balance-related activity needed to operate payouts, and an audit log of address
+              changes. You may export your private key using your security password.
             </li>
             <li>
               <strong>Activity.</strong> Quests you create or complete, submissions and their

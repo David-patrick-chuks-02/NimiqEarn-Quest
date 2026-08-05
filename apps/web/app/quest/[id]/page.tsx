@@ -29,8 +29,16 @@ interface WorkerView {
   quest: PublicQuest;
   isCreator: boolean;
   submitted: boolean;
+  submissionStatus?: string | null;
   canSubmit: boolean;
-  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "NOT_STARTED" | null;
+  reason:
+    | "NOT_REGISTERED"
+    | "CREATOR"
+    | "ALREADY_SUBMITTED"
+    | "FULL"
+    | "NOT_STARTED"
+    | "SUSPENDED"
+    | null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -44,20 +52,46 @@ const CATEGORY_LABELS: Record<string, string> = {
   OTHER: "Quest",
 };
 
-const PROOF_META: Record<string, { label: string; placeholder: string; multiline: boolean }> = {
+const PROOF_META: Record<string, { label: string; placeholder: string; multiline: boolean; upload?: boolean }> = {
   TEXT: { label: "Your response", placeholder: "Write your response here…", multiline: true },
   LINK: { label: "Your link", placeholder: "https://…", multiline: false },
-  SCREENSHOT: { label: "Screenshot link", placeholder: "Paste a link to your screenshot", multiline: false },
+  SCREENSHOT: { label: "Upload screenshot", placeholder: "", multiline: false, upload: true },
   TRANSACTION_HASH: { label: "Transaction hash", placeholder: "e.g. a1b2c3…", multiline: false },
   REFERRAL_EVENT: { label: "Referral details", placeholder: "Who did you refer?", multiline: true },
 };
 
+/** Compress an uploaded image to a JPEG data URL (max ~1000px) for inline storage. */
+async function compressImage(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = document.createElement("img");
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("That doesn't look like an image."));
+    el.src = dataUrl;
+  });
+  const max = 1000;
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Couldn't process that image.");
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.7);
+}
+
 const BLOCKED_COPY: Record<NonNullable<WorkerView["reason"]>, string> = {
   NOT_REGISTERED: "Send /start to the bot first to create your worker profile, then reopen this quest.",
   CREATOR: "You created this quest — you can't complete your own quest.",
-  ALREADY_SUBMITTED: "You've already done this quest.",
+  ALREADY_SUBMITTED: "You've already submitted proof for this quest. Wait for the creator to review it.",
   FULL: "All slots for this quest are taken.",
   NOT_STARTED: "This quest hasn't started yet. Check back at its start time.",
+  SUSPENDED: "Your account is suspended and can't submit quests.",
 };
 
 export default function DoQuestPage() {
@@ -68,8 +102,12 @@ export default function DoQuestPage() {
   const [error, setError] = useState("");
   const [view, setView] = useState<WorkerView | null>(null);
   const [proof, setProof] = useState("");
+  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [txUrl, setTxUrl] = useState<string | null>(null);
+  const [doneStatus, setDoneStatus] = useState<"PENDING" | "ACCEPTED" | "REJECTED" | null>(null);
+  const [doneOutcome, setDoneOutcome] = useState<string | null>(null);
   const initDataRef = useRef<string>("");
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
@@ -143,8 +181,10 @@ export default function DoQuestPage() {
   }, [boot]);
 
   const submit = useCallback(async () => {
-    if (proof.trim().length === 0) {
-      setError("Please enter your proof before submitting.");
+    const isScreenshot = view?.quest.proofType === "SCREENSHOT";
+    const payload = isScreenshot ? proofImage : proof.trim();
+    if (!payload) {
+      setError(isScreenshot ? "Upload a screenshot before submitting." : "Please enter your proof before submitting.");
       return;
     }
     setSubmitting(true);
@@ -152,18 +192,41 @@ export default function DoQuestPage() {
     try {
       const res = (await api(`/api/quests/${questId}/submit`, {
         method: "POST",
-        body: JSON.stringify({ proof: proof.trim() }),
-      })) as { txUrl?: string | null };
+        body: JSON.stringify({ proof: payload }),
+      })) as { txUrl?: string | null; status?: string; outcome?: string | null };
       setTxUrl(res.txUrl ?? null);
+      setDoneStatus(
+        res.status === "ACCEPTED" || res.status === "REJECTED" || res.status === "PENDING"
+          ? res.status
+          : "PENDING",
+      );
+      setDoneOutcome(res.outcome ?? null);
       setPhase("done");
     } catch (e) {
       setError((e as Error).message);
-      // Refresh context so the UI reflects a now-full/closed quest.
       await load().catch(() => undefined);
     } finally {
       setSubmitting(false);
     }
-  }, [api, load, proof, questId]);
+  }, [api, load, proof, proofImage, questId, view?.quest.proofType]);
+
+  const onProofImage = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setProofBusy(true);
+    setError("");
+    try {
+      const compressed = await compressImage(file);
+      if (compressed.length > 700_000) {
+        setError("That image is too large even after compression. Try a smaller screenshot.");
+        return;
+      }
+      setProofImage(compressed);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setProofBusy(false);
+    }
+  }, []);
 
   const proofMeta = view ? (PROOF_META[view.quest.proofType] ?? PROOF_META.TEXT) : PROOF_META.TEXT;
 
@@ -199,11 +262,36 @@ export default function DoQuestPage() {
 
         {phase === "done" && view && (
           <div className="glass rounded-2xl p-6 text-center">
-            <h1 className="text-lg font-bold text-white">Submitted!</h1>
+            <h1 className="text-lg font-bold text-white">
+              {doneStatus === "ACCEPTED"
+                ? "Verified & paid!"
+                : doneStatus === "REJECTED"
+                  ? "Not accepted"
+                  : "Submitted!"}
+            </h1>
             <p className="mt-2 text-sm text-[var(--brand-muted)]">
-              Your proof for <span className="text-white">{view.quest.title}</span> was accepted.
-              Your {Number(view.quest.rewardAmount).toLocaleString()} NIM reward is on its way to
-              your wallet.
+              {doneStatus === "ACCEPTED" ? (
+                <>
+                  Your proof for <span className="text-white">{view.quest.title}</span> was
+                  auto-approved.{" "}
+                  {Number(view.quest.rewardAmount).toLocaleString()} NIM is on its way to your
+                  wallet.
+                </>
+              ) : doneStatus === "REJECTED" ? (
+                <>
+                  Verification rejected your proof for{" "}
+                  <span className="text-white">{view.quest.title}</span>. Try another quest or
+                  follow the instructions more closely.
+                </>
+              ) : (
+                <>
+                  Your proof for <span className="text-white">{view.quest.title}</span> is pending
+                  review
+                  {doneOutcome === "MANUAL_REVIEW" ? " (flagged for manual check)" : ""}.
+                  You&apos;ll receive {Number(view.quest.rewardAmount).toLocaleString()} NIM if
+                  it&apos;s accepted.
+                </>
+              )}
             </p>
             {txUrl && (
               <a
@@ -284,7 +372,43 @@ export default function DoQuestPage() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
                   {proofMeta.label}
                 </label>
-                {proofMeta.multiline ? (
+                {proofMeta.upload ? (
+                  <div className="mt-2">
+                    {proofImage ? (
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={proofImage}
+                          alt="Your screenshot"
+                          className="w-full rounded-xl border border-white/10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setProofImage(null)}
+                          className="absolute right-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/20 px-4 py-8 transition hover:border-[var(--brand-gold)]/50 hover:bg-black/30">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={proofBusy || submitting}
+                          onChange={(e) => void onProofImage(e.target.files?.[0] ?? null)}
+                        />
+                        <span className="text-sm font-semibold text-white">
+                          {proofBusy ? "Processing…" : "Tap to upload screenshot"}
+                        </span>
+                        <span className="mt-1 text-xs text-[var(--brand-muted)]">
+                          PNG or JPG from your gallery
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                ) : proofMeta.multiline ? (
                   <textarea
                     className={`${inputClass} min-h-[100px]`}
                     value={proof}
@@ -304,10 +428,10 @@ export default function DoQuestPage() {
                 {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
                 <button
                   onClick={() => void submit()}
-                  disabled={submitting}
+                  disabled={submitting || proofBusy || (proofMeta.upload ? !proofImage : !proof.trim())}
                   className={`${primaryBtn} mt-3 w-full`}
                 >
-                  {submitting ? "Submitting…" : "Submit & earn"}
+                  {submitting ? "Submitting…" : "Submit for review"}
                 </button>
               </div>
             ) : (

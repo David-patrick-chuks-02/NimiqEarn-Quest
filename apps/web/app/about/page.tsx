@@ -62,9 +62,9 @@ export default function AboutPage() {
 
           <h2>Built on Nimiq</h2>
           <p>
-            Wallet onboarding uses Nimiq&apos;s own tooling, and ownership is proven by signing a
-            message — never by sharing keys. The platform is non-custodial: we store only your public
-            address, and rewards are paid on the Nimiq network.
+            When you join, the bot creates an encrypted custodial Nimiq wallet for you. You can
+            export the private key anytime with your security password. Quest rewards are funded into
+            per-quest escrow and paid on-chain after the creator accepts your proof.
           </p>
         </div>
 

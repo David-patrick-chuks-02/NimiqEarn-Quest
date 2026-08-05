@@ -15,6 +15,7 @@ import { studioRoutes } from "./routes/studio.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { createEscrowService } from "./services/escrow.service.js";
 import { createTelegramNotifier } from "./services/telegram-notify.js";
+import { checkRateLimit } from "./rate-limit.js";
 
 export async function buildServer() {
   const env = loadEnv();
@@ -54,6 +55,28 @@ export async function buildServer() {
   });
 
   await app.register(cors, { origin: true });
+
+  // Rate-limit money-moving API paths (fail closed — deny when over limit).
+  app.addHook("onRequest", async (request, reply) => {
+    const url = request.url.split("?")[0] ?? request.url;
+    const money =
+      /\/wallet\/(withdraw|export|custodial)$/.test(url) ||
+      /\/quests\/[^/]+\/(publish|promote|submit)$/.test(url) ||
+      /\/studio\/quests\/[^/]+\/(publish|promote)$/.test(url) ||
+      /\/studio\/submissions\/[^/]+\/(accept|reject)$/.test(url) ||
+      url === "/api/studio/faucet";
+    if (!money || request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") {
+      return;
+    }
+    const ip = request.ip || "unknown";
+    const result = checkRateLimit(`money:${ip}:${url}`, 20, 60_000);
+    if (!result.allowed) {
+      return reply
+        .code(429)
+        .header("retry-after", String(result.retryAfterSec))
+        .send({ error: "Too many requests. Please try again shortly." });
+    }
+  });
 
   // Shared-secret gate for bot → API traffic (sent as x-internal-key). Health/root stay
   // public; the wallet signing page uses an unguessable per-request token instead.
@@ -101,13 +124,21 @@ export async function buildServer() {
     fees,
     notifier,
     apiSharedSecret: env.API_SHARED_SECRET,
+    verifier: {
+      url: env.VERIFIER_URL,
+      sharedSecret: env.VERIFIER_SHARED_SECRET,
+    },
   });
   await app.register(studioRoutes, { 
     botToken: env.BOT_TOKEN, 
     escrow, 
     fees, 
     notifier,
-    network: env.NIMIQ_NETWORK 
+    network: env.NIMIQ_NETWORK,
+    verifier: {
+      url: env.VERIFIER_URL,
+      sharedSecret: env.VERIFIER_SHARED_SECRET,
+    },
   });
   await app.register(settingsRoutes);
   await app.register(adminRoutes, { adminApiKey: env.ADMIN_API_KEY });

@@ -34,8 +34,9 @@ export function rateLimitMiddleware(limiter: RateLimiter, logger: Logger) {
     }
 
     const result = await limiter(`sensitive:${ctx.from.id}`, LIMIT, WINDOW_SEC).catch((err) => {
+      // Fail closed on money-adjacent flows — don't allow actions if Redis is down.
       logger.error({ err }, "rate limiter error");
-      return { allowed: true, retryAfterSec: 0 };
+      return { allowed: false, retryAfterSec: WINDOW_SEC };
     });
 
     if (!result.allowed) {

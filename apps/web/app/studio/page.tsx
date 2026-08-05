@@ -127,6 +127,7 @@ export default function StudioPage() {
     promotionFeeNim: number;
   }>({ feePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
   const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [reviewQuest, setReviewQuest] = useState<Quest | null>(null);
   const [faucetOpen, setFaucetOpen] = useState(false);
   const [balanceAnim, setBalanceAnim] = useState<{ from: number; to: number } | null>(null);
   const [walletTxOpen, setWalletTxOpen] = useState(false);
@@ -158,12 +159,31 @@ export default function StudioPage() {
     // Only declare a JSON content-type when we actually send a body — Fastify rejects an
     // empty body with content-type application/json (bodyless POSTs: publish, register).
     if (init?.body != null) headers["Content-Type"] = "application/json";
-    const res = await fetch(path, { ...init, headers });
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) {
-      throw new Error((body.error as string) ?? `Request failed (${res.status})`);
+
+    // Retry idempotent GETs (and cold-start 502/503/504) a few times — Render free API spins down.
+    const method = (init?.method ?? "GET").toUpperCase();
+    const canRetry = method === "GET" || method === "HEAD";
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < (canRetry ? 4 : 1); attempt++) {
+      try {
+        const res = await fetch(path, { ...init, headers });
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (res.ok) return body;
+        if (canRetry && (res.status === 502 || res.status === 503 || res.status === 504) && attempt < 3) {
+          await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+          continue;
+        }
+        throw new Error((body.error as string) ?? `Request failed (${res.status})`);
+      } catch (e) {
+        lastErr = e as Error;
+        if (canRetry && attempt < 3 && !(e instanceof Error && e.message.startsWith("Request failed"))) {
+          await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+          continue;
+        }
+        throw e;
+      }
     }
-    return body;
+    throw lastErr ?? new Error("Request failed");
   }, []);
 
   // Open a quest's analytics inline: swap to the detail view immediately (skeleton with the
@@ -276,12 +296,17 @@ export default function StudioPage() {
   const onFaucetSuccess = useCallback(
     (detail: { from: number; to: number }) => {
       setFaucetOpen(false);
+      // Keep the stored balance at `from` while the UI counts up to `to`,
+      // otherwise loadBalance / setBalance(to) jumps the number before the anim runs.
+      setBalance((b) => ({ ...b, nim: detail.from, reachable: true }));
       setBalanceAnim({ from: detail.from, to: detail.to });
-      setBalance((b) => ({ ...b, nim: detail.to, reachable: true }));
-      window.setTimeout(() => setBalanceAnim(null), 1600);
-      void loadBalance();
-      window.setTimeout(() => void loadBalance(), 3000);
-      window.setTimeout(() => void refreshAll(), 6000);
+      window.setTimeout(() => {
+        setBalance((b) => ({ ...b, nim: detail.to, reachable: true }));
+        setBalanceAnim(null);
+        void loadBalance();
+      }, 1800);
+      window.setTimeout(() => void loadBalance(), 4000);
+      window.setTimeout(() => void refreshAll(), 7000);
     },
     [loadBalance, refreshAll],
   );
@@ -294,11 +319,12 @@ export default function StudioPage() {
   }, [notice]);
 
   // Keep wallet balance fresh while Creator Studio is open.
+  // Pause during count-up so a refresh can't jump past the animation.
   useEffect(() => {
-    if (phase !== "ready") return;
+    if (phase !== "ready" || balanceAnim) return;
     const id = window.setInterval(() => void loadBalance(), 10_000);
     return () => window.clearInterval(id);
-  }, [phase, loadBalance]);
+  }, [phase, balanceAnim, loadBalance]);
 
   const boot = useCallback(async () => {
     const tg = window.Telegram?.WebApp;
@@ -535,6 +561,14 @@ export default function StudioPage() {
           initialBalance={{ nim: balance.nim, reachable: balance.reachable }}
           onClose={() => setFaucetOpen(false)}
           onSuccess={onFaucetSuccess}
+        />
+      )}
+      {reviewQuest && (
+        <SubmissionsReviewModal
+          quest={reviewQuest}
+          api={api}
+          onClose={() => setReviewQuest(null)}
+          onChanged={() => void loadQuests()}
         />
       )}
       {createConfirm && (
@@ -865,6 +899,7 @@ export default function StudioPage() {
                     onShare={shareQuest}
                     onViewAnalytics={openAnalytics}
                     onPromote={promoteQuest}
+                    onReview={setReviewQuest}
                   />
                 ))}
 
@@ -1652,6 +1687,8 @@ function StatRow({ dashboard }: { dashboard: Dashboard }) {
 }
 
 // Smooth count-up when balance increases (e.g. after faucet credit lands).
+// Always animates from bump.from (current) → bump.to (new). Ignores `value`
+// while a bump is active so a premature balance refresh can't jump the number.
 function AnimatedNimBalance({
   value,
   bump,
@@ -1663,46 +1700,56 @@ function AnimatedNimBalance({
   className?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  // Important UX: when bump is present, we must start rendering from bump.from
-  // (the current balance), not from `value` (which is often the new balance).
-  const [display, setDisplay] = useState(() => bump?.from ?? value ?? 0);
+  const from = bump?.from;
+  const to = bump?.to;
+  const animating = from != null && to != null;
+  const [display, setDisplay] = useState(() => from ?? value ?? 0);
   const animRef = useRef<number | null>(null);
 
+  // Count from current → new when a bump arrives.
   useEffect(() => {
-    if (bump) {
+    if (!animating) return;
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    setDisplay(from);
+    const start = performance.now();
+    const duration = 1600;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (to - from) * eased);
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(step);
+      } else {
+        animRef.current = null;
+        setDisplay(to);
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+    return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
-      const from = bump.from;
-      const to = bump.to;
-      // Set immediately so the first paint starts at the "current" balance.
-      setDisplay(from);
-      const start = performance.now();
-      const duration = 1400;
-      const step = (now: number) => {
-        const t = Math.min(1, (now - start) / duration);
-        const eased = 1 - Math.pow(1 - t, 3);
-        setDisplay(from + (to - from) * eased);
-        if (t < 1) animRef.current = requestAnimationFrame(step);
-        else animRef.current = null;
-      };
-      animRef.current = requestAnimationFrame(step);
-      return () => {
-        if (animRef.current) cancelAnimationFrame(animRef.current);
-      };
-    }
+    };
+  }, [animating, from, to]);
+
+  // Sync to live balance only when not counting up.
+  useEffect(() => {
+    if (animating) return;
     if (value != null) setDisplay(value);
-  }, [value, bump]);
+  }, [animating, value]);
 
   const sizeClass =
     size === "lg" ? "text-4xl" : size === "sm" ? "text-xl" : "text-4xl";
   const nimClass = size === "sm" ? "text-sm" : "text-lg";
 
-  if (value == null && !bump) {
+  if (value == null && !animating) {
     return <p className="mt-1 text-sm text-[var(--brand-muted)]">Couldn&apos;t load balance</p>;
   }
 
+  // Whole NIM during the count-up reads cleaner than fractional ticks.
+  const shown = Math.round(display);
+
   return (
     <p className={`font-bold tracking-tight ${sizeClass} ${className}`}>
-      <span className="text-gradient-gold">{display.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+      <span className="text-gradient-gold">{shown.toLocaleString()}</span>
       <span className={`ml-2 font-semibold text-[var(--brand-muted)] ${nimClass}`}>NIM</span>
     </p>
   );
@@ -1944,9 +1991,10 @@ function FaucetModal({
   }, [refreshBalance]);
 
   useEffect(() => {
+    if (phase === "done" || phase === "sending") return;
     const id = window.setInterval(() => void refreshBalance(), 4000);
     return () => window.clearInterval(id);
-  }, [refreshBalance]);
+  }, [phase, refreshBalance]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -1964,11 +2012,12 @@ function FaucetModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, phase]);
 
+  // Let confetti + balance count-up finish before handing off to the parent.
   useEffect(() => {
     if (phase !== "done" || !sent) return;
     const t = window.setTimeout(() => {
       onSuccess({ from: sent.from, to: sent.to });
-    }, 1400);
+    }, 2200);
     return () => window.clearTimeout(t);
   }, [phase, sent, onSuccess]);
 
@@ -2048,9 +2097,9 @@ function FaucetModal({
                 <span className="text-base font-semibold text-[var(--brand-muted)]">NIM</span>
               </p>
               <div className="mt-5 rounded-2xl border border-white/10 bg-[var(--brand-navy-900)] px-4 py-4">
-                <p className="text-xs text-[var(--brand-muted)]">New balance</p>
+                <p className="text-xs text-[var(--brand-muted)]">Balance</p>
                 <AnimatedNimBalance
-                  value={sent.to}
+                  value={sent.from}
                   bump={{ from: sent.from, to: sent.to }}
                   size="md"
                   className="mt-1 justify-center"
@@ -2225,6 +2274,7 @@ interface QuestListProps {
   onShare: (id: string) => void;
   onViewAnalytics: (quest: Quest) => void;
   onPromote: (id: string) => void;
+  onReview: (quest: Quest) => void;
 }
 
 // The Quests tab: filter toolbar + paginated quest cards (each with its OG-card preview).
@@ -2418,6 +2468,7 @@ function QuestList({
   onShare,
   onViewAnalytics,
   onPromote,
+  onReview,
 }: QuestListProps) {
   return (
     <div className="space-y-2.5">
@@ -2472,8 +2523,17 @@ function QuestList({
 
             {q.status === "PUBLISHED" && (
               <button
+                onClick={() => onReview(q)}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/25"
+              >
+                Review submissions
+              </button>
+            )}
+
+            {q.status === "PUBLISHED" && (
+              <button
                 onClick={() => onShare(q.id)}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10"
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--brand-gold)]/40 px-4 py-2 text-sm font-semibold text-[var(--brand-gold)] transition hover:bg-[var(--brand-gold)]/10"
               >
                 {sharedId === q.id ? "Link copied" : "Share quest link"}
               </button>
@@ -2541,6 +2601,171 @@ function StatusBadge({ status }: { status: Quest["status"] }) {
     >
       {status.toLowerCase()}
     </span>
+  );
+}
+
+type StudioSubmission = {
+  id: string;
+  status: string;
+  proof: string;
+  verificationOutcome?: string | null;
+  confidenceScore?: number | null;
+  verificationSignals?: Record<string, unknown> | null;
+  payoutTxUrl: string | null;
+  createdAt: string;
+  worker: { telegramId: string; username: string | null; displayName: string | null };
+};
+
+function SubmissionsReviewModal({
+  quest,
+  api,
+  onClose,
+  onChanged,
+}: {
+  quest: Quest;
+  api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [subs, setSubs] = useState<StudioSubmission[] | null>(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const body = (await api(`/api/studio/quests/${quest.id}/submissions`)) as {
+        submissions?: StudioSubmission[];
+      };
+      setSubs(body.submissions ?? []);
+    } catch (e) {
+      setError((e as Error).message);
+      setSubs([]);
+    }
+  }, [api, quest.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const act = async (id: string, action: "accept" | "reject") => {
+    setBusyId(id);
+    setError("");
+    try {
+      await api(`/api/studio/submissions/${id}/${action}`, { method: "POST" });
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:px-5"
+      onClick={onClose}
+    >
+      <div
+        className="glass max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl p-5 sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-white">Submissions</h2>
+            <p className="mt-0.5 text-sm text-[var(--brand-muted)]">{quest.title}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full border border-white/10 px-3 py-1 text-sm text-white"
+          >
+            Close
+          </button>
+        </div>
+
+        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+
+        {subs === null ? (
+          <p className="mt-4 text-sm text-[var(--brand-muted)]">Loading…</p>
+        ) : subs.length === 0 ? (
+          <p className="mt-4 text-sm text-[var(--brand-muted)]">No submissions yet.</p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {subs.map((s) => {
+              const label =
+                s.worker.displayName ||
+                (s.worker.username ? `@${s.worker.username}` : s.worker.telegramId);
+              const isImage = s.proof.startsWith("data:image/");
+              return (
+                <li key={s.id} className="rounded-xl border border-white/10 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-white">{label}</p>
+                    <span className="text-[0.65rem] uppercase tracking-wide text-[var(--brand-muted)]">
+                      {s.status}
+                    </span>
+                  </div>
+                  {(s.verificationOutcome || s.confidenceScore != null) && (
+                    <p className="mt-1 text-[0.7rem] text-[var(--brand-gold)]">
+                      AI: {s.verificationOutcome ?? "—"}
+                      {s.confidenceScore != null
+                        ? ` · ${(s.confidenceScore * 100).toFixed(0)}% confidence`
+                        : ""}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                    {new Date(s.createdAt).toLocaleString()}
+                  </p>
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.proof} alt="Proof" className="mt-2 max-h-48 w-full rounded-lg object-contain" />
+                  ) : (
+                    <p className="mt-2 break-all text-sm text-white/90">{s.proof}</p>
+                  )}
+                  {s.payoutTxUrl && (
+                    <a
+                      href={s.payoutTxUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block text-xs font-semibold text-[var(--brand-gold)] underline"
+                    >
+                      View payout
+                    </a>
+                  )}
+                  {s.status === "PENDING" && (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        disabled={busyId === s.id}
+                        onClick={() => void act(s.id, "accept")}
+                        className={`${primaryBtn} flex-1 py-2`}
+                      >
+                        {busyId === s.id ? "…" : "Accept & pay"}
+                      </button>
+                      <button
+                        disabled={busyId === s.id}
+                        onClick={() => void act(s.id, "reject")}
+                        className="flex-1 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                  {s.status === "ACCEPTED" && !s.payoutTxUrl && (
+                    <button
+                      disabled={busyId === s.id}
+                      onClick={() => void act(s.id, "accept")}
+                      className={`${primaryBtn} mt-3 w-full py-2`}
+                    >
+                      {busyId === s.id ? "…" : "Retry payout"}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 

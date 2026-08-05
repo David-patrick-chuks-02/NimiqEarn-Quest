@@ -30,7 +30,12 @@ export function formatEarnings(earnings: WorkerEarnings): string {
   ];
   // Show the most recent 10.
   for (const s of earnings.submissions.slice(0, 10)) {
-    const status = STATUS_LABELS[s.status] ?? s.status;
+    const status =
+      s.status === "ACCEPTED"
+        ? s.payoutTxUrl
+          ? "Paid"
+          : "Accepted"
+        : (STATUS_LABELS[s.status] ?? s.status);
     const line = `• *${escapeMarkdown(s.questTitle)}* — ${s.reward.toLocaleString()} NIM · ${status}`;
     lines.push(s.payoutTxUrl ? `${line} · [tx](${s.payoutTxUrl})` : line);
   }

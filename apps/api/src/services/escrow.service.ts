@@ -78,17 +78,20 @@ export function createEscrowService(config: EscrowConfig) {
       return { address, keyCiphertext: box.encrypt(privateKeyHex) };
     },
 
-    /** Total funding a quest needs, in luna (1 NIM = 100_000 luna). */
-    requiredLuna(rewardNim: number, slots: number): number {
-      return Math.round(rewardNim * slots * LUNA_PER_NIM);
+    /** Total funding a quest needs, in luna (1 NIM = 100_000 luna). Uses bigint for large pools. */
+    requiredLuna(rewardNim: number, slots: number): bigint {
+      const perSlot = BigInt(Math.round(rewardNim * LUNA_PER_NIM));
+      return perSlot * BigInt(Math.max(0, Math.floor(slots)));
     },
 
     /** Live funding status from the RPC node. `reachable: false` when we can't check. */
-    async getFunding(address: string, requiredLuna: number): Promise<QuestFunding> {
+    async getFunding(address: string, requiredLuna: number | bigint): Promise<QuestFunding> {
+      const required = typeof requiredLuna === "bigint" ? requiredLuna : BigInt(requiredLuna);
+      const requiredNum = Number(required);
       const base = {
         address,
-        requiredLuna,
-        requiredNim: requiredLuna / LUNA_PER_NIM,
+        requiredLuna: requiredNum,
+        requiredNim: requiredNum / LUNA_PER_NIM,
       };
       if (!rpcUrl) {
         return { ...base, balanceLuna: null, balanceNim: null, reachable: false, funded: false };
@@ -100,7 +103,7 @@ export function createEscrowService(config: EscrowConfig) {
         balanceLuna,
         balanceNim: balanceLuna === null ? null : balanceLuna / LUNA_PER_NIM,
         reachable: info.reachable,
-        funded: info.reachable && balanceLuna !== null && balanceLuna >= requiredLuna,
+        funded: info.reachable && balanceLuna !== null && BigInt(balanceLuna) >= required,
       };
     },
 

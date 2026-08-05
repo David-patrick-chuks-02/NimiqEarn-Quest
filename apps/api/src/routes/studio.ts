@@ -34,6 +34,7 @@ import { questErrorStatus } from "./quests.js";
 import { createCreatorService, CreatorServiceError } from "../services/creator.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
 import type { TelegramNotifier } from "../services/telegram-notify.js";
+import type { VerifierConfig } from "../services/verification.service.js";
 
 interface StudioRouteOptions {
   botToken?: string;
@@ -41,6 +42,7 @@ interface StudioRouteOptions {
   fees?: PlatformFees;
   notifier?: TelegramNotifier;
   network?: string;
+  verifier?: VerifierConfig;
 }
 
 function sendStudioError(reply: FastifyReply, error: unknown) {
@@ -164,7 +166,7 @@ async function buildFaucetQuote(address: string, rpcUrl: string, requestedNim?: 
  */
 export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, opts) => {
   const botToken = opts.botToken;
-  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier, opts.verifier);
   const creators = createCreatorService(app.db);
 
   app.addHook("onRequest", async (request, reply) => {
@@ -376,6 +378,45 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     },
   );
 
+  // List submissions for a quest the creator owns (review queue).
+  app.get<{ Params: { questId: string } }>(
+    "/api/studio/quests/:questId/submissions",
+    async (request, reply) => {
+      try {
+        return await quests.listQuestSubmissions(telegramId(request), request.params.questId);
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { submissionId: string } }>(
+    "/api/studio/submissions/:submissionId/accept",
+    async (request, reply) => {
+      try {
+        const result = await quests.acceptSubmission(
+          telegramId(request),
+          request.params.submissionId,
+        );
+        return { ok: true, ...result };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { submissionId: string } }>(
+    "/api/studio/submissions/:submissionId/reject",
+    async (request, reply) => {
+      try {
+        await quests.rejectSubmission(telegramId(request), request.params.submissionId);
+        return { ok: true };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
   // DevTool Faucet quote — powers the confirm modal (amount + remaining 1M NIM cap).
   app.get<{ Querystring: { amountNim?: string } }>("/api/studio/faucet", async (request, reply) => {
     try {
@@ -403,6 +444,8 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
   // DevTool Faucet for testing: Funds the creator's custodial wallet with NIM on testnet.
   // Caps wallet balance at 1,000,000 NIM. Body: { amountNim?: number }.
   app.post<{ Body: { amountNim?: number } }>("/api/studio/faucet", async (request, reply) => {
+    const { tryLock, unlock } = await import("../rate-limit.js");
+    let lockKey: string | null = null;
     try {
       if (opts.network !== "testnet") {
         return reply.code(400).send({ error: "Faucet is only available on testnet." });
@@ -415,6 +458,11 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       const wallet = user?.walletProfiles.find((w) => w.keyCiphertext) ?? null;
       if (!wallet || !wallet.nimiqAddress) {
         return reply.code(400).send({ error: "No custodial wallet found to fund." });
+      }
+
+      lockKey = `faucet:${wallet.nimiqAddress}`;
+      if (!tryLock(lockKey)) {
+        return reply.code(429).send({ error: "Faucet request already in progress. Please wait." });
       }
 
       const privateKeyHex = await loadFaucetPrivateKey();
@@ -470,6 +518,8 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       };
     } catch (error) {
       return sendStudioError(reply, error);
+    } finally {
+      if (lockKey) unlock(lockKey);
     }
   });
 };

@@ -9,6 +9,10 @@ export interface SessionData {
   captchaVerified?: boolean;
   /** The pending CAPTCHA challenge: expected answer, its message id, and any /start payload. */
   captcha?: { answer: string; messageId: number; startPayload?: string };
+  /** Failed CAPTCHA attempts in the current challenge streak. */
+  captchaFails?: number;
+  /** Epoch ms until which CAPTCHA attempts are blocked after too many failures. */
+  captchaLockedUntil?: number;
   /** Message id of the current "incorrect answer" notice, so it can be cleared on the next try. */
   captchaNoticeId?: number;
   /** Which secure-action-password flow to run when the securityPassword conversation starts. */

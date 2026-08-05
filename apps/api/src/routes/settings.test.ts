@@ -32,7 +32,7 @@ describe("settings security-password routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/users/123456/security/password",
-      payload: { password: "hunter2" },
+      payload: { password: "hunter22" },
     });
 
     expect(response.statusCode).toBe(200);

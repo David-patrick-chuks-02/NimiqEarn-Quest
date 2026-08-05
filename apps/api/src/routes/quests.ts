@@ -9,6 +9,7 @@ import {
 } from "../services/quest.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
 import type { TelegramNotifier } from "../services/telegram-notify.js";
+import type { VerifierConfig } from "../services/verification.service.js";
 import { verifyInitData } from "../telegram-auth.js";
 import { safeCompare } from "../security.js";
 
@@ -20,6 +21,7 @@ interface QuestRouteOptions {
   notifier?: TelegramNotifier;
   /** Shared secret — lets a trusted internal caller (the bot) pass ?telegramId to personalize. */
   apiSharedSecret?: string;
+  verifier?: VerifierConfig;
 }
 
 /** Verify Telegram Mini App initData on a request and return the telegram id, or null. */
@@ -35,6 +37,7 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
   switch (code) {
     case "USER_NOT_FOUND":
     case "QUEST_NOT_FOUND":
+    case "SUBMISSION_NOT_FOUND":
       return 404;
     case "NOT_CREATOR":
     case "SUSPENDED":
@@ -52,6 +55,8 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
     case "QUEST_NOT_STARTED":
     case "ALREADY_SUBMITTED":
     case "ALREADY_PROMOTED":
+    case "ALREADY_REVIEWED":
+    case "NOT_PENDING":
       return 409;
     case "PROMOTION_UNAVAILABLE":
       return 503;
@@ -61,7 +66,7 @@ export function questErrorStatus(code: QuestServiceError["code"]) {
 }
 
 export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, opts) => {
-  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier);
+  const quests = createQuestService(app.db, opts.escrow, opts.fees, opts.notifier, opts.verifier);
 
   const sendQuestError = (reply: FastifyReply, error: unknown) => {
     if (error instanceof QuestServiceError) {
@@ -129,7 +134,7 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
     }
   });
 
-  // Worker Mini App: submit proof for a quest (auto-accepts and fills a slot).
+  // Worker Mini App: submit proof for a quest (pending creator review; pays on accept).
   app.post<{ Params: { id: string }; Body: { proof?: string } }>(
     "/api/quests/:id/submit",
     async (request, reply) => {
@@ -142,8 +147,14 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
         return reply.code(400).send({ error: "proof is required" });
       }
       try {
-        const { txHash, txUrl } = await quests.submitQuest(telegramId, request.params.id, proof);
-        return { ok: true, txHash, txUrl };
+        const result = await quests.submitQuest(telegramId, request.params.id, proof);
+        return {
+          ok: true,
+          status: result.status,
+          outcome: result.outcome,
+          txHash: result.txHash,
+          txUrl: result.txUrl,
+        };
       } catch (error) {
         return sendQuestError(reply, error);
       }

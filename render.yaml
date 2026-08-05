@@ -56,6 +56,8 @@ services:
         sync: false # Nimiq address that receives platform + promotion fees (unset = no fees)
       - key: PROMOTION_FEE_NIM
         value: "100" # flat NIM fee to promote ("premium ad") a quest
+      - key: BOT_TOKEN
+        sync: false # from @BotFather — required to verify Mini App initData on studio/worker routes
       - key: ADMIN_API_KEY
         sync: false # optional: enables /api/admin/* endpoints
       - key: SENTRY_DSN

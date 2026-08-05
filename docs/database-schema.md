@@ -117,6 +117,6 @@ For Supabase, point `DATABASE_URL` at the project connection string and run `pnp
 
 | Entity | Milestone | Purpose |
 | --- | --- | --- |
-| `Submission` | M2 | Proof record with status and AI score. |
-| `Payout` | M2 | Reward transfer with tx hash. |
-| `ModerationEvent` | M3 | Trust and review history. |
+| `QuestSubmission` | M2–M3 | Proof record with status, AI confidence, and verification outcome. |
+| `ModerationEvent` | M3 | Trust and review history for the verification pipeline. |
+| `Payout` | M2+ | Dedicated payout table (today payouts live on `QuestSubmission`). |

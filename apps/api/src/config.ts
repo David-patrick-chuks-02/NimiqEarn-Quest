@@ -30,6 +30,9 @@ const envSchema = z.object({
   PLATFORM_FEE_ADDRESS: z.string().optional(),
   // Flat fee (in NIM) to promote a quest ("premium ad" boost).
   PROMOTION_FEE_NIM: z.coerce.number().min(0).default(100),
+  // Python AI verifier (M3). When unset, rules still run and AI is skipped → MANUAL_REVIEW.
+  VERIFIER_URL: z.string().url().optional(),
+  VERIFIER_SHARED_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

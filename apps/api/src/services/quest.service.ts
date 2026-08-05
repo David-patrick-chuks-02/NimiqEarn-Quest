@@ -4,6 +4,11 @@ import { createQuestSchema, questStatusSchema, updateQuestSchema } from "@nimiqe
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
 import type { EscrowService, QuestFunding } from "./escrow.service.js";
 import type { TelegramNotifier } from "./telegram-notify.js";
+import {
+  createVerificationService,
+  type VerifierConfig,
+} from "./verification.service.js";
+import { createReputationService } from "./reputation.service.js";
 
 export class QuestServiceError extends Error {
   constructor(
@@ -29,7 +34,10 @@ export class QuestServiceError extends Error {
       | "PAYOUT_FAILED"
       | "QUEST_NOT_STARTED"
       | "ALREADY_PROMOTED"
-      | "PROMOTION_UNAVAILABLE",
+      | "PROMOTION_UNAVAILABLE"
+      | "SUBMISSION_NOT_FOUND"
+      | "NOT_PENDING"
+      | "ALREADY_REVIEWED",
   ) {
     super(message);
     this.name = "QuestServiceError";
@@ -38,6 +46,60 @@ export class QuestServiceError extends Error {
 
 function isCreatorRole(role: string) {
   return role === "CREATOR" || role === "ADMIN";
+}
+
+/** Validate proof against the quest's declared proofType. */
+function normalizeSubmissionProof(proof: string, proofType: string): string {
+  const trimmed = proof.trim();
+  if (trimmed.length === 0) {
+    throw new QuestServiceError("Your submission can't be empty.", "INVALID_PROOF");
+  }
+
+  const isImage =
+    /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(trimmed) && trimmed.length <= 700_000;
+
+  switch (proofType) {
+    case "SCREENSHOT":
+      if (!isImage) {
+        throw new QuestServiceError(
+          "This quest needs a screenshot upload (JPEG, PNG, or WebP).",
+          "INVALID_PROOF",
+        );
+      }
+      return trimmed;
+    case "LINK":
+      if (trimmed.startsWith("data:")) {
+        throw new QuestServiceError("This quest needs a link, not an image.", "INVALID_PROOF");
+      }
+      try {
+        const u = new URL(trimmed);
+        if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad proto");
+      } catch {
+        throw new QuestServiceError("Enter a valid http(s) link.", "INVALID_PROOF");
+      }
+      if (trimmed.length > 2000) {
+        throw new QuestServiceError("That link is too long.", "INVALID_PROOF");
+      }
+      return trimmed;
+    case "TRANSACTION_HASH":
+      if (trimmed.startsWith("data:") || trimmed.length > 200 || !/^[a-fA-F0-9]+$/.test(trimmed)) {
+        throw new QuestServiceError("Enter a valid transaction hash.", "INVALID_PROOF");
+      }
+      return trimmed;
+    case "TEXT":
+    case "REFERRAL_EVENT":
+    default:
+      if (trimmed.startsWith("data:image/")) {
+        throw new QuestServiceError("This quest needs text proof, not an image.", "INVALID_PROOF");
+      }
+      if (trimmed.length > 2000) {
+        throw new QuestServiceError(
+          "Your submission must be between 1 and 2000 characters.",
+          "INVALID_PROOF",
+        );
+      }
+      return trimmed;
+  }
 }
 
 export interface PlatformFees {
@@ -56,8 +118,11 @@ export function createQuestService(
   escrow?: EscrowService,
   fees: PlatformFees = DEFAULT_FEES,
   notifier?: TelegramNotifier,
+  verifierConfig?: VerifierConfig,
 ) {
   const profiles = createProfileService(db);
+  const verification = createVerificationService(db, verifierConfig ?? {});
+  const reputation = createReputationService(db);
 
   return {
     async createDraftQuest(telegramId: string, input: CreateQuestInput): Promise<Quest> {
@@ -277,7 +342,7 @@ export function createQuestService(
       // Fund the quest from the creator's custodial wallet: transfer the reward pool to the
       // quest's escrow wallet on-chain, plus the platform fee (charged on top) to the fee
       // wallet. This is where the creator "pays" for the quest.
-      let fundedAt: Date | null = null;
+      let fundedAt: Date | null = quest.fundedAt;
       if (escrow?.enabled && quest.escrowAddress) {
         const creatorWallet = user.walletProfiles.find((w) => w.keyCiphertext);
         if (!creatorWallet?.keyCiphertext) {
@@ -285,61 +350,93 @@ export function createQuestService(
         }
 
         const poolLuna = escrow.requiredLuna(Number(quest.rewardAmount), quest.totalSlots);
-        // Fee is only charged when a recipient is configured.
         const feeLuna =
-          fees.address && fees.percent > 0 ? Math.round((poolLuna * fees.percent) / 100) : 0;
+          fees.address && fees.percent > 0 ? (poolLuna * BigInt(fees.percent)) / 100n : 0n;
         const totalLuna = poolLuna + feeLuna;
 
-        const balance = await escrow.getFunding(creatorWallet.nimiqAddress, totalLuna);
-        if (!balance.reachable) {
-          throw new QuestServiceError(
-            "Couldn't reach the Nimiq network. Please try again shortly.",
-            "RPC_UNAVAILABLE",
-          );
-        }
-        if (!balance.funded) {
-          const have = balance.balanceNim ?? 0;
-          throw new QuestServiceError(
-            `Insufficient balance — you need ${balance.requiredNim.toLocaleString()} NIM (reward pool + ${fees.percent}% platform fee) but have ${have.toLocaleString()}. Top up your wallet and try again.`,
-            "INSUFFICIENT_BALANCE",
-          );
-        }
+        // Already funded (e.g. prior attempt crashed after transfer) — just flip to PUBLISHED.
+        if (!fundedAt) {
+          const balance = await escrow.getFunding(creatorWallet.nimiqAddress, totalLuna);
+          if (!balance.reachable) {
+            throw new QuestServiceError(
+              "Couldn't reach the Nimiq network. Please try again shortly.",
+              "RPC_UNAVAILABLE",
+            );
+          }
+          if (!balance.funded) {
+            const have = balance.balanceNim ?? 0;
+            throw new QuestServiceError(
+              `Insufficient balance — you need ${balance.requiredNim.toLocaleString()} NIM (reward pool + ${fees.percent}% platform fee) but have ${have.toLocaleString()}. Top up your wallet and try again.`,
+              "INSUFFICIENT_BALANCE",
+            );
+          }
 
-        const result = await escrow.transfer({
-          fromKeyCiphertext: creatorWallet.keyCiphertext,
-          toAddress: quest.escrowAddress,
-          valueLuna: BigInt(poolLuna),
-        });
-        if (!result.hash) {
-          throw new QuestServiceError(
-            result.error ?? "Funding the quest failed. Please try again.",
-            "FUNDING_FAILED",
-          );
-        }
-        fundedAt = new Date();
-
-        // Collect the platform fee (best-effort — the quest is already funded, so a fee
-        // hiccup shouldn't block the creator).
-        if (feeLuna > 0 && fees.address) {
-          const feeResult = await escrow.transfer({
-            fromKeyCiphertext: creatorWallet.keyCiphertext,
-            toAddress: fees.address,
-            valueLuna: BigInt(feeLuna),
+          // Claim funding so a concurrent publish can't double-transfer.
+          const claim = await db.quest.updateMany({
+            where: { id: quest.id, status: "DRAFT", fundedAt: null },
+            data: { fundedAt: new Date() },
           });
-          if (!feeResult.hash) {
-            console.error("Platform fee transfer failed for quest", quest.id, feeResult.error);
+          if (claim.count === 0) {
+            throw new QuestServiceError("Only draft quests can be published.", "INVALID_STATUS");
+          }
+          fundedAt = new Date();
+
+          try {
+            const result = await escrow.transfer({
+              fromKeyCiphertext: creatorWallet.keyCiphertext,
+              toAddress: quest.escrowAddress,
+              valueLuna: poolLuna,
+            });
+            if (!result.hash) {
+              await db.quest
+                .updateMany({
+                  where: { id: quest.id, status: "DRAFT" },
+                  data: { fundedAt: null },
+                })
+                .catch(() => undefined);
+              throw new QuestServiceError(
+                result.error ?? "Funding the quest failed. Please try again.",
+                "FUNDING_FAILED",
+              );
+            }
+
+            // Collect the platform fee (best-effort — the quest is already funded).
+            if (feeLuna > 0n && fees.address) {
+              const feeResult = await escrow.transfer({
+                fromKeyCiphertext: creatorWallet.keyCiphertext,
+                toAddress: fees.address,
+                valueLuna: feeLuna,
+              });
+              if (!feeResult.hash) {
+                console.error("Platform fee transfer failed for quest", quest.id, feeResult.error);
+              }
+            }
+          } catch (error) {
+            if (error instanceof QuestServiceError) throw error;
+            await db.quest
+              .updateMany({
+                where: { id: quest.id, status: "DRAFT" },
+                data: { fundedAt: null },
+              })
+              .catch(() => undefined);
+            throw error;
           }
         }
       }
 
-      return db.quest.update({
-        where: { id: quest.id },
+      const published = await db.quest.updateMany({
+        where: { id: quest.id, status: "DRAFT" },
         data: {
           status: "PUBLISHED",
           publishedAt: new Date(),
           ...(fundedAt ? { fundedAt } : {}),
         },
       });
+      if (published.count === 0) {
+        throw new QuestServiceError("Only draft quests can be published.", "INVALID_STATUS");
+      }
+      const updated = await db.quest.findUniqueOrThrow({ where: { id: quest.id } });
+      return updated;
     },
 
     /**
@@ -490,12 +587,16 @@ export function createQuestService(
       const isCreator = Boolean(user) && quest.creatorId === user!.id;
       const slotsLeft = Math.max(0, quest.totalSlots - quest.filledSlots);
       const notStarted = quest.startAt != null && quest.startAt.getTime() > Date.now();
+      const suspended = user?.status === "SUSPENDED";
 
       let canSubmit = true;
       let reason: WorkerQuestView["reason"] = null;
       if (!user) {
         canSubmit = false;
         reason = "NOT_REGISTERED";
+      } else if (suspended) {
+        canSubmit = false;
+        reason = "SUSPENDED";
       } else if (isCreator) {
         canSubmit = false;
         reason = "CREATOR";
@@ -514,37 +615,36 @@ export function createQuestService(
         quest: toPublicQuestResponse(quest),
         isCreator,
         submitted: Boolean(existing),
+        submissionStatus: existing?.status ?? null,
         canSubmit,
         reason,
       };
     },
 
     /**
-     * Record a worker's proof for a quest, fill a slot, and pay the reward to their wallet.
-     * Proof is auto-accepted (no creator review in this milestone) — our system is the
-     * verifier. Guards against the creator doing their own quest, duplicates, a full quest,
-     * and a quest that hasn't started. When payments are configured the reward is disbursed on-chain
-     * from the quest's escrow to the worker's custodial wallet immediately.
+     * Record a worker's proof, reserve a slot, then run the hybrid verification pipeline
+     * (deterministic rules → AI → decision). Auto-approve pays immediately; light/manual
+     * review stay PENDING for the creator; reject frees the slot.
      */
     async submitQuest(
       telegramId: string,
       questId: string,
       proof: string,
-    ): Promise<{ txHash: string | null; txUrl: string | null }> {
-      const trimmed = proof.trim();
-      if (trimmed.length === 0 || trimmed.length > 2000) {
-        throw new QuestServiceError(
-          "Your submission must be between 1 and 2000 characters.",
-          "INVALID_PROOF",
-        );
-      }
-
+    ): Promise<{
+      status: "PENDING" | "ACCEPTED" | "REJECTED";
+      outcome: string | null;
+      txHash: string | null;
+      txUrl: string | null;
+    }> {
       const user = await db.user.findUnique({
         where: { telegramId },
         include: { walletProfiles: true },
       });
       if (!user) {
         throw new QuestServiceError("Send /start to register before doing quests.", "USER_NOT_FOUND");
+      }
+      if (user.status === "SUSPENDED") {
+        throw new QuestServiceError("Your account is suspended.", "SUSPENDED");
       }
 
       const quest = await db.quest.findFirst({ where: { id: questId } });
@@ -561,20 +661,20 @@ export function createQuestService(
         throw new QuestServiceError("This quest hasn't started yet.", "QUEST_NOT_STARTED");
       }
 
-      // Pay the reward on accept when escrow is configured and the quest holds its own key.
+      // Fast format check before reserving a slot (full rule engine runs in verification).
+      const trimmed = normalizeSubmissionProof(proof, quest.proofType);
+
       const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
       const workerWallet = user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
       if (willPay && !workerWallet) {
         throw new QuestServiceError("Set up your wallet with /start before doing quests.", "NO_WALLET");
       }
 
-      // Reserve a slot and record the submission atomically. The unique (quest,user) index
-      // rejects a double-submit; the conditional increment prevents overselling slots.
       let submissionId: string;
       try {
         submissionId = await db.$transaction(async (tx) => {
           const submission = await tx.questSubmission.create({
-            data: { questId, userId: user.id, proof: trimmed, status: "ACCEPTED" },
+            data: { questId, userId: user.id, proof: trimmed, status: "PENDING" },
           });
           const reserved = await tx.quest.updateMany({
             where: { id: questId, filledSlots: { lt: quest.totalSlots } },
@@ -593,58 +693,283 @@ export function createQuestService(
         throw error;
       }
 
-      let txHash: string | null = null;
-      let txUrl: string | null = null;
-      if (willPay && workerWallet) {
+      const { decision } = await verification.verifySubmission({
+        submissionId,
+        userId: user.id,
+        proofType: quest.proofType,
+        proof: trimmed,
+        proofInstructions: quest.proofInstructions,
+        title: quest.title,
+        reputationScore: user.reputationScore,
+      });
+
+      if (decision.outcome === "REJECT") {
+        await db.$transaction(async (tx) => {
+          await tx.questSubmission.updateMany({
+            where: { id: submissionId, status: "PENDING" },
+            data: { status: "REJECTED" },
+          });
+          await tx.quest.updateMany({
+            where: { id: questId, filledSlots: { gt: 0 } },
+            data: { filledSlots: { decrement: 1 } },
+          });
+        });
+        await reputation.applyOutcome(user.id, "REJECT");
+        void notifier?.notify(
+          user.telegramId,
+          `Your submission for "${quest.title}" was rejected by verification. You can try another quest.`,
+        );
+        return { status: "REJECTED", outcome: decision.outcome, txHash: null, txUrl: null };
+      }
+
+      if (decision.outcome === "AUTO_APPROVE") {
+        const claimed = await db.questSubmission.updateMany({
+          where: { id: submissionId, status: "PENDING" },
+          data: { status: "ACCEPTED" },
+        });
+        if (claimed.count === 0) {
+          return { status: "PENDING", outcome: decision.outcome, txHash: null, txUrl: null };
+        }
+
+        let txHash: string | null = null;
+        let txUrl: string | null = null;
+        if (willPay && workerWallet) {
+          const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+          const result = await escrow!.transfer({
+            fromKeyCiphertext: quest.escrowKeyCiphertext!,
+            toAddress: workerWallet.nimiqAddress,
+            valueLuna: rewardLuna,
+          });
+          if (!result.hash) {
+            console.error("Auto-approve payout failed", {
+              questId,
+              submissionId,
+              error: result.error,
+            });
+            // Leave ACCEPTED unpaid — creator/worker can retry via accept path.
+            throw new QuestServiceError(
+              result.error ?? "We couldn't pay your reward. Please try again shortly.",
+              "PAYOUT_FAILED",
+            );
+          }
+          txHash = result.hash;
+          txUrl = escrow!.explorerTxUrl(txHash);
+          await db.questSubmission.update({
+            where: { id: submissionId },
+            data: { payoutTxHash: txHash, paidAt: new Date() },
+          });
+          const rewardNim = Number(quest.rewardAmount).toLocaleString();
+          void notifier?.notify(
+            user.telegramId,
+            `Verified — you earned ${rewardNim} NIM for "${quest.title}".\n\nView the payout: ${txUrl}`,
+          );
+        } else {
+          void notifier?.notify(
+            user.telegramId,
+            `Your submission for "${quest.title}" was auto-approved.`,
+          );
+        }
+        await reputation.applyOutcome(user.id, "AUTO_APPROVE");
+        await db.questEvent.create({ data: { questId, type: "FILL" } }).catch(() => undefined);
+        return { status: "ACCEPTED", outcome: decision.outcome, txHash, txUrl };
+      }
+
+      // LIGHT_REVIEW / MANUAL_REVIEW — stay PENDING for creator.
+      void notifier?.notify(
+        user.telegramId,
+        `Thanks — your submission for "${quest.title}" is pending review. You'll be paid if it's accepted.`,
+      );
+      return {
+        status: "PENDING",
+        outcome: decision.outcome,
+        txHash: null,
+        txUrl: null,
+      };
+    },
+
+    /** Creator: list submissions for a quest they own (newest first). */
+    async listQuestSubmissions(telegramId: string, questId: string) {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+      const quest = await db.quest.findFirst({ where: { id: questId, creatorId: user.id } });
+      if (!quest) throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+
+      const subs = await db.questSubmission.findMany({
+        where: { questId },
+        include: {
+          user: { select: { telegramId: true, telegramUsername: true, displayName: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      return {
+        questId,
+        proofType: quest.proofType,
+        submissions: subs.map((s) => ({
+          id: s.id,
+          status: s.status,
+          proof: s.proof,
+          verificationOutcome: s.verificationOutcome,
+          confidenceScore: s.confidenceScore,
+          verificationSignals: s.verificationSignals,
+          payoutTxHash: s.payoutTxHash,
+          payoutTxUrl: s.payoutTxHash && escrow ? escrow.explorerTxUrl(s.payoutTxHash) : null,
+          paidAt: s.paidAt?.toISOString() ?? null,
+          createdAt: s.createdAt.toISOString(),
+          worker: {
+            telegramId: s.user.telegramId,
+            username: s.user.telegramUsername,
+            displayName: s.user.displayName,
+          },
+        })),
+      };
+    },
+
+    /**
+     * Creator accepts a PENDING submission: mark ACCEPTED and pay from escrow.
+     * Idempotent on payoutTxHash — never rolls back an ambiguous RPC so we can't double-pay.
+     */
+    async acceptSubmission(
+      telegramId: string,
+      submissionId: string,
+    ): Promise<{ txHash: string | null; txUrl: string | null }> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const submission = await db.questSubmission.findUnique({
+        where: { id: submissionId },
+        include: {
+          quest: true,
+          user: { include: { walletProfiles: true } },
+        },
+      });
+      if (!submission || submission.quest.creatorId !== user.id) {
+        throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
+      }
+      if (submission.status === "REJECTED") {
+        throw new QuestServiceError("This submission was already rejected.", "ALREADY_REVIEWED");
+      }
+      if (submission.status === "ACCEPTED" && submission.payoutTxHash) {
+        const txUrl = escrow ? escrow.explorerTxUrl(submission.payoutTxHash) : null;
+        return { txHash: submission.payoutTxHash, txUrl };
+      }
+
+      if (submission.status === "PENDING") {
+        const claimed = await db.questSubmission.updateMany({
+          where: { id: submissionId, status: "PENDING" },
+          data: { status: "ACCEPTED" },
+        });
+        if (claimed.count === 0) {
+          throw new QuestServiceError("This submission is no longer pending.", "NOT_PENDING");
+        }
+      } else if (submission.status !== "ACCEPTED") {
+        throw new QuestServiceError("This submission is no longer pending.", "NOT_PENDING");
+      }
+
+      const quest = submission.quest;
+      const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
+      const workerWallet =
+        submission.user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
+
+      let txHash: string | null = submission.payoutTxHash;
+      let txUrl: string | null = txHash && escrow ? escrow.explorerTxUrl(txHash) : null;
+
+      if (willPay && !txHash) {
+        if (!workerWallet) {
+          throw new QuestServiceError("Worker has no wallet for payout.", "NO_WALLET");
+        }
         const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
         const result = await escrow!.transfer({
           fromKeyCiphertext: quest.escrowKeyCiphertext!,
           toAddress: workerWallet.nimiqAddress,
-          valueLuna: BigInt(rewardLuna),
+          valueLuna: rewardLuna,
         });
         if (!result.hash) {
-          console.error("Quest payout failed", { questId, userId: user.id, error: result.error });
-          // Payout failed — undo the slot + submission so the worker can retry cleanly.
-          await db
-            .$transaction(async (tx) => {
-              await tx.questSubmission.delete({ where: { id: submissionId } });
-              await tx.quest.updateMany({
-                where: { id: questId, filledSlots: { gt: 0 } },
-                data: { filledSlots: { decrement: 1 } },
-              });
-            })
-            .catch(() => undefined);
+          // Clear failure only — leave ACCEPTED unpaid so accept can be retried without
+          // double-spend from deleting/recreating. Do not revert to PENDING after transfer
+          // may have broadcast (ambiguous timeout).
+          console.error("Quest payout failed", {
+            questId: quest.id,
+            submissionId,
+            error: result.error,
+          });
           throw new QuestServiceError(
-            result.error ?? "We couldn't pay your reward. Please try again.",
+            result.error ?? "We couldn't pay the reward. Please try again.",
             "PAYOUT_FAILED",
           );
         }
         txHash = result.hash;
-        console.info("Quest payout ok", { questId, userId: user.id, txHash });
-        await db.questSubmission
-          .update({ where: { id: submissionId }, data: { payoutTxHash: txHash, paidAt: new Date() } })
-          .catch(() => undefined);
-
-        // Confirm the payout to the worker in Telegram (best-effort, fire-and-forget). Plain
-        // text — the quest title is untrusted and would break Markdown parsing; the bare URL
-        // is auto-linked by Telegram anyway.
-        const rewardNim = Number(quest.rewardAmount).toLocaleString();
         txUrl = escrow!.explorerTxUrl(txHash);
+        await db.questSubmission.update({
+          where: { id: submissionId },
+          data: { payoutTxHash: txHash, paidAt: new Date() },
+        });
+        const rewardNim = Number(quest.rewardAmount).toLocaleString();
         void notifier?.notify(
-          user.telegramId,
-          `You earned ${rewardNim} NIM for completing "${quest.title}".\n\nView the payout on-chain: ${txUrl}`,
+          submission.user.telegramId,
+          `Your submission for "${quest.title}" was accepted — you earned ${rewardNim} NIM.\n\nView the payout: ${txUrl}`,
+        );
+      } else if (!willPay) {
+        void notifier?.notify(
+          submission.user.telegramId,
+          `Your submission for "${quest.title}" was accepted.`,
         );
       }
 
-      // FILL marks a completed+paid slot — logged after payout so analytics stay honest.
-      await db.questEvent.create({ data: { questId, type: "FILL" } }).catch(() => undefined);
+      await reputation.applyOutcome(submission.userId, "CREATOR_ACCEPT");
+      await db.questEvent.create({ data: { questId: quest.id, type: "FILL" } }).catch(() => undefined);
 
       return { txHash, txUrl };
     },
 
+    /** Creator rejects a PENDING submission and frees the reserved slot. */
+    async rejectSubmission(telegramId: string, submissionId: string): Promise<void> {
+      const user = await db.user.findUnique({ where: { telegramId } });
+      if (!user) throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+      if (!isCreatorRole(user.role)) {
+        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+      }
+
+      const submission = await db.questSubmission.findUnique({
+        where: { id: submissionId },
+        include: { quest: true, user: true },
+      });
+      if (!submission || submission.quest.creatorId !== user.id) {
+        throw new QuestServiceError("Submission not found.", "SUBMISSION_NOT_FOUND");
+      }
+      if (submission.status !== "PENDING") {
+        throw new QuestServiceError("Only pending submissions can be rejected.", "NOT_PENDING");
+      }
+
+      await db.$transaction(async (tx) => {
+        const rejected = await tx.questSubmission.updateMany({
+          where: { id: submissionId, status: "PENDING" },
+          data: { status: "REJECTED" },
+        });
+        if (rejected.count === 0) {
+          throw new QuestServiceError("Only pending submissions can be rejected.", "NOT_PENDING");
+        }
+        await tx.quest.updateMany({
+          where: { id: submission.questId, filledSlots: { gt: 0 } },
+          data: { filledSlots: { decrement: 1 } },
+        });
+      });
+
+      await reputation.applyOutcome(submission.userId, "CREATOR_REJECT");
+      void notifier?.notify(
+        submission.user.telegramId,
+        `Your submission for "${submission.quest.title}" was not accepted. The slot has been freed.`,
+      );
+    },
+
     /**
-     * Promote a published quest ("premium ad"): charge the flat promotion fee to the
-     * platform wallet and flag it. Requires escrow + a configured fee address.
+     * Promote a published quest ("premium ad"): claim the flag first (prevents double-charge),
+     * then charge the flat promotion fee. Rollback the flag only on a clear payment failure.
      */
     async promoteQuest(telegramId: string, questId: string): Promise<void> {
       const user = await db.user.findUnique({
@@ -687,19 +1012,29 @@ export function createQuestService(
           "INSUFFICIENT_BALANCE",
         );
       }
+
+      const claim = await db.quest.updateMany({
+        where: { id: quest.id, promoted: false, status: "PUBLISHED" },
+        data: { promoted: true },
+      });
+      if (claim.count === 0) {
+        throw new QuestServiceError("This quest is already promoted.", "ALREADY_PROMOTED");
+      }
+
       const result = await escrow.transfer({
         fromKeyCiphertext: wallet.keyCiphertext,
         toAddress: fees.address,
-        valueLuna: BigInt(feeLuna),
+        valueLuna: feeLuna,
       });
       if (!result.hash) {
+        await db.quest
+          .updateMany({ where: { id: quest.id, promoted: true }, data: { promoted: false } })
+          .catch(() => undefined);
         throw new QuestServiceError(
           result.error ?? "Promotion payment failed. Please try again.",
           "FUNDING_FAILED",
         );
       }
-
-      await db.quest.update({ where: { id: quest.id }, data: { promoted: true } });
     },
 
     /**
@@ -756,8 +1091,16 @@ export interface WorkerQuestView {
   quest: ReturnType<typeof toPublicQuestResponse>;
   isCreator: boolean;
   submitted: boolean;
+  submissionStatus: string | null;
   canSubmit: boolean;
-  reason: "NOT_REGISTERED" | "CREATOR" | "ALREADY_SUBMITTED" | "FULL" | "NOT_STARTED" | null;
+  reason:
+    | "NOT_REGISTERED"
+    | "CREATOR"
+    | "ALREADY_SUBMITTED"
+    | "FULL"
+    | "NOT_STARTED"
+    | "SUSPENDED"
+    | null;
 }
 
 export interface QuestAnalytics {

@@ -24,8 +24,8 @@ describe("escrow service", () => {
 
   it("computes the required funding in luna", () => {
     const escrow = createEscrowService({ encryptionKey: "k" });
-    expect(escrow.requiredLuna(10, 5)).toBe(50 * 100_000);
-    expect(escrow.requiredLuna(0.5, 3)).toBe(150_000);
+    expect(escrow.requiredLuna(10, 5)).toBe(50n * 100_000n);
+    expect(escrow.requiredLuna(0.5, 3)).toBe(150_000n);
   });
 
   it("reports not-reachable funding when no RPC is configured", async () => {

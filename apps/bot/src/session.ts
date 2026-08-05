@@ -16,6 +16,6 @@ export function createRedisSessionStorage(env: BotEnv, logger: Logger) {
 
   return {
     redis,
-    storage: new RedisAdapter({ instance: redis }),
+    storage: new RedisAdapter({ instance: redis, ttl: 60 * 60 * 24 * 7 }), // 7-day session TTL
   };
 }

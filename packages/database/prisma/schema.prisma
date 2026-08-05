@@ -58,12 +58,19 @@ enum QuestEventType {
   FILL
 }
 
-// Outcome of a worker's quest submission. Submissions currently auto-accept on submit;
-// PENDING/REJECTED exist for a future creator-review flow.
+// Outcome of a worker's quest submission. Creators review PENDING proofs before payout.
 enum SubmissionStatus {
   ACCEPTED
   PENDING
   REJECTED
+}
+
+// Architecture decision outcomes from the hybrid verification pipeline (M3).
+enum VerificationOutcome {
+  AUTO_APPROVE
+  LIGHT_REVIEW
+  MANUAL_REVIEW
+  REJECT
 }
 
 model User {
@@ -81,10 +88,11 @@ model User {
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
-  walletProfiles WalletProfile[]
-  walletAudits  WalletAddressAudit[]
-  quests        Quest[]
-  submissions   QuestSubmission[]
+  walletProfiles    WalletProfile[]
+  walletAudits      WalletAddressAudit[]
+  quests            Quest[]
+  submissions       QuestSubmission[]
+  moderationEvents  ModerationEvent[]
 
   @@map("users")
 }
@@ -182,17 +190,41 @@ model QuestSubmission {
   questId   String           @map("quest_id") @db.Uuid
   userId    String           @map("user_id") @db.Uuid
   proof     String           @db.Text
-  status    SubmissionStatus @default(ACCEPTED)
-  // On-chain payout of the reward to the worker (auto-paid on accept). Null when payments
-  // aren't configured (dev) or a payout hasn't settled yet.
+  status    SubmissionStatus @default(PENDING)
+  // Hybrid verification pipeline (M3) — set after rule + AI decision.
+  verificationOutcome VerificationOutcome? @map("verification_outcome")
+  confidenceScore     Float?               @map("confidence_score")
+  verificationSignals Json?                @map("verification_signals")
+  verifiedAt          DateTime?            @map("verified_at")
+  // On-chain payout of the reward to the worker (paid when the creator accepts). Null when
+  // payments aren't configured (dev) or a payout hasn't settled yet.
   payoutTxHash String?       @map("payout_tx_hash")
   paidAt       DateTime?     @map("paid_at")
   createdAt DateTime         @default(now()) @map("created_at")
 
-  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest            Quest             @relation(fields: [questId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moderationEvents ModerationEvent[]
 
   @@unique([questId, userId])
   @@index([questId])
   @@map("quest_submissions")
+}
+
+// Trust and review history for the verification / moderation pipeline (M3).
+model ModerationEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @map("submission_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  flagType     String   @map("flag_type") @db.VarChar(64)
+  resolution   String   @map("resolution") @db.VarChar(64)
+  detail       Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  submission QuestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user       User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([userId])
+  @@map("moderation_events")
 }

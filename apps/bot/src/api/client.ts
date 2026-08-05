@@ -121,17 +121,17 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.user;
     },
 
-    /** Get-or-create the user's custodial wallet. Returns the private key ONCE (to show + save). */
+    /** Get-or-create the user's custodial wallet. Private key only when newly created. */
     async createCustodialWallet(
       telegramId: string,
-    ): Promise<{ nimiqAddress: string; privateKey: string; created: boolean }> {
+    ): Promise<{ nimiqAddress: string; privateKey: string | null; created: boolean }> {
       const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/wallet/custodial`,
         { method: "POST", headers: authHeaders },
       );
       const data = (await response.json().catch(() => ({}))) as {
         nimiqAddress?: string;
-        privateKey?: string;
+        privateKey?: string | null;
         created?: boolean;
         error?: string;
         code?: string;
@@ -139,7 +139,7 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       if (!response.ok) throw parseApiError(data, `Failed to create wallet (${response.status})`);
       return {
         nimiqAddress: data.nimiqAddress!,
-        privateKey: data.privateKey!,
+        privateKey: data.privateKey ?? null,
         created: Boolean(data.created),
       };
     },

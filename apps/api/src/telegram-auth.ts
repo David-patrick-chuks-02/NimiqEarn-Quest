@@ -8,7 +8,7 @@ export interface TelegramInitDataUser {
 }
 
 // Reject initData older than this to limit replay of a captured payload.
-const MAX_AGE_SECONDS = 24 * 60 * 60;
+const MAX_AGE_SECONDS = 60 * 60; // 1 hour — limits replay of stolen Mini App initData
 
 /**
  * Verify a Telegram Mini App `initData` string and return the authenticated user, or null.

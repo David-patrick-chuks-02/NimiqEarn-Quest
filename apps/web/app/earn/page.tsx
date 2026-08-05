@@ -36,7 +36,7 @@ export default function EarnPage() {
   const [error, setError] = useState("");
   const [data, setData] = useState<DiscoverPage | null>(null);
   const [category, setCategory] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [filtering, setFiltering] = useState(false);
   const initDataRef = useRef<string>("");
 
   const api = useCallback(async (path: string) => {
@@ -76,14 +76,14 @@ export default function EarnPage() {
   // Re-query on filter/page change (used by the chips + pagination once ready).
   const refresh = useCallback(
     async (page: number, cat: string | null) => {
-      setBusy(true);
+      setFiltering(true);
       setError("");
       try {
         await load(page, cat);
       } catch (e) {
         setError((e as Error).message);
       } finally {
-        setBusy(false);
+        setFiltering(false);
       }
     },
     [load],
@@ -160,25 +160,34 @@ export default function EarnPage() {
 
         {phase === "ready" && data && (
           <div className="space-y-3">
-            {/* Category filter chips */}
+            {/* Category filter chips — highlight updates instantly; list stays visible while fetching. */}
             <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
               {[{ value: null, label: "All" }, ...CATEGORY_CHIPS].map((c) => {
                 const on = category === c.value;
+                const pending = filtering && on;
                 return (
                   <button
                     key={c.label}
-                    disabled={busy}
                     onClick={() => {
+                      if (filtering && on) return;
                       setCategory(c.value);
                       void refresh(0, c.value);
                     }}
-                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition disabled:opacity-60 ${
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
                       on
                         ? "bg-[var(--brand-gold)] text-[var(--brand-ink)]"
                         : "glass text-white hover:border-white/25"
-                    }`}
+                    } ${filtering && !on ? "opacity-60" : ""}`}
                   >
-                    {c.label}
+                    <span className="inline-flex items-center gap-1.5">
+                      {pending && (
+                        <span
+                          className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[var(--brand-ink)]/30 border-t-[var(--brand-ink)]"
+                          aria-hidden
+                        />
+                      )}
+                      {c.label}
+                    </span>
                   </button>
                 );
               })}
@@ -190,20 +199,34 @@ export default function EarnPage() {
               </p>
             )}
 
-            {data.quests.length === 0 ? (
-              <Info>No open quests match. Try another category or check back soon.</Info>
-            ) : (
-              <div className="space-y-2.5">
-                {data.quests.map((q) => (
-                  <QuestCard key={q.id} quest={q} />
-                ))}
-              </div>
-            )}
+            <div className="relative">
+              {filtering && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-2xl bg-[var(--brand-navy-900)]/40 pt-16 backdrop-blur-[1px]">
+                  <p className="rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white">
+                    Updating quests…
+                  </p>
+                </div>
+              )}
+
+              {data.quests.length === 0 && !filtering ? (
+                <Info>No open quests match. Try another category or check back soon.</Info>
+              ) : data.quests.length === 0 && filtering ? (
+                <EarnListSkeleton />
+              ) : (
+                <div
+                  className={`space-y-2.5 transition-opacity duration-150 ${filtering ? "opacity-50" : ""}`}
+                >
+                  {data.quests.map((q) => (
+                    <QuestCard key={q.id} quest={q} />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {data.pageCount > 1 && (
               <div className="flex items-center justify-between pt-1">
                 <button
-                  disabled={busy || data.page === 0}
+                  disabled={filtering || data.page === 0}
                   onClick={() => void refresh(data.page - 1, category)}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
                 >
@@ -213,7 +236,7 @@ export default function EarnPage() {
                   Page {data.page + 1} of {data.pageCount}
                 </span>
                 <button
-                  disabled={busy || data.page >= data.pageCount - 1}
+                  disabled={filtering || data.page >= data.pageCount - 1}
                   onClick={() => void refresh(data.page + 1, category)}
                   className="rounded-full border border-white/10 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/25 disabled:opacity-40"
                 >
@@ -288,6 +311,22 @@ function QuestCard({ quest }: { quest: DiscoverQuest }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function EarnListSkeleton() {
+  return (
+    <div className="space-y-2.5" aria-busy="true" aria-label="Loading quests">
+      {[0, 1].map((i) => (
+        <div key={i} className="glass overflow-hidden rounded-xl">
+          <div className="aspect-[1200/630] w-full animate-pulse bg-white/5" />
+          <div className="space-y-2 p-4">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-1/3 animate-pulse rounded bg-white/10" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

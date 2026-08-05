@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../app.js";
 
-const { findUnique, create, findFirst, update, questEventCreate } = vi.hoisted(() => ({
-  findUnique: vi.fn(),
-  create: vi.fn(),
-  findFirst: vi.fn(),
-  update: vi.fn(),
-  questEventCreate: vi.fn(),
-}));
+const { findUnique, create, findFirst, update, updateMany, findUniqueOrThrow, questEventCreate } =
+  vi.hoisted(() => ({
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    questEventCreate: vi.fn(),
+  }));
 
 vi.mock("@nimiqearn/database", () => ({
   prisma: {
     user: { findUnique, upsert: vi.fn() },
-    quest: { create, findMany: vi.fn(), findFirst, update },
+    quest: { create, findMany: vi.fn(), findFirst, update, updateMany, findUniqueOrThrow },
     questEvent: { create: questEventCreate },
     walletProfile: { findFirst: vi.fn(), create: vi.fn() },
     $disconnect: vi.fn(),
@@ -33,6 +36,8 @@ describe("quest routes", () => {
     create.mockReset();
     findFirst.mockReset();
     update.mockReset();
+    updateMany.mockReset();
+    findUniqueOrThrow.mockReset();
     questEventCreate.mockReset();
   });
 
@@ -107,7 +112,8 @@ describe("quest routes", () => {
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       publishedAt: null,
     });
-    update.mockResolvedValue({
+    updateMany.mockResolvedValue({ count: 1 });
+    findUniqueOrThrow.mockResolvedValue({
       id: "quest-1",
       creatorId: "user-1",
       title: "Community Feedback",
@@ -121,6 +127,11 @@ describe("quest routes", () => {
       status: "PUBLISHED",
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       publishedAt: new Date("2026-06-27T00:00:00.000Z"),
+      promoted: false,
+      startAt: null,
+      escrowAddress: null,
+      fundedAt: null,
+      viewCount: 0,
     });
 
     const { app } = await buildServer();

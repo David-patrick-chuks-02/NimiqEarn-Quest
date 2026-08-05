@@ -11,7 +11,7 @@ export class SecurityServiceError extends Error {
   }
 }
 
-const MIN_LENGTH = 4;
+const MIN_LENGTH = 8;
 
 // Stored as "salt:hash" (both hex). scrypt is deliberately slow to resist brute force.
 function hashPassword(password: string): string {

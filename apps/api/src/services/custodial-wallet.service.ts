@@ -69,18 +69,18 @@ export function createCustodialWalletService(db: PrismaClient, config: Custodial
 
     /**
      * Return the user's custodial wallet, creating one if they don't have it yet.
-     * Includes the plaintext private key so the caller can show it once.
+     * Plaintext private key is returned ONLY when the wallet was just created.
      */
     async getOrCreate(
       telegramId: string,
-    ): Promise<{ address: string; privateKeyHex: string; created: boolean }> {
+    ): Promise<{ address: string; privateKeyHex: string | null; created: boolean }> {
       const user = await requireUser(telegramId);
 
       const existing = user.walletProfiles.find((w) => w.keyCiphertext);
       if (existing?.keyCiphertext) {
         return {
           address: existing.nimiqAddress,
-          privateKeyHex: box.decrypt(existing.keyCiphertext),
+          privateKeyHex: null,
           created: false,
         };
       }
@@ -109,12 +109,12 @@ export function createCustodialWalletService(db: PrismaClient, config: Custodial
         });
       } catch (error) {
         // Lost a concurrent-create race (unique userId or nimiqAddress) — return the wallet
-        // the winning transaction created instead of a duplicate.
+        // the winning transaction created instead of a duplicate. Never reveal the key again.
         if ((error as { code?: string }).code === "P2002") {
           const again = await requireUser(telegramId);
           const w = again.walletProfiles.find((x) => x.keyCiphertext);
           if (w?.keyCiphertext) {
-            return { address: w.nimiqAddress, privateKeyHex: box.decrypt(w.keyCiphertext), created: false };
+            return { address: w.nimiqAddress, privateKeyHex: null, created: false };
           }
         }
         throw error;

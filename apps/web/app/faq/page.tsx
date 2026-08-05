@@ -21,23 +21,19 @@ const FAQS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Do you hold my funds or private keys?",
-    a: "No. NimiqEarn Quest is non-custodial. We only ever store your public Nimiq address. We never see your private keys or seed phrase and never take custody of your funds.",
+    a: "Yes — NimiqEarn Quest uses custodial wallets. We generate a Nimiq wallet for you, encrypt the private key at rest, and you can export it anytime with your security password. Quest reward pools are also held in per-quest escrow until payouts.",
   },
   {
-    q: "How do I link a wallet?",
-    a: "Open My Wallet in the bot and follow the signing link. You sign a short message with the wallet you want to link — no funds move — and we read the address from your signature. There's nothing to copy or paste.",
-  },
-  {
-    q: "Can I link more than one wallet?",
-    a: "Yes. You can link multiple wallets and choose one as your primary payout wallet. You can switch the primary or unlink any wallet at any time. Each address can only be linked to one account.",
+    q: "How do I back up my wallet?",
+    a: "Open Settings in the bot and use Backup private key. You'll need your security password. Store the key somewhere safe — anyone with it can move your NIM.",
   },
   {
     q: "How does verification work?",
-    a: "Submissions run through deterministic rule checks first, then AI-assisted moderation. High-confidence submissions can auto-approve, while borderline or suspicious ones go to review. This keeps rewards fair and reduces spam and fraud.",
+    a: "You submit proof that matches the quest's required type (text, link, screenshot, etc.). The creator reviews pending submissions and accepts or rejects them. Accepted submissions are paid from the quest's escrow.",
   },
   {
     q: "How and when do I get paid?",
-    a: "Rewards are paid in NIM to your primary wallet after a submission passes verification. The automated payout engine ships in a later milestone as the project rolls out.",
+    a: "Rewards are paid in NIM to your custodial wallet after the creator accepts your submission. You'll get a Telegram notification with an on-chain explorer link when payout succeeds.",
   },
   {
     q: "How do I become a creator?",

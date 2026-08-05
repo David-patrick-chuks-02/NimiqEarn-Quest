@@ -79,6 +79,7 @@ export const messages = {
       "A quick check to keep bots out — type the characters shown above:",
     ].join("\n"),
     incorrect: "That didn't match. Please try the new image above.",
+    locked: "Too many incorrect attempts. Please wait a minute and try again with /start.",
   },
 
   securityNotice: (botUsername?: string) =>

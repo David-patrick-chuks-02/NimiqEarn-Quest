@@ -41,13 +41,17 @@ export default function TermsPage() {
           <h2>3. Wallets and funds</h2>
           <ul>
             <li>
-              You are solely responsible for your Nimiq wallet, your keys, and providing a correct
-              payout address. We are <strong>non-custodial</strong> and never hold your funds or
-              keys.
+              The Service provides a <strong>custodial</strong> Nimiq wallet per account. We generate
+              and encrypt private keys at rest so we can fund quests and pay rewards. You can export
+              your key with your security password and are responsible for any key you export.
+            </li>
+            <li>
+              Quest reward pools are held in per-quest escrow until creators accept submissions and
+              workers are paid on-chain.
             </li>
             <li>
               Blockchain transactions are irreversible. We are not responsible for losses caused by
-              an incorrect address, a compromised wallet, or errors on your side.
+              an incorrect withdrawal address, a compromised exported key, or errors on your side.
             </li>
             <li>Ownership of a linked wallet is proven by signing a message; no funds move.</li>
           </ul>

@@ -47,13 +47,17 @@ export const walletRoutes: FastifyPluginAsync<WalletRouteOptions> = async (app, 
     throw error;
   };
 
-  // Get-or-create the user's custodial wallet. Returns the private key ONCE (to show + save).
+  // Get-or-create the user's custodial wallet. Private key only when newly created.
   app.post<{ Params: { telegramId: string } }>(
     "/api/users/:telegramId/wallet/custodial",
     async (request, reply) => {
       try {
         const w = await custodial.getOrCreate(request.params.telegramId);
-        return { nimiqAddress: w.address, privateKey: w.privateKeyHex, created: w.created };
+        return {
+          nimiqAddress: w.address,
+          privateKey: w.created ? w.privateKeyHex : null,
+          created: w.created,
+        };
       } catch (error) {
         return sendCustodialError(reply, error);
       }
