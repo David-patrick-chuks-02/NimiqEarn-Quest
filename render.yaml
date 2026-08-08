@@ -134,7 +134,7 @@ services:
           name: nimiqearn-redis
           property: connectionString
       - key: API_URL
-        value: https://nimiqearn-api.onrender.com
+        value: https://nimiq-earnquest-api.onrender.com
       - key: WEB_PUBLIC_URL
         value: https://nimiqearn-web.onrender.com
       - fromGroup: nimiqearn-secrets # provides API_SHARED_SECRET (must match the API)
@@ -154,7 +154,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: API_INTERNAL_URL
-        value: https://nimiqearn-api.onrender.com # web proxies /api/wallet/verify/* here
+        value: https://nimiq-earnquest-api.onrender.com # web proxies /api/wallet/verify/* here
       - key: NEXT_PUBLIC_BOT_URL
         sync: false # e.g. https://t.me/YourBot
       - key: NEXT_PUBLIC_HUB_URL
