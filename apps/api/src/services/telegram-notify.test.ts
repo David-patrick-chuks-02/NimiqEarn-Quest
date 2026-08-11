@@ -39,12 +39,18 @@ describe("createTelegramNotifier", () => {
     );
   });
 
-  it("editMessage posts editMessageText to Telegram", async () => {
+  it("editMessage posts editMessageText with reply_markup when provided", async () => {
     fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
     const notifier = createTelegramNotifier("tok");
-    await expect(notifier.editMessage("123", 55, "*Balance:* 1 NIM", { markdown: true })).resolves.toBe(
-      true,
-    );
+    const replyMarkup = {
+      inline_keyboard: [[{ text: "Refresh", callback_data: "creator:refresh" }]],
+    };
+    await expect(
+      notifier.editMessage("123", 55, "*Balance:* 1 NIM", {
+        markdown: true,
+        replyMarkup,
+      }),
+    ).resolves.toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.telegram.org/bottok/editMessageText",
       expect.objectContaining({
@@ -54,6 +60,7 @@ describe("createTelegramNotifier", () => {
           message_id: 55,
           text: "*Balance:* 1 NIM",
           parse_mode: "Markdown",
+          reply_markup: replyMarkup,
           disable_web_page_preview: true,
         }),
       }),

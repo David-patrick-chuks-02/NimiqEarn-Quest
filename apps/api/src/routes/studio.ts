@@ -33,12 +33,38 @@ import {
 import { questErrorStatus } from "./quests.js";
 import { createCreatorService, CreatorServiceError } from "../services/creator.service.js";
 import type { EscrowService } from "../services/escrow.service.js";
-import type { TelegramNotifier } from "../services/telegram-notify.js";
+import type { TelegramInlineKeyboard, TelegramNotifier } from "../services/telegram-notify.js";
 import type { VerifierConfig } from "../services/verification.service.js";
 
 /** Escape dynamic text for Telegram legacy Markdown (same rules as the bot). */
 function escapeMarkdown(text: string) {
   return text.replace(/([_*`[\\])/g, "\\$1");
+}
+
+/** Match the bot Creator Hub keyboard so faucet edits don't strip the buttons. */
+function creatorHubInlineKeyboard(): TelegramInlineKeyboard {
+  const base = (process.env.WEB_PUBLIC_URL ?? "https://www.nimiqearn.com").replace(/\/$/, "");
+  if (base.startsWith("https://")) {
+    return {
+      inline_keyboard: [
+        [{ text: "Open Creator Studio", web_app: { url: `${base}/studio` } }],
+        [
+          { text: "Refresh", callback_data: "creator:refresh" },
+          { text: "Main Menu", callback_data: "creator:back-menu" },
+        ],
+      ],
+    };
+  }
+  return {
+    inline_keyboard: [
+      [{ text: "Create Quest", callback_data: "creator:create-quest" }],
+      [{ text: "My Quests", callback_data: "creator:my-quests" }],
+      [
+        { text: "Refresh", callback_data: "creator:refresh" },
+        { text: "Main Menu", callback_data: "creator:back-menu" },
+      ],
+    ],
+  };
 }
 
 /** Rebuild Creator Hub copy with an updated balance so faucet can edit the bubble in place. */
@@ -578,6 +604,8 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
             const hubText = formatCreatorHubMessage(dashboard, balanceAfterNim);
             const edited = await opts.notifier.editMessage(tgId, hubMessageId, hubText, {
               markdown: true,
+              // Telegram strips inline keyboards unless reply_markup is re-sent on edit.
+              replyMarkup: creatorHubInlineKeyboard(),
             });
             if (edited) return;
           } catch (error) {

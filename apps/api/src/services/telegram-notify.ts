@@ -2,6 +2,18 @@
  * Minimal Telegram notifier: lets the API push or edit a message via the Bot API.
  * Best-effort — never throws. Used for payouts and in-place Creator Hub balance updates.
  */
+
+/** Telegram Bot API inline keyboard payload. */
+export type TelegramInlineKeyboard = {
+  inline_keyboard: Array<
+    Array<
+      | { text: string; callback_data: string }
+      | { text: string; web_app: { url: string } }
+      | { text: string; url: string }
+    >
+  >;
+};
+
 export function createTelegramNotifier(botToken?: string) {
   return {
     enabled: Boolean(botToken),
@@ -9,7 +21,7 @@ export function createTelegramNotifier(botToken?: string) {
     async notify(
       telegramId: string,
       text: string,
-      opts: { markdown?: boolean } = {},
+      opts: { markdown?: boolean; replyMarkup?: TelegramInlineKeyboard } = {},
     ): Promise<boolean> {
       if (!botToken) return false;
       try {
@@ -20,6 +32,7 @@ export function createTelegramNotifier(botToken?: string) {
             chat_id: telegramId,
             text,
             ...(opts.markdown ? { parse_mode: "Markdown" } : {}),
+            ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
             disable_web_page_preview: true,
           }),
         });
@@ -33,12 +46,16 @@ export function createTelegramNotifier(botToken?: string) {
       }
     },
 
-    /** Edit an existing chat message in place (keeps its inline keyboard if markup omitted). */
+    /**
+     * Edit an existing chat message in place.
+     * Always pass `replyMarkup` when the original had buttons — Telegram removes the
+     * keyboard if reply_markup is omitted on editMessageText.
+     */
     async editMessage(
       telegramId: string,
       messageId: number,
       text: string,
-      opts: { markdown?: boolean } = {},
+      opts: { markdown?: boolean; replyMarkup?: TelegramInlineKeyboard } = {},
     ): Promise<boolean> {
       if (!botToken) return false;
       try {
@@ -50,6 +67,7 @@ export function createTelegramNotifier(botToken?: string) {
             message_id: messageId,
             text,
             ...(opts.markdown ? { parse_mode: "Markdown" } : {}),
+            ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
             disable_web_page_preview: true,
           }),
         });

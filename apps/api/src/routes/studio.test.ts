@@ -233,10 +233,13 @@ describe("studio routes", () => {
       chat_id: string;
       message_id: number;
       text: string;
+      reply_markup?: { inline_keyboard: unknown[] };
     };
     expect(body).toMatchObject({ chat_id: "test-user-123", message_id: 168 });
     expect(body.text).toContain("*Balance:* 500 NIM");
     expect(body.text).toContain("*Creator Hub*");
+    expect(body.reply_markup?.inline_keyboard?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(body.reply_markup)).toMatch(/creator:refresh|Open Creator Studio/);
 
     await app.close();
   });
