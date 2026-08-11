@@ -62,7 +62,6 @@ const PROOF_TYPES: CreateQuestInput["proofType"][] = [
   "SCREENSHOT",
   "UPLOADED_MEDIA",
   "TRANSACTION_HASH",
-  "WALLET_INTERACTION",
   "REFERRAL_EVENT",
 ];
 
@@ -92,7 +91,7 @@ export const PROOF_TYPE_LABELS: Record<CreateQuestInput["proofType"], string> = 
   TEXT: "Text",
   LINK: "Link",
   SCREENSHOT: "Screenshot",
-  UPLOADED_MEDIA: "Image or video",
+  UPLOADED_MEDIA: "Image",
   TRANSACTION_HASH: "Transaction hash",
   WALLET_INTERACTION: "Wallet signed message",
   REFERRAL_EVENT: "Referral event",
@@ -102,7 +101,7 @@ const PROOF_BUTTON_LABELS: Record<CreateQuestInput["proofType"], string> = {
   TEXT: "Text",
   LINK: "Link",
   SCREENSHOT: "Screenshot",
-  UPLOADED_MEDIA: "Media",
+  UPLOADED_MEDIA: "Image",
   TRANSACTION_HASH: "Tx hash",
   WALLET_INTERACTION: "Wallet",
   REFERRAL_EVENT: "Referral",

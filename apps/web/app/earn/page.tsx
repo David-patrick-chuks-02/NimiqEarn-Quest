@@ -106,7 +106,10 @@ export default function EarnPage() {
       // Older Telegram clients may not support every method — non-fatal.
     }
     try {
-      await load(0);
+      const fromUrl = new URLSearchParams(window.location.search).get("category");
+      const initialCat = fromUrl && fromUrl.length > 0 ? fromUrl : null;
+      if (initialCat) setCategory(initialCat);
+      await load(0, initialCat);
       setPhase("ready");
     } catch (e) {
       setError((e as Error).message);

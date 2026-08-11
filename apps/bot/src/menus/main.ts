@@ -4,7 +4,7 @@ import type { BotContext } from "../context.js";
 import { messages } from "../copy/messages.js";
 import { editOrReply } from "../utils/edit-or-reply.js";
 import { openCreatorEntry } from "./creator.js";
-import { sendBrowsePrompt } from "../commands/quests.js";
+import { sendBrowseQuests } from "./browse.js";
 import { sendEarnings } from "./earnings.js";
 import { walletHeader } from "./wallet-summary.js";
 import { renderWalletMenu } from "./wallet.js";
@@ -14,23 +14,16 @@ export const MAIN_MENU_CALLBACKS = {
   earnings: "menu:earnings",
   wallet: "menu:wallet",
   creator: "menu:creator",
+  home: "menu:home",
   refresh: "menu:refresh",
   help: "menu:help",
 } as const;
 
-/** Worker "Browse & Earn" Mini App URL — web_app buttons require HTTPS. */
-function earnMiniAppUrl(): string | null {
-  const base = (process.env.WEB_PUBLIC_URL ?? "").replace(/\/$/, "");
-  return base.startsWith("https://") ? `${base}/earn` : null;
-}
-
 export function mainMenuKeyboard() {
   const kb = new InlineKeyboard();
 
-  // One browse entry: the rich Mini App over HTTPS, else the native bot list (dev fallback).
-  const earnUrl = earnMiniAppUrl();
-  if (earnUrl) kb.webApp("Start Earning", earnUrl);
-  else kb.text("Start Earning", MAIN_MENU_CALLBACKS.startEarning);
+  // Prefer in-chat categorized browse; Mini App remains reachable from that screen.
+  kb.text("Start Earning", MAIN_MENU_CALLBACKS.startEarning);
   kb.text("My Earnings", MAIN_MENU_CALLBACKS.earnings).row();
 
   return kb
@@ -55,19 +48,17 @@ export async function sendMainMenu(ctx: BotContext, api: ApiClient, greeting: st
 
 
 export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
-  // Backward-compat: old in-chat quest-list buttons (discover:page:*) now open the browse
-  // Mini App instead of dead-ending.
+  // Backward-compat: old in-chat quest-list buttons (discover:page:*) now open browse.
   bot.callbackQuery(/^discover:page:/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await sendBrowsePrompt(ctx).catch(() => undefined);
+    await sendBrowseQuests(ctx, api).catch(() => undefined);
   });
 
-  // Start Earning → open the quest Mini App (over HTTPS the button opens it directly; this
-  // callback is only hit on the non-HTTPS dev fallback).
+  // Start Earning → categorized in-chat browse (+ Mini App from that screen).
   bot.callbackQuery(MAIN_MENU_CALLBACKS.startEarning, async (ctx) => {
     await ctx.answerCallbackQuery();
     try {
-      await sendBrowsePrompt(ctx);
+      await sendBrowseQuests(ctx, api);
     } catch (error) {
       console.error("Start earning failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
@@ -102,6 +93,17 @@ export function registerMainMenuHandlers(bot: Bot<BotContext>, api: ApiClient) {
     } catch (error) {
       console.error("Creator hub from menu failed:", error);
       await ctx.reply(messages.errors.apiUnavailable);
+    }
+  });
+
+  // Return to main menu without a toast (e.g. from Browse).
+  bot.callbackQuery(MAIN_MENU_CALLBACKS.home, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const name = ctx.from?.first_name ?? "there";
+    try {
+      await sendMainMenu(ctx, api, messages.menu.greeting(name));
+    } catch (error) {
+      console.error("Main menu home failed:", error);
     }
   });
 

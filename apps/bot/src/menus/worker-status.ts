@@ -10,8 +10,7 @@ export function formatWorkerStatus(user: ApiUser): string {
     "",
     `Wallet · ${user.wallet ? "Ready" : "Not set up yet"}`,
     `Reputation · ${user.reputationScore} pts`,
-    "Quests completed · 0",
     "",
-    "Quest discovery is opening soon — you'll browse quests and earn NIM right here. Your wallet is already set up for payouts.",
+    "Tap *Start Earning* to browse open quests by category and earn NIM.",
   ].join("\n");
 }

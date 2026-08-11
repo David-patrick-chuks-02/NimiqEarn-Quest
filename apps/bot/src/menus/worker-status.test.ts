@@ -19,6 +19,7 @@ describe("formatWorkerStatus", () => {
 
     expect(text).toContain("Your profile");
     expect(text).toContain("Not set up");
+    expect(text).toContain("Start Earning");
   });
 
   it("formats a verified worker with a linked wallet", () => {
@@ -52,5 +53,6 @@ describe("formatWorkerStatus", () => {
 
     expect(text).toContain("Your profile");
     expect(text).toContain("Wallet · Ready");
+    expect(text).toContain("browse open quests by category");
   });
 });

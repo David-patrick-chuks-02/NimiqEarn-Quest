@@ -18,6 +18,7 @@ import { loggingMiddleware } from "./middleware/logging.js";
 import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { createRateLimiter } from "./utils/rate-limit.js";
 import { registerCreatorHandlers } from "./menus/creator.js";
+import { registerBrowseHandlers } from "./menus/browse.js";
 import { registerMainMenuHandlers } from "./menus/main.js";
 import { registerSettingsHandlers } from "./menus/settings.js";
 import { registerWalletHandlers } from "./menus/wallet.js";
@@ -68,6 +69,7 @@ export function createBot(env: BotEnv, logger: Logger) {
 
   registerCommands(bot, api);
   registerMainMenuHandlers(bot, api);
+  registerBrowseHandlers(bot, api);
   registerWalletHandlers(bot, api);
   registerSettingsHandlers(bot, api);
   registerCreatorHandlers(bot, api);

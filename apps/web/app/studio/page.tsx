@@ -16,15 +16,131 @@ const CATEGORIES = [
   { value: "OTHER", label: "Other" },
 ] as const;
 
+/** Creator-facing proof types that are launch-ready (wallet sign / video held back). */
 const PROOF_TYPES = [
   { value: "TEXT", label: "Text response" },
   { value: "LINK", label: "Link / URL" },
   { value: "SCREENSHOT", label: "Screenshot" },
-  { value: "UPLOADED_MEDIA", label: "Image or video" },
+  { value: "UPLOADED_MEDIA", label: "Image upload" },
   { value: "TRANSACTION_HASH", label: "Transaction hash" },
-  { value: "WALLET_INTERACTION", label: "Wallet signed message" },
   { value: "REFERRAL_EVENT", label: "Referral event" },
 ] as const;
+
+type QuestTemplate = {
+  id: string;
+  label: string;
+  blurb: string;
+  category: (typeof CATEGORIES)[number]["value"];
+  proofType: (typeof PROOF_TYPES)[number]["value"];
+  title: string;
+  description: string;
+  proofInstructions: string;
+  rewardAmount: string;
+  totalSlots: string;
+};
+
+/** One-tap starters so creators don’t stare at empty enums. */
+const QUEST_TEMPLATES: QuestTemplate[] = [
+  {
+    id: "feedback-text",
+    label: "Product feedback",
+    blurb: "Text answers · easy review",
+    category: "FEEDBACK",
+    proofType: "TEXT",
+    title: "Try the product and share feedback",
+    description:
+      "1. Open the product / bot and complete the main flow.\n2. Note what worked and what felt confusing.\n3. Submit a short written review.",
+    proofInstructions: "Write 2–5 sentences: what you tried, what worked, what to improve.",
+    rewardAmount: "50",
+    totalSlots: "20",
+  },
+  {
+    id: "social-link",
+    label: "Social share",
+    blurb: "Workers paste a post link",
+    category: "SOCIAL_CAMPAIGN",
+    proofType: "LINK",
+    title: "Share our announcement post",
+    description:
+      "1. Open the campaign post linked in the instructions.\n2. Like / repost / quote as described.\n3. Submit the public URL of your post.",
+    proofInstructions: "Paste the public link to your post (must be viewable without login).",
+    rewardAmount: "25",
+    totalSlots: "50",
+  },
+  {
+    id: "screenshot-proof",
+    label: "Screenshot proof",
+    blurb: "Upload a clear screenshot",
+    category: "COMMUNITY_ENGAGEMENT",
+    proofType: "SCREENSHOT",
+    title: "Join and screenshot confirmation",
+    description:
+      "1. Complete the community action described below.\n2. Take a screenshot that clearly shows you did it.\n3. Upload that screenshot as proof.",
+    proofInstructions: "Upload a clear screenshot showing the completed action.",
+    rewardAmount: "30",
+    totalSlots: "30",
+  },
+  {
+    id: "onchain-tx",
+    label: "On-chain payment",
+    blurb: "Tx hash · verified on-chain",
+    category: "OTHER",
+    proofType: "TRANSACTION_HASH",
+    title: "Send a small NIM test transfer",
+    description:
+      "1. Send the required NIM amount to the pay-to address in Verification rules.\n2. Copy the transaction hash.\n3. Submit the hash as proof.",
+    proofInstructions: "Paste the transaction hash from your wallet or explorer.",
+    rewardAmount: "100",
+    totalSlots: "10",
+  },
+  {
+    id: "referral",
+    label: "Referral",
+    blurb: "Invite someone who joins",
+    category: "REFERRAL",
+    proofType: "REFERRAL_EVENT",
+    title: "Invite a friend to start the bot",
+    description:
+      "1. Share your invite with a friend.\n2. They must open the bot and create a profile.\n3. Submit their Telegram username or id as proof.",
+    proofInstructions: "Submit the referred person's Telegram @username or numeric id.",
+    rewardAmount: "75",
+    totalSlots: "25",
+  },
+  {
+    id: "bug-bounty",
+    label: "Bug report",
+    blurb: "Text write-up of a bug",
+    category: "BUG_BOUNTY",
+    proofType: "TEXT",
+    title: "Report a reproducible bug",
+    description:
+      "1. Reproduce the issue.\n2. Describe steps, expected vs actual result.\n3. Include device / Telegram version if relevant.",
+    proofInstructions: "Steps to reproduce, expected result, actual result.",
+    rewardAmount: "200",
+    totalSlots: "15",
+  },
+];
+
+/** Defaults applied when the creator only changes category (keeps title if already typed). */
+const CATEGORY_DEFAULTS: Record<
+  string,
+  { proofType: string; proofHint: string }
+> = {
+  PRODUCT_TESTING: { proofType: "TEXT", proofHint: "Describe what you tested and your findings." },
+  SOCIAL_CAMPAIGN: { proofType: "LINK", proofHint: "Paste the public URL of your post." },
+  COMMUNITY_ENGAGEMENT: {
+    proofType: "SCREENSHOT",
+    proofHint: "Upload a screenshot that proves you completed the action.",
+  },
+  REFERRAL: {
+    proofType: "REFERRAL_EVENT",
+    proofHint: "Submit the referred person's Telegram @username or id.",
+  },
+  CONTENT: { proofType: "LINK", proofHint: "Paste the link to your published content." },
+  FEEDBACK: { proofType: "TEXT", proofHint: "Write your feedback in a few sentences." },
+  BUG_BOUNTY: { proofType: "TEXT", proofHint: "Steps to reproduce, expected vs actual." },
+  OTHER: { proofType: "TEXT", proofHint: "Submit the proof described in the instructions." },
+};
 
 type Phase = "loading" | "no-telegram" | "not-creator" | "ready" | "error";
 type TabKey = "home" | "create" | "quests" | "wallet";
@@ -762,6 +878,39 @@ export default function StudioPage() {
                 <form onSubmit={submitQuest} className="glass rounded-2xl p-5">
               <div className="space-y-3.5">
                 <div>
+                  <p className={labelClass}>Quick start</p>
+                  <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                    Pick a template to prefill category, proof type, and copy — then edit.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {QUEST_TEMPLATES.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() =>
+                          setForm({
+                            ...emptyForm,
+                            category: t.category,
+                            proofType: t.proofType,
+                            title: t.title,
+                            description: t.description,
+                            proofInstructions: t.proofInstructions,
+                            rewardAmount: t.rewardAmount,
+                            totalSlots: t.totalSlots,
+                          })
+                        }
+                        className="rounded-lg border border-white/10 bg-[var(--brand-navy-800)] px-3 py-2 text-left transition hover:border-[var(--brand-gold)]/40"
+                      >
+                        <span className="block text-xs font-semibold text-white">{t.label}</span>
+                        <span className="mt-0.5 block text-[0.65rem] text-[var(--brand-muted)]">
+                          {t.blurb}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <label className={labelClass}>Title</label>
                   <input
                     className={inputClass}
@@ -779,7 +928,24 @@ export default function StudioPage() {
                     <select
                       className={inputClass}
                       value={form.category}
-                      onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      onChange={(e) => {
+                        const category = e.target.value;
+                        const defaults = CATEGORY_DEFAULTS[category];
+                        setForm({
+                          ...form,
+                          category,
+                          ...(defaults
+                            ? {
+                                proofType: defaults.proofType,
+                                ...emptyProofRules,
+                                // Only overwrite instructions if still blank.
+                                ...(form.proofInstructions.trim()
+                                  ? {}
+                                  : { proofInstructions: defaults.proofHint }),
+                              }
+                            : {}),
+                        });
+                      }}
                     >
                       {CATEGORIES.map((c) => (
                         <option key={c.value} value={c.value}>
@@ -1185,7 +1351,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 // Per-tab page header (home has its own personalised greeting, so it's omitted here).
 const TAB_META: Partial<Record<TabKey, { title: string; subtitle: string }>> = {
-  create: { title: "Create a quest", subtitle: "Draft a paid task for the community." },
+  create: { title: "Create a quest", subtitle: "Start from a template, or build your own." },
   quests: { title: "Your quests", subtitle: "Publish, share, and track performance." },
   wallet: { title: "Wallet", subtitle: "The balance that funds your quests." },
 };

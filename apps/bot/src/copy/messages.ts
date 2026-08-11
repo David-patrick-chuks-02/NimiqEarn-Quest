@@ -51,7 +51,7 @@ export const messages = {
       section(
         "Main menu",
         [
-          "• *Start Earning* — Your worker profile and progress",
+          "• *Start Earning* — Browse open quests by category and earn NIM",
           "• *My Wallet* — Balance, deposit & withdraw NIM",
           "• *Creator Hub* — Create and manage paid quests",
           "• *Settings* — Language and security",
@@ -239,10 +239,10 @@ export const messages = {
   quests: {
     browsePrompt: section(
       "Browse quests",
-      "Tap below to open the quest marketplace, complete quests, and earn NIM — paid straight to your wallet.",
+      "Pick a category, open a quest, complete the proof, and earn NIM — paid to your wallet.",
     ),
     miniAppOnly:
-      "Quests are browsed in the Mini App, which needs the web app on HTTPS. It'll open here once WEB_PUBLIC_URL is set to an https:// address.",
+      "Quests open in the Mini App, which needs the web app on HTTPS. Set WEB_PUBLIC_URL to an https:// address to complete quests from chat.",
     sharedUnavailable:
       "That quest link is no longer available — it may be a draft, closed, or removed. Use the menu below to get started.",
   },
