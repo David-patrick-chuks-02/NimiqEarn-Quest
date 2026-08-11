@@ -4,7 +4,21 @@ import { FeedbackForm } from "./FeedbackForm";
 
 export const metadata: Metadata = {
   title: "Feedback — NimiqEarn Quest",
-  description: "Share anonymous feedback on the NimiqEarn Quest Telegram build.",
+  description:
+    "Try @NimiqEarnBot, then leave anonymous feedback on what worked and what didn't.",
+  openGraph: {
+    title: "Share feedback on NimiqEarn Quest",
+    description:
+      "Try @NimiqEarnBot, then tell us what worked and what didn't. Name optional — stay anonymous.",
+    type: "website",
+    url: "https://www.nimiqearn.com/feedback",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Share feedback on NimiqEarn Quest",
+    description:
+      "Try @NimiqEarnBot, then tell us what worked and what didn't. Name optional — stay anonymous.",
+  },
 };
 
 const STEPS = ["Open @NimiqEarnBot", "Try the flows", "Tell us what to fix"];

@@ -15,6 +15,7 @@ const grotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.nimiqearn.com"),
   title: "NimiqEarn Quest — Earn NIM for quests in Telegram",
   description:
     "A Telegram-native task and bounty marketplace. Complete quests, prove ownership of your Nimiq wallet, and earn NIM.",
