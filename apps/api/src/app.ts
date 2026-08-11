@@ -13,6 +13,7 @@ import { walletRoutes } from "./routes/wallets.js";
 import { adminRoutes } from "./routes/admin.js";
 import { studioRoutes } from "./routes/studio.js";
 import { settingsRoutes } from "./routes/settings.js";
+import { feedbackRoutes } from "./routes/feedback.js";
 import { createEscrowService } from "./services/escrow.service.js";
 import { createTelegramNotifier } from "./services/telegram-notify.js";
 import { checkRateLimit } from "./rate-limit.js";
@@ -89,6 +90,8 @@ export async function buildServer() {
       // Public quest reads (discovery list GET /api/quests, share pages GET /api/quests/:id)
       // and initData-authed worker routes — no shared secret needed.
       if (request.url.startsWith("/api/quests")) return;
+      // Anonymous build-review feedback form on the marketing site.
+      if (request.url.startsWith("/api/feedback")) return;
       // Moderator admin UI uses x-admin-key instead of the bot shared secret.
       if (request.url.startsWith("/api/admin")) return;
       if (!safeCompare(request.headers["x-internal-key"], secret)) {
@@ -145,6 +148,7 @@ export async function buildServer() {
     },
   });
   await app.register(settingsRoutes);
+  await app.register(feedbackRoutes);
   await app.register(adminRoutes, {
     adminApiKey: env.ADMIN_API_KEY,
     escrow,

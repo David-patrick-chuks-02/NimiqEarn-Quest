@@ -13,6 +13,10 @@ build/
 .env
 .env.local
 .env.*.local
+api.env
+bot.env
+web.env
+*.env.local
 admin-wallet.json
 
 # Logs

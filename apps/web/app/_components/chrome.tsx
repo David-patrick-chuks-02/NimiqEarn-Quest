@@ -4,7 +4,7 @@ import { APP_NAME } from "@nimiqearn/shared";
 
 export const BOT_URL = process.env.NEXT_PUBLIC_BOT_URL ?? "https://t.me/YourBot";
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "";
-export const GITHUB_URL = "https://github.com/David-patrick-chuks/NimiqEarn-Quest";
+export const GITHUB_URL = "https://github.com/David-patrick-chuks-02/NimiqEarn-Quest";
 
 export function IconArrow({ className }: { className?: string }) {
   return (
@@ -160,6 +160,11 @@ export function SiteFooter() {
             <li>
               <Link href="/about" className={footerLink}>
                 About
+              </Link>
+            </li>
+            <li>
+              <Link href="/feedback" className={footerLink}>
+                Feedback
               </Link>
             </li>
             <li>

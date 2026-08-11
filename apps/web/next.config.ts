@@ -77,6 +77,14 @@ const nextConfig: NextConfig = {
         source: "/api/admin/:path*",
         destination: `${API_INTERNAL_URL}/api/admin/:path*`,
       },
+      {
+        source: "/api/feedback",
+        destination: `${API_INTERNAL_URL}/api/feedback`,
+      },
+      {
+        source: "/api/feedback/:path*",
+        destination: `${API_INTERNAL_URL}/api/feedback/:path*`,
+      },
     ];
   },
 };

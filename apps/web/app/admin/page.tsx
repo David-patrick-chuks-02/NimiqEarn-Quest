@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Tab = "queue" | "submissions" | "moderation" | "users";
+type Tab = "queue" | "submissions" | "moderation" | "users" | "feedback";
 
 interface SubmissionRow {
   id: string;
@@ -35,6 +35,15 @@ interface UserRow {
   reputationScore: number;
 }
 
+interface FeedbackRow {
+  id: string;
+  displayName: string | null;
+  telegramHandle: string | null;
+  message: string;
+  rating: number | null;
+  createdAt: string;
+}
+
 const KEY_STORAGE = "nimiqearn_admin_key";
 
 async function adminFetch(path: string, key: string, init?: RequestInit) {
@@ -61,6 +70,7 @@ export default function AdminPage() {
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [moderation, setModeration] = useState<ModerationRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem(KEY_STORAGE);
@@ -88,6 +98,9 @@ export default function AdminPage() {
       } else if (tab === "moderation") {
         const data = await adminFetch("/api/admin/moderation?limit=50", key.trim());
         setModeration(data.items ?? []);
+      } else if (tab === "feedback") {
+        const data = await adminFetch("/api/admin/feedback?limit=100", key.trim());
+        setFeedback(data.items ?? []);
       } else {
         const data = await adminFetch("/api/admin/users?limit=50", key.trim());
         setUsers(data.items ?? []);
@@ -161,7 +174,7 @@ export default function AdminPage() {
       </div>
 
       <nav className="mb-4 flex flex-wrap gap-2 text-sm">
-        {(["queue", "submissions", "moderation", "users"] as Tab[]).map((t) => (
+        {(["queue", "submissions", "moderation", "users", "feedback"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -318,6 +331,38 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {tab === "feedback" && (
+        <ul className="space-y-3">
+          {feedback.map((f) => (
+            <li
+              key={f.id}
+              className="rounded-lg border border-white/10 bg-[var(--brand-navy-800)] px-4 py-3 text-sm"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-medium text-white">
+                  {f.displayName || "Anonymous"}
+                  {f.telegramHandle && (
+                    <span className="ml-2 font-normal text-[var(--brand-muted)]">
+                      @{f.telegramHandle}
+                    </span>
+                  )}
+                  {f.rating != null && (
+                    <span className="ml-2 text-[var(--brand-gold)]">{f.rating}/5</span>
+                  )}
+                </p>
+                <span className="text-xs text-[var(--brand-muted)]">
+                  {new Date(f.createdAt).toLocaleString()}
+                </span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-[var(--brand-text)]">{f.message}</p>
+            </li>
+          ))}
+          {feedback.length === 0 && (
+            <li className="text-sm text-[var(--brand-muted)]">No feedback yet.</li>
+          )}
+        </ul>
       )}
     </main>
   );

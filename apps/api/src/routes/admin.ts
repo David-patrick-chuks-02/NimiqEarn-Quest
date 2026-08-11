@@ -81,6 +81,27 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
     return admin.listModerationEvents(limit, offset);
   });
 
+  app.get<{ Querystring: ListQuery }>("/api/admin/feedback", async (request) => {
+    const { limit, offset } = parsePaging(request.query);
+    const [items, total] = await Promise.all([
+      app.db.feedback.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          displayName: true,
+          telegramHandle: true,
+          message: true,
+          rating: true,
+          createdAt: true,
+        },
+      }),
+      app.db.feedback.count(),
+    ]);
+    return { total, limit, offset, items };
+  });
+
   app.post<{
     Params: { userId: string };
     Body: { status?: string };

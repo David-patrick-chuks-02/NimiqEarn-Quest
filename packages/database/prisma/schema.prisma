@@ -286,3 +286,21 @@ model ModerationEvent {
   @@index([userId])
   @@map("moderation_events")
 }
+
+// Anonymous public feedback from the /feedback landing page (no login required).
+model Feedback {
+  id             String   @id @default(uuid()) @db.Uuid
+  // Optional display name / handle — never required for anonymity.
+  displayName    String?  @map("display_name") @db.VarChar(80)
+  telegramHandle String?  @map("telegram_handle") @db.VarChar(64)
+  message        String   @db.Text
+  // Optional 1–5 rating of the Telegram build experience.
+  rating         Int?
+  // Coarse client metadata for spam triage (not used for identity).
+  userAgent      String?  @map("user_agent") @db.VarChar(256)
+  ipHash         String?  @map("ip_hash") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("feedback")
+}
