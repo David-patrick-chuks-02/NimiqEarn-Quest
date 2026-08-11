@@ -36,6 +36,49 @@ import type { EscrowService } from "../services/escrow.service.js";
 import type { TelegramNotifier } from "../services/telegram-notify.js";
 import type { VerifierConfig } from "../services/verification.service.js";
 
+/** Escape dynamic text for Telegram legacy Markdown (same rules as the bot). */
+function escapeMarkdown(text: string) {
+  return text.replace(/([_*`[\\])/g, "\\$1");
+}
+
+/** Rebuild Creator Hub copy with an updated balance so faucet can edit the bubble in place. */
+function formatCreatorHubMessage(
+  dashboard: {
+    user: { displayName: string | null; role: string; status: string };
+    quests: { DRAFT: number; PUBLISHED: number; CLOSED: number };
+  },
+  balanceNim: number | null,
+): string {
+  const balance =
+    balanceNim !== null ? `${balanceNim.toLocaleString()} NIM` : "tap Refresh";
+  const name = escapeMarkdown(dashboard.user.displayName ?? "Creator");
+  const role = dashboard.user.role === "ADMIN" ? "Admin" : "Creator";
+  const status =
+    dashboard.user.status === "ACTIVE"
+      ? "Verified"
+      : dashboard.user.status === "SUSPENDED"
+        ? "Suspended"
+        : "Verification required";
+
+  return [
+    `*Balance:* ${balance}`,
+    "",
+    "*Creator Hub*",
+    `Welcome back, *${name}*`,
+    "",
+    "*Account*",
+    `• Role · ${role}`,
+    `• Status · ${status}`,
+    "",
+    "*Your quests*",
+    `• Draft · ${dashboard.quests.DRAFT}`,
+    `• Published · ${dashboard.quests.PUBLISHED}`,
+    `• Closed · ${dashboard.quests.CLOSED}`,
+    "",
+    "Open *Creator Studio* to create quests, publish drafts, and track performance.",
+  ].join("\n");
+}
+
 interface StudioRouteOptions {
   botToken?: string;
   escrow?: EscrowService;
@@ -507,13 +550,49 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         return reply.code(500).send({ error: result.error });
       }
 
+      const balanceAfterNim =
+        quote.balanceNim !== null ? quote.balanceNim + quote.amountNim : null;
+      const tgId = telegramId(request);
+
+      // Prefer editing the live Creator Hub bubble (message id saved by the bot). Fall back
+      // to a new notify if we don't have an id or Telegram rejects the edit.
+      void (async () => {
+        const amountLabel = quote.amountNim.toLocaleString();
+        const balanceLabel =
+          balanceAfterNim !== null ? balanceAfterNim.toLocaleString() : null;
+        const txUrl =
+          result.hash && opts.escrow ? opts.escrow.explorerTxUrl(result.hash) : null;
+        const fallbackText = [
+          `Testnet faucet sent you ${amountLabel} NIM.`,
+          balanceLabel ? `Updated balance: ${balanceLabel} NIM` : null,
+          txUrl ? `Tx: ${txUrl}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+
+        const hubMessageId = user?.telegramHubMessageId ?? null;
+        if (hubMessageId != null && opts.notifier) {
+          try {
+            const creators = createCreatorService(app.db);
+            const dashboard = await creators.getDashboard(tgId);
+            const hubText = formatCreatorHubMessage(dashboard, balanceAfterNim);
+            const edited = await opts.notifier.editMessage(tgId, hubMessageId, hubText, {
+              markdown: true,
+            });
+            if (edited) return;
+          } catch (error) {
+            console.error("Faucet hub edit failed:", error);
+          }
+        }
+        void opts.notifier?.notify(tgId, fallbackText);
+      })();
+
       return {
         ok: true,
         hash: result.hash,
         amountNim: quote.amountNim,
         balanceBeforeNim: quote.balanceNim,
-        balanceAfterNim:
-          quote.balanceNim !== null ? quote.balanceNim + quote.amountNim : null,
+        balanceAfterNim,
         quote,
       };
     } catch (error) {

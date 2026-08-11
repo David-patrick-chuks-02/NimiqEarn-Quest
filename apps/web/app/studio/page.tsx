@@ -50,6 +50,17 @@ interface Dashboard {
   quests: { total: number; DRAFT: number; PUBLISHED: number; CLOSED: number };
 }
 
+/** Proof-type–specific verification fields (cleared when the creator switches proof type). */
+const emptyProofRules = {
+  targetAddress: "",
+  minAmountNim: "",
+  requiredHashtags: "",
+  requiredMentions: "",
+  expectedMessage: "",
+  livePostUrl: "",
+  requireFirstQuest: false,
+};
+
 const emptyForm = {
   title: "",
   category: "SOCIAL_CAMPAIGN",
@@ -61,17 +72,10 @@ const emptyForm = {
   proofInstructions: "",
   sampleEvidence: "", // compressed image data URL, optional
   // Optional verificationConfig (campaign rules)
-  targetAddress: "",
-  minAmountNim: "",
-  requiredHashtags: "",
-  requiredMentions: "",
-  minEngagement: "",
+  ...emptyProofRules,
+  // Gates that apply to any proof type
   minReputation: "",
   deadlineAt: "",
-  expectedMessage: "",
-  livePostUrl: "",
-  senderMustMatchWorker: false,
-  requireFirstQuest: false,
 };
 
 /**
@@ -429,36 +433,55 @@ export default function StudioPage() {
       }
 
       // Don't create anything yet — ask the creator whether to publish now or save a draft.
+      // Only include verification fields that apply to the selected proof type.
       const verificationConfig: Record<string, unknown> = {};
-      if (form.targetAddress.trim()) verificationConfig.targetAddress = form.targetAddress.trim();
-      if (form.minAmountNim.trim()) {
-        const n = Number(form.minAmountNim);
-        if (!Number.isFinite(n) || n <= 0) {
-          setError("Min amount: enter a positive NIM amount, or leave blank.");
+      const proof = form.proofType;
+
+      if (proof === "TRANSACTION_HASH") {
+        if (form.targetAddress.trim()) verificationConfig.targetAddress = form.targetAddress.trim();
+        if (form.minAmountNim.trim()) {
+          const n = Number(form.minAmountNim);
+          if (!Number.isFinite(n) || n <= 0) {
+            setError("Min amount: enter a positive NIM amount, or leave blank.");
+            return;
+          }
+          verificationConfig.minAmountNim = n;
+        }
+      }
+      if (proof === "LINK") {
+        if (form.requiredHashtags.trim()) {
+          verificationConfig.requiredHashtags = form.requiredHashtags
+            .split(/[,\s]+/)
+            .map((h) => h.replace(/^#/, "").trim())
+            .filter(Boolean);
+        }
+        if (form.requiredMentions.trim()) {
+          verificationConfig.requiredMentions = form.requiredMentions
+            .split(/[,\s]+/)
+            .map((h) => h.replace(/^@/, "").trim())
+            .filter(Boolean);
+        }
+      }
+      if (proof === "WALLET_INTERACTION" && form.expectedMessage.trim()) {
+        verificationConfig.expectedMessage = form.expectedMessage.trim();
+      }
+      if (
+        (proof === "SCREENSHOT" || proof === "UPLOADED_MEDIA") &&
+        form.livePostUrl.trim()
+      ) {
+        try {
+          // eslint-disable-next-line no-new
+          new URL(form.livePostUrl.trim());
+          verificationConfig.livePostUrl = form.livePostUrl.trim();
+        } catch {
+          setError("Live post URL: enter a valid http(s) URL, or leave blank.");
           return;
         }
-        verificationConfig.minAmountNim = n;
       }
-      if (form.requiredHashtags.trim()) {
-        verificationConfig.requiredHashtags = form.requiredHashtags
-          .split(/[,\s]+/)
-          .map((h) => h.replace(/^#/, "").trim())
-          .filter(Boolean);
+      if (proof === "REFERRAL_EVENT" && form.requireFirstQuest) {
+        verificationConfig.requireFirstQuest = true;
       }
-      if (form.requiredMentions.trim()) {
-        verificationConfig.requiredMentions = form.requiredMentions
-          .split(/[,\s]+/)
-          .map((h) => h.replace(/^@/, "").trim())
-          .filter(Boolean);
-      }
-      if (form.minEngagement.trim()) {
-        const n = Number(form.minEngagement);
-        if (!Number.isInteger(n) || n < 0) {
-          setError("Min engagement: enter a whole number ≥ 0, or leave blank.");
-          return;
-        }
-        verificationConfig.minEngagement = n;
-      }
+
       if (form.minReputation.trim()) {
         const n = Number(form.minReputation);
         if (!Number.isInteger(n) || n < 0) {
@@ -475,20 +498,6 @@ export default function StudioPage() {
         }
         verificationConfig.deadlineAt = when.toISOString();
       }
-      if (form.expectedMessage.trim()) verificationConfig.expectedMessage = form.expectedMessage.trim();
-      if (form.livePostUrl.trim()) {
-        try {
-          // validate URL
-          // eslint-disable-next-line no-new
-          new URL(form.livePostUrl.trim());
-          verificationConfig.livePostUrl = form.livePostUrl.trim();
-        } catch {
-          setError("Live post URL: enter a valid http(s) URL, or leave blank.");
-          return;
-        }
-      }
-      if (form.senderMustMatchWorker) verificationConfig.senderMustMatchWorker = true;
-      if (form.requireFirstQuest) verificationConfig.requireFirstQuest = true;
 
       setCreateConfirm({
         payload: {
@@ -784,7 +793,14 @@ export default function StudioPage() {
                     <select
                       className={inputClass}
                       value={form.proofType}
-                      onChange={(e) => setForm({ ...form, proofType: e.target.value })}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          proofType: e.target.value,
+                          // Drop rules that only apply to the previous proof type.
+                          ...emptyProofRules,
+                        })
+                      }
                     >
                       {PROOF_TYPES.map((p) => (
                         <option key={p.value} value={p.value}>
@@ -867,57 +883,101 @@ export default function StudioPage() {
                     Verification rules (optional)
                   </summary>
                   <p className="mt-2 text-[0.7rem] text-[var(--brand-muted)]">
-                    Campaign-specific checks used by the hybrid verifier (on-chain, social, referral,
-                    wallet).
+                    Extra checks for the selected proof type. Leave blank to rely on instructions
+                    and the hybrid verifier defaults.
                   </p>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Target address</label>
+
+                  {form.proofType === "TRANSACTION_HASH" && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <label className={labelClass}>Pay-to address</label>
+                        <input
+                          className={inputClass}
+                          value={form.targetAddress}
+                          onChange={(e) => setForm({ ...form, targetAddress: e.target.value })}
+                          placeholder="NQ…"
+                        />
+                        <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                          Where workers must send NIM (your wallet or campaign address).
+                        </p>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Min amount (NIM)</label>
+                        <input
+                          className={inputClass}
+                          value={form.minAmountNim}
+                          onChange={(e) => setForm({ ...form, minAmountNim: e.target.value })}
+                          inputMode="decimal"
+                          placeholder="10"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {form.proofType === "LINK" && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className={labelClass}>Required hashtags</label>
+                        <input
+                          className={inputClass}
+                          value={form.requiredHashtags}
+                          onChange={(e) => setForm({ ...form, requiredHashtags: e.target.value })}
+                          placeholder="#nimiq #earn"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Required mentions</label>
+                        <input
+                          className={inputClass}
+                          value={form.requiredMentions}
+                          onChange={(e) => setForm({ ...form, requiredMentions: e.target.value })}
+                          placeholder="@nimiq"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {form.proofType === "WALLET_INTERACTION" && (
+                    <div className="mt-3">
+                      <label className={labelClass}>Expected signed message</label>
                       <input
                         className={inputClass}
-                        value={form.targetAddress}
-                        onChange={(e) => setForm({ ...form, targetAddress: e.target.value })}
-                        placeholder="NQ… recipient"
+                        value={form.expectedMessage}
+                        onChange={(e) => setForm({ ...form, expectedMessage: e.target.value })}
+                        placeholder="Exact message workers must sign"
                       />
                     </div>
-                    <div>
-                      <label className={labelClass}>Min amount (NIM)</label>
+                  )}
+
+                  {(form.proofType === "SCREENSHOT" || form.proofType === "UPLOADED_MEDIA") && (
+                    <div className="mt-3">
+                      <label className={labelClass}>Live post URL</label>
                       <input
                         className={inputClass}
-                        value={form.minAmountNim}
-                        onChange={(e) => setForm({ ...form, minAmountNim: e.target.value })}
-                        inputMode="decimal"
-                        placeholder="10"
+                        value={form.livePostUrl}
+                        onChange={(e) => setForm({ ...form, livePostUrl: e.target.value })}
+                        placeholder="https://x.com/…/status/…"
                       />
+                      <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
+                        Optional — match the uploaded screenshot to this live post.
+                      </p>
                     </div>
-                    <div>
-                      <label className={labelClass}>Required hashtags</label>
+                  )}
+
+                  {form.proofType === "REFERRAL_EVENT" && (
+                    <label className="mt-3 flex items-center gap-2 text-sm text-[var(--brand-muted)]">
                       <input
-                        className={inputClass}
-                        value={form.requiredHashtags}
-                        onChange={(e) => setForm({ ...form, requiredHashtags: e.target.value })}
-                        placeholder="#nimiq #earn"
+                        type="checkbox"
+                        checked={form.requireFirstQuest}
+                        onChange={(e) =>
+                          setForm({ ...form, requireFirstQuest: e.target.checked })
+                        }
                       />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Required mentions</label>
-                      <input
-                        className={inputClass}
-                        value={form.requiredMentions}
-                        onChange={(e) => setForm({ ...form, requiredMentions: e.target.value })}
-                        placeholder="@nimiq"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Min engagement</label>
-                      <input
-                        className={inputClass}
-                        value={form.minEngagement}
-                        onChange={(e) => setForm({ ...form, minEngagement: e.target.value })}
-                        inputMode="numeric"
-                        placeholder="5"
-                      />
-                    </div>
+                      Referral must complete a first quest
+                    </label>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 border-t border-white/10 pt-3 sm:grid-cols-2">
                     <div>
                       <label className={labelClass}>Min reputation</label>
                       <input
@@ -937,46 +997,6 @@ export default function StudioPage() {
                         onChange={(e) => setForm({ ...form, deadlineAt: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <label className={labelClass}>Live post URL (screenshot match)</label>
-                      <input
-                        className={inputClass}
-                        value={form.livePostUrl}
-                        onChange={(e) => setForm({ ...form, livePostUrl: e.target.value })}
-                        placeholder="https://x.com/…/status/…"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <label className={labelClass}>Expected signed message</label>
-                    <input
-                      className={inputClass}
-                      value={form.expectedMessage}
-                      onChange={(e) => setForm({ ...form, expectedMessage: e.target.value })}
-                      placeholder="For wallet interaction quests"
-                    />
-                  </div>
-                  <div className="mt-3 flex flex-col gap-2 text-sm text-[var(--brand-muted)]">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.senderMustMatchWorker}
-                        onChange={(e) =>
-                          setForm({ ...form, senderMustMatchWorker: e.target.checked })
-                        }
-                      />
-                      Sender / signer must match worker wallet
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.requireFirstQuest}
-                        onChange={(e) =>
-                          setForm({ ...form, requireFirstQuest: e.target.checked })
-                        }
-                      />
-                      Referral must complete a first quest
-                    </label>
                   </div>
                 </details>
 

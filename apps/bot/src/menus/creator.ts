@@ -128,10 +128,16 @@ export async function sendCreatorHub(ctx: BotContext, api: ApiClient) {
     api.getCreatorDashboard(String(from.id)),
     walletHeader(api, String(from.id)),
   ]);
-  await editOrReply(ctx, header + formatCreatorDashboard(dashboard), {
+  const messageId = await editOrReply(ctx, header + formatCreatorDashboard(dashboard), {
     parse_mode: "Markdown",
     reply_markup: creatorHubKeyboard(),
   });
+  // Persist so Studio faucet can edit this bubble's balance in place.
+  if (messageId !== undefined) {
+    void api.saveHubMessage(String(from.id), messageId).catch((error) => {
+      console.error("Failed to save Creator Hub message id:", error);
+    });
+  }
 }
 
 export function registerCreatorHandlers(bot: Bot<BotContext>, api: ApiClient) {

@@ -39,14 +39,18 @@ vi.mock("@nimiqearn/nimiq", () => ({
 }));
 
 describe("studio routes", () => {
+  const fetchMock = vi.fn();
+
   beforeEach(() => {
     process.env.DATABASE_URL ??= "postgresql://nimiqearn:nimiqearn@localhost:5432/nimiqearn";
     process.env.NODE_ENV = "test";
+    process.env.APP_ENV = "development";
     process.env.PORT = "3099";
     process.env.LOG_LEVEL = "error";
     process.env.NIMIQ_NETWORK = "testnet";
     process.env.FAUCET_ADMIN_PRIVATE_KEY = "dummy-private-key";
     process.env.BOT_TOKEN = "dummy-bot-token";
+    delete process.env.API_SHARED_SECRET;
 
     findUnique.mockReset();
     verifyInitDataMock.mockReset();
@@ -54,9 +58,12 @@ describe("studio routes", () => {
     buildBasicTransaction.mockReset();
     sendRawTransaction.mockReset();
     fetchNimiqAccount.mockReset();
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -105,6 +112,7 @@ describe("studio routes", () => {
     findUnique.mockResolvedValue({
       id: "user-1",
       telegramId: "test-user-123",
+      telegramHubMessageId: null,
       walletProfiles: [
         {
           keyCiphertext: "mock-cipher",
@@ -121,6 +129,7 @@ describe("studio routes", () => {
     getRpcBlockNumber.mockResolvedValue(12345);
     buildBasicTransaction.mockReturnValue({ hex: "mock-tx-hex" });
     sendRawTransaction.mockResolvedValue({ hash: "mock-tx-hash" });
+    fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
 
     const { app } = await buildServer();
     const response = await app.inject({
@@ -149,6 +158,85 @@ describe("studio routes", () => {
       validityStartHeight: 12345,
       networkId: 1,
     });
+
+    // No saved hub message → fallback notify (sendMessage), not edit.
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/sendMessage");
+
+    await app.close();
+  });
+
+  it("POST /api/studio/faucet edits the saved Creator Hub message when present", async () => {
+    verifyInitDataMock.mockReturnValue({ telegramId: "test-user-123" });
+
+    findUnique
+      .mockResolvedValueOnce({
+        id: "user-1",
+        telegramId: "test-user-123",
+        telegramHubMessageId: 168,
+        role: "CREATOR",
+        status: "ACTIVE",
+        displayName: "David",
+        walletProfiles: [
+          {
+            keyCiphertext: "mock-cipher",
+            nimiqAddress: "NQ00 TEST ADDRESS",
+          },
+        ],
+      })
+      // creators.getDashboard()
+      .mockResolvedValueOnce({
+        id: "user-1",
+        telegramId: "test-user-123",
+        displayName: "David",
+        role: "CREATOR",
+        status: "ACTIVE",
+        quests: [{ status: "DRAFT" }, { status: "PUBLISHED" }],
+      });
+
+    fetchNimiqAccount.mockResolvedValue({
+      reachable: true,
+      balanceLuna: 0,
+      balanceNim: 0,
+    });
+    getRpcBlockNumber.mockResolvedValue(12345);
+    buildBasicTransaction.mockReturnValue({ hex: "mock-tx-hex" });
+    sendRawTransaction.mockResolvedValue({ hash: "mock-tx-hash" });
+    fetchMock.mockResolvedValue({ ok: true, text: async () => "" });
+
+    const { app } = await buildServer();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/studio/faucet",
+      headers: {
+        "x-telegram-init-data": "mock-init-data",
+        "content-type": "application/json",
+      },
+      payload: { amountNim: 500 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      amountNim: 500,
+      balanceAfterNim: 500,
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toContain("/editMessageText");
+    const body = JSON.parse(String((init as { body?: string })?.body ?? "{}")) as {
+      chat_id: string;
+      message_id: number;
+      text: string;
+    };
+    expect(body).toMatchObject({ chat_id: "test-user-123", message_id: 168 });
+    expect(body.text).toContain("*Balance:* 500 NIM");
+    expect(body.text).toContain("*Creator Hub*");
 
     await app.close();
   });

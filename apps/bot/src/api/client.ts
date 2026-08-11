@@ -344,6 +344,22 @@ export function createApiClient(baseUrl: string, sharedSecret?: string) {
       return data.dashboard!;
     },
 
+    /** Remember the live Creator Hub message so the API can edit its balance after faucet. */
+    async saveHubMessage(telegramId: string, messageId: number): Promise<void> {
+      const response = await fetchWithRetry(
+        `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/hub-message`,
+        {
+          method: "PUT",
+          headers: jsonHeaders,
+          body: JSON.stringify({ messageId }),
+        },
+      );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `Failed to save hub message (${response.status})`);
+      }
+    },
+
     async createQuest(telegramId: string, input: CreateQuestInput): Promise<ApiQuest> {
       const response = await fetchWithRetry(
         `${normalizedBase}/api/users/${encodeURIComponent(telegramId)}/quests`,

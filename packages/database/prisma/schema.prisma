@@ -91,6 +91,9 @@ model User {
   referredById     String?    @map("referred_by_id") @db.Uuid
   // Last time reputation was decayed for inactivity (idempotent daily decay).
   reputationDecayedAt DateTime? @map("reputation_decayed_at")
+  // Telegram message id of the user's live Creator Hub bubble (private chat = telegramId).
+  // Used so Studio can edit balance in place after faucet instead of sending a new message.
+  telegramHubMessageId Int? @map("telegram_hub_message_id")
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
