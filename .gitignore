@@ -20,6 +20,7 @@ prod-api.env
 prod-bot.env
 *.env.local
 admin-wallet.json
+platform-fee-wallet.json
 
 # Deployment backups (contain real user data — never commit)
 backups/

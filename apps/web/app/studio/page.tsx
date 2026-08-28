@@ -266,7 +266,7 @@ export default function StudioPage() {
       setBalance({
         nim: 12_500,
         reachable: true,
-        address: "NQ48 VAXG JD1K YSCM X6H6 DJSL AYN7 FTYF 0KAH",
+        address: "NQ91 NRCF QK1J S2JV 3FYQ 8B3N 8Y2U HE1L R6XG",
       });
       setConfig({ feePercent: 5, promotionAvailable: true, promotionFeeNim: 250 });
       setTab("create");
