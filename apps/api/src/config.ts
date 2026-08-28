@@ -14,7 +14,7 @@ const envSchema = z.object({
   // Shared secret for bot → API calls. When set, all /api routes require it.
   API_SHARED_SECRET: z.string().optional(),
   // Nimiq network — selects the transaction network id for withdrawals.
-  NIMIQ_NETWORK: z.enum(["testnet", "mainnet"]).default("testnet"),
+  NIMIQ_NETWORK: z.enum(["testnet", "mainnet"]).default("mainnet"),
   // Nimiq Albatross JSON-RPC node. When set, wallet verification adds an on-chain balance check
   // and per-quest escrow funding can be verified.
   NIMIQ_RPC_URL: z.string().optional(),

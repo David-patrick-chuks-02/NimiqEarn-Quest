@@ -19,7 +19,7 @@ async function main() {
   const escrow = createEscrowService({
     encryptionKey: process.env.ESCROW_ENCRYPTION_KEY,
     rpcUrl: process.env.NIMIQ_RPC_URL,
-    network: (process.env.NIMIQ_NETWORK as "testnet" | "mainnet") ?? "testnet",
+    network: (process.env.NIMIQ_NETWORK as "testnet" | "mainnet") ?? "mainnet",
   });
 
   const worker = startPayoutWorker(async (job) => {

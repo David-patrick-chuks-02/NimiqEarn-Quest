@@ -27,6 +27,7 @@
   },
   "packageManager": "pnpm@9.15.0",
   "devDependencies": {
+    "railway": "^3.11.0",
     "vitest": "^3.2.4"
   }
 }

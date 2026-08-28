@@ -314,7 +314,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         };
       }
 
-      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.nimiqwatch.com";
       const nimiqCore = await import("@nimiqearn/nimiq");
       const account = await nimiqCore.fetchNimiqAccount(rpcUrl, wallet.nimiqAddress);
       return {
@@ -502,7 +502,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
         return reply.code(400).send({ error: "No custodial wallet found to fund." });
       }
 
-      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.nimiqwatch.com";
       const requested = parseRequestedFaucetNim(request.query.amountNim);
       return await buildFaucetQuote(wallet.nimiqAddress, rpcUrl, requested);
     } catch (error) {
@@ -542,7 +542,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       }
 
       const nimiqCore = await import("@nimiqearn/nimiq");
-      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.testnet.nimiqwatch.com/";
+      const rpcUrl = process.env.NIMIQ_RPC_URL ?? "https://rpc.nimiqwatch.com";
       const requested = parseRequestedFaucetNim(request.body?.amountNim);
       const quote = await buildFaucetQuote(wallet.nimiqAddress, rpcUrl, requested);
 

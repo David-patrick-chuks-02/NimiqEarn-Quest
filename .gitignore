@@ -16,8 +16,19 @@ build/
 api.env
 bot.env
 web.env
+prod-api.env
+prod-bot.env
 *.env.local
 admin-wallet.json
+
+# Deployment backups (contain real user data — never commit)
+backups/
+
+# Nested AI verifier repo (has its own .git)
+model/
+
+# Stray screenshots / scratch images
+image.png
 
 # Logs
 logs/
