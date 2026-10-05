@@ -92,7 +92,7 @@ export async function buildServer() {
       if (request.url.startsWith("/api/quests")) return;
       // Anonymous build-review feedback form on the marketing site.
       if (request.url.startsWith("/api/feedback")) return;
-      // Moderator admin UI uses x-admin-key instead of the bot shared secret.
+      // Moderator admin UI authenticates with email/password session tokens.
       if (request.url.startsWith("/api/admin")) return;
       if (!safeCompare(request.headers["x-internal-key"], secret)) {
         return reply.code(401).send({ error: "Unauthorized" });
@@ -150,6 +150,8 @@ export async function buildServer() {
   await app.register(settingsRoutes);
   await app.register(feedbackRoutes);
   await app.register(adminRoutes, {
+    adminEmail: env.ADMIN_EMAIL,
+    adminPassword: env.ADMIN_PASSWORD,
     adminApiKey: env.ADMIN_API_KEY,
     escrow,
     fees,

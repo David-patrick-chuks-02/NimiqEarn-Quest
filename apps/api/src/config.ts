@@ -10,7 +10,12 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   BOT_TOKEN: z.string().optional(),
+  /** Session HMAC secret for admin tokens (optional if ADMIN_EMAIL+PASSWORD set). */
   ADMIN_API_KEY: z.string().optional(),
+  /** Ops console login email. Required with ADMIN_PASSWORD to enable /api/admin. */
+  ADMIN_EMAIL: z.string().email().optional(),
+  /** Ops console login password (plain env secret — treat like ADMIN_API_KEY). */
+  ADMIN_PASSWORD: z.string().min(8).optional(),
   // Shared secret for bot → API calls. When set, all /api routes require it.
   API_SHARED_SECRET: z.string().optional(),
   // Nimiq network — selects the transaction network id for withdrawals.

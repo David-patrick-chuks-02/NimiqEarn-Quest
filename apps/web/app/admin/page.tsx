@@ -1,369 +1,150 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useAdminAuth } from "./_lib/auth";
+import { formatWhen } from "./_lib/utils";
+import { DetailLink, Empty, Field, PageHeader, StatusPill, ghostBtn } from "./_components/ui";
 
-type Tab = "queue" | "submissions" | "moderation" | "users" | "feedback";
+type Overview = {
+  counts: {
+    queue: number;
+    submissions: number;
+    quests: number;
+    accounts: number;
+    audit: number;
+    feedback: number;
+  };
+  queue: Array<{
+    id: string;
+    questTitle: string;
+    displayName: string | null;
+    telegramId: string;
+    createdAt: string;
+    verificationOutcome: string | null;
+  }>;
+};
 
-interface SubmissionRow {
-  id: string;
-  status: string;
-  verificationOutcome: string | null;
-  confidenceScore: number | null;
-  moderationQueue?: string | null;
-  questTitle: string;
-  telegramId: string;
-  displayName: string | null;
-  reputationScore: number;
-  proofPreview?: string;
-  decisionReasons?: string[];
-  createdAt: string;
-}
-
-interface ModerationRow {
-  id: string;
-  submissionId: string;
-  flagType: string;
-  resolution: string;
-  createdAt: string;
-}
-
-interface UserRow {
-  id: string;
-  telegramId: string;
-  displayName: string | null;
-  status: string;
-  reputationScore: number;
-}
-
-interface FeedbackRow {
-  id: string;
-  displayName: string | null;
-  telegramHandle: string | null;
-  message: string;
-  rating: number | null;
-  createdAt: string;
-}
-
-const KEY_STORAGE = "nimiqearn_admin_key";
-
-async function adminFetch(path: string, key: string, init?: RequestInit) {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      "x-admin-key": key,
-      "content-type": "application/json",
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-export default function AdminPage() {
-  const [key, setKey] = useState("");
-  const [tab, setTab] = useState<Tab>("queue");
+export default function AdminOverviewPage() {
+  const { adminFetch, unlocked } = useAdminAuth();
+  const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
-  const [moderation, setModeration] = useState<ModerationRow[]>([]);
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem(KEY_STORAGE);
-    if (saved) setKey(saved);
-  }, []);
-
-  const load = useCallback(async () => {
-    if (!key.trim()) {
-      setError("Enter ADMIN_API_KEY to continue.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      localStorage.setItem(KEY_STORAGE, key.trim());
-      if (tab === "queue") {
-        const data = await adminFetch(
-          "/api/admin/submissions?queue=PLATFORM&limit=50",
-          key.trim(),
-        );
-        setSubmissions(data.items ?? []);
-      } else if (tab === "submissions") {
-        const data = await adminFetch("/api/admin/submissions?limit=50", key.trim());
-        setSubmissions(data.items ?? []);
-      } else if (tab === "moderation") {
-        const data = await adminFetch("/api/admin/moderation?limit=50", key.trim());
-        setModeration(data.items ?? []);
-      } else if (tab === "feedback") {
-        const data = await adminFetch("/api/admin/feedback?limit=100", key.trim());
-        setFeedback(data.items ?? []);
-      } else {
-        const data = await adminFetch("/api/admin/users?limit=50", key.trim());
-        setUsers(data.items ?? []);
+    if (!unlocked) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = (await adminFetch("/api/admin/overview")) as Overview;
+        if (!cancelled) setData(next);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load overview");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Request failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [key, tab]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked, adminFetch]);
 
-  useEffect(() => {
-    if (key.trim()) void load();
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const counts = data?.counts;
+  const recentQueue = data?.queue ?? [];
 
-  async function resolve(id: string, action: "accept" | "reject") {
-    try {
-      await adminFetch(`/api/admin/submissions/${id}/${action}`, key.trim(), {
-        method: "POST",
-        body: "{}",
-      });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed");
-    }
-  }
-
-  async function suspendUser(userId: string, status: "SUSPENDED" | "ACTIVE") {
-    try {
-      await adminFetch(`/api/admin/users/${userId}/status`, key.trim(), {
-        method: "POST",
-        body: JSON.stringify({ status }),
-      });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Update failed");
-    }
-  }
+  const cards = [
+    { href: "/admin/queue", label: "Review queue", value: counts?.queue },
+    { href: "/admin/submissions", label: "Submissions", value: counts?.submissions },
+    { href: "/admin/quests", label: "Quests", value: counts?.quests },
+    { href: "/admin/accounts", label: "Accounts", value: counts?.accounts },
+    { href: "/admin/audit", label: "Audit events", value: counts?.audit },
+    { href: "/admin/feedback", label: "Feedback", value: counts?.feedback },
+  ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-10">
-      <header className="mb-8">
-        <p className="font-[family-name:var(--font-head)] text-3xl tracking-tight text-[var(--brand-gold)]">
-          NimiqEarn
-        </p>
-        <h1 className="mt-1 text-xl text-[var(--brand-text)]">Moderator console</h1>
-        <p className="mt-2 max-w-xl text-sm text-[var(--brand-muted)]">
-          Platform queue handles MANUAL_REVIEW. Creators still own LIGHT_REVIEW in Studio.
-        </p>
-      </header>
+    <div>
+      <PageHeader
+        title="Overview"
+        description="Platform ops console — review queue, quests, accounts, and audit trails."
+        actions={
+          <Link href="/admin/queue" className={ghostBtn} prefetch>
+            Open queue
+          </Link>
+        }
+      />
 
-      <div className="mb-6 flex flex-wrap items-end gap-3">
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-sm text-[var(--brand-muted)]">
-          Admin API key
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            className="rounded-md border border-white/10 bg-[var(--brand-navy-700)] px-3 py-2 text-[var(--brand-text)]"
-            placeholder="ADMIN_API_KEY"
-            autoComplete="off"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md bg-[var(--brand-gold)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)]"
-        >
-          {loading ? "Loading…" : "Refresh"}
-        </button>
+      {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c) => (
+          <Link
+            key={c.href}
+            href={c.href}
+            prefetch
+            className="rounded-xl border border-white/10 bg-[var(--brand-navy-800)]/60 px-4 py-4 transition hover:border-[var(--brand-gold)]/30"
+          >
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.12em] text-white/35">{c.label}</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums text-white">
+              {c.value === undefined ? "—" : c.value}
+            </p>
+          </Link>
+        ))}
       </div>
 
-      <nav className="mb-4 flex flex-wrap gap-2 text-sm">
-        {(["queue", "submissions", "moderation", "users", "feedback"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={
-              tab === t
-                ? "rounded-md bg-white/10 px-3 py-1.5 text-[var(--brand-gold)]"
-                : "rounded-md px-3 py-1.5 text-[var(--brand-muted)] hover:bg-white/5"
-            }
-          >
-            {t === "queue" ? "platform queue" : t}
-          </button>
-        ))}
-      </nav>
-
-      {error && (
-        <p className="mb-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-          {error}
-        </p>
-      )}
-
-      {(tab === "queue" || tab === "submissions") && (
-        <div className="overflow-x-auto rounded-lg border border-white/10">
-          <table className="w-full min-w-[44rem] text-left text-sm">
-            <thead className="bg-[var(--brand-navy-800)] text-[var(--brand-muted)]">
-              <tr>
-                <th className="px-3 py-2 font-medium">Quest</th>
-                <th className="px-3 py-2 font-medium">Worker</th>
-                <th className="px-3 py-2 font-medium">Outcome</th>
-                <th className="px-3 py-2 font-medium">Conf</th>
-                {tab === "queue" && <th className="px-3 py-2 font-medium">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((s) => (
-                <tr key={s.id} className="border-t border-white/5 align-top">
-                  <td className="px-3 py-2">
-                    <div>{s.questTitle}</div>
-                    {s.proofPreview && (
-                      <p className="mt-1 max-w-xs truncate text-[0.7rem] text-[var(--brand-muted)]">
-                        {s.proofPreview}
-                      </p>
-                    )}
-                    {s.decisionReasons && s.decisionReasons.length > 0 && (
-                      <ul className="mt-1 list-disc pl-4 text-[0.65rem] text-[var(--brand-muted)]">
-                        {s.decisionReasons.slice(0, 3).map((r) => (
-                          <li key={r}>{r}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {s.displayName ?? s.telegramId}
-                    <span className="ml-1 text-[var(--brand-muted)]">rep {s.reputationScore}</span>
-                  </td>
-                  <td className="px-3 py-2">{s.verificationOutcome ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    {s.confidenceScore != null ? s.confidenceScore.toFixed(2) : "—"}
-                  </td>
-                  {tab === "queue" && (
-                    <td className="px-3 py-2 space-x-3">
-                      <button
-                        type="button"
-                        className="text-[var(--brand-gold)] underline"
-                        onClick={() => void resolve(s.id, "accept")}
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        className="text-red-300 underline"
-                        onClick={() => void resolve(s.id, "reject")}
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {submissions.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-[var(--brand-muted)]">
-                    {tab === "queue" ? "Platform queue is empty." : "No submissions yet."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <section className="mt-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Needs review</h2>
+          <Link href="/admin/queue" prefetch className="text-sm text-[var(--brand-gold)] hover:underline">
+            View all
+          </Link>
         </div>
-      )}
-
-      {tab === "moderation" && (
-        <ul className="space-y-2">
-          {moderation.map((m) => (
-            <li
-              key={m.id}
-              className="rounded-md border border-white/10 bg-[var(--brand-navy-800)] px-3 py-2 text-sm"
-            >
-              <span className="text-[var(--brand-gold)]">{m.resolution}</span>
-              <span className="mx-2 text-[var(--brand-muted)]">{m.flagType}</span>
-              <span className="text-[var(--brand-muted)]">{m.submissionId.slice(0, 8)}…</span>
-              <span className="float-right text-[var(--brand-muted)]">
-                {new Date(m.createdAt).toLocaleString()}
-              </span>
-            </li>
-          ))}
-          {moderation.length === 0 && (
-            <li className="text-sm text-[var(--brand-muted)]">No moderation events.</li>
-          )}
-        </ul>
-      )}
-
-      {tab === "users" && (
-        <div className="overflow-x-auto rounded-lg border border-white/10">
-          <table className="w-full min-w-[36rem] text-left text-sm">
-            <thead className="bg-[var(--brand-navy-800)] text-[var(--brand-muted)]">
-              <tr>
-                <th className="px-3 py-2 font-medium">User</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Rep</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-t border-white/5">
-                  <td className="px-3 py-2">
-                    {u.displayName ?? "—"}{" "}
-                    <span className="text-[var(--brand-muted)]">{u.telegramId}</span>
-                  </td>
-                  <td className="px-3 py-2">{u.status}</td>
-                  <td className="px-3 py-2">{u.reputationScore}</td>
-                  <td className="px-3 py-2">
-                    {u.status === "SUSPENDED" ? (
-                      <button
-                        type="button"
-                        className="text-[var(--brand-gold)] underline"
-                        onClick={() => void suspendUser(u.id, "ACTIVE")}
-                      >
-                        Reinstate
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="text-red-300 underline"
-                        onClick={() => void suspendUser(u.id, "SUSPENDED")}
-                      >
-                        Suspend
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {tab === "feedback" && (
-        <ul className="space-y-3">
-          {feedback.map((f) => (
-            <li
-              key={f.id}
-              className="rounded-lg border border-white/10 bg-[var(--brand-navy-800)] px-4 py-3 text-sm"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-medium text-white">
-                  {f.displayName || "Anonymous"}
-                  {f.telegramHandle && (
-                    <span className="ml-2 font-normal text-[var(--brand-muted)]">
-                      @{f.telegramHandle}
-                    </span>
-                  )}
-                  {f.rating != null && (
-                    <span className="ml-2 text-[var(--brand-gold)]">{f.rating}/5</span>
-                  )}
-                </p>
-                <span className="text-xs text-[var(--brand-muted)]">
-                  {new Date(f.createdAt).toLocaleString()}
-                </span>
+        {!data && !error ? (
+          <p className="mt-4 text-sm text-[var(--brand-muted)]">Loading…</p>
+        ) : recentQueue.length === 0 ? (
+          <Empty message="Queue is clear." />
+        ) : (
+          <div className="mt-3 divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/10">
+            {recentQueue.map((row) => (
+              <div key={row.id} className="flex flex-wrap items-center gap-3 bg-[var(--brand-navy-800)]/40 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <DetailLink href={`/admin/submissions/${row.id}`}>{row.questTitle}</DetailLink>
+                  <p className="mt-0.5 text-xs text-[var(--brand-muted)]">
+                    {row.displayName ?? "—"} · {row.telegramId} · {formatWhen(row.createdAt)}
+                  </p>
+                </div>
+                {row.verificationOutcome && <StatusPill value={row.verificationOutcome} />}
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-[var(--brand-text)]">{f.message}</p>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-8 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-[var(--brand-navy-800)]/40 p-4">
+          <h3 className="text-sm font-semibold text-white">Quick links</h3>
+          <ul className="mt-3 space-y-2 text-sm text-[var(--brand-muted)]">
+            <li>
+              <Link href="/admin/quests" prefetch className="hover:text-[var(--brand-gold)]">
+                Browse quests with created / funded times
+              </Link>
             </li>
-          ))}
-          {feedback.length === 0 && (
-            <li className="text-sm text-[var(--brand-muted)]">No feedback yet.</li>
-          )}
-        </ul>
-      )}
-    </main>
+            <li>
+              <Link href="/admin/accounts" prefetch className="hover:text-[var(--brand-gold)]">
+                Inspect accounts, wallets, reputation
+              </Link>
+            </li>
+            <li>
+              <Link href="/admin/audit" prefetch className="hover:text-[var(--brand-gold)]">
+                Moderation audit log
+              </Link>
+            </li>
+          </ul>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-[var(--brand-navy-800)]/40 p-4">
+          <h3 className="text-sm font-semibold text-white">Local only</h3>
+          <div className="mt-3 grid gap-3">
+            <Field label="Scope">Development ops console — not deployed to Railway.</Field>
+            <Field label="Auth">Email + password (ADMIN_EMAIL / ADMIN_PASSWORD)</Field>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

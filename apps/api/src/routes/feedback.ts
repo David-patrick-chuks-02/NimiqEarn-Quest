@@ -13,7 +13,7 @@ function hashIp(ip: string | undefined): string | null {
 
 /**
  * Public anonymous feedback for the Telegram build review.
- * POST is open (rate-limited). Listing is via /api/admin/feedback with ADMIN_API_KEY.
+ * Listing is via /api/admin/feedback with an admin session token.
  */
 export const feedbackRoutes: FastifyPluginAsync = async (app) => {
   app.post<{
