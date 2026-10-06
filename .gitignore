@@ -74,6 +74,6 @@ __pycache__/
 coverage/
 
 # Local planning docs (not tracked in git)
-MILESTONE-1.md
-STACK.md
+# MILESTONE-1.md and STACK.md are tracked on purpose: the Community Council reads them
+# to verify milestone completion (see the council requirements in MILESTONE-1.md).
 docs/day-3-4-plan.md
