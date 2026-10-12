@@ -25,8 +25,8 @@ import {
   service,
 } from "railway/iac";
 
-// Change this if you deploy from a fork instead of the origin remote.
-const GITHUB_REPO = "davy-patty/Nimiq-EarnQuest";
+// Deploy source: the repo the Railway GitHub app is authorized for.
+const GITHUB_REPO = "David-patrick-chuks-02/NimiqEarn-Quest";
 
 export default defineRailway(() => {
   // Postgres is Supabase (kept for existing data). DATABASE_URL is a preserved
@@ -73,13 +73,16 @@ export default defineRailway(() => {
       PLATFORM_FEE_ADDRESS: preserve(),
       PROMOTION_FEE_NIM: "1000",
       PAYOUT_QUEUE_ENABLED: "1",
+      ADMIN_EMAIL: preserve(), // ops console login on /admin
+      ADMIN_PASSWORD: preserve(), // 8+ chars; also the HMAC secret for admin session tokens
       VERIFIER_URL: "http://verifier.railway.internal:8080", // private domain + port (Railway injects PORT=8080)
       VERIFIER_SHARED_SECRET: preserve(),
       SENTRY_DSN: preserve(),
     },
   });
 
-  // grammY bot — long polling (WEBHOOK_URL intentionally unset).
+  // grammY bot — webhook mode: WEBHOOK_URL is the bot's public domain and the
+  // target Telegram delivers to. Re-run setWebhook after that domain changes.
   // Builds from the repo root (no rootDirectory) so pnpm workspaces resolve.
   const bot = service("bot", {
     source: github(GITHUB_REPO),
@@ -93,15 +96,17 @@ export default defineRailway(() => {
       REDIS_URL: cache.env.REDIS_URL,
       API_URL: "http://api.railway.internal:8080", // private domain + port (Railway injects PORT=8080)
       API_SHARED_SECRET: preserve(), // must match the API's API_SHARED_SECRET
-      WEB_PUBLIC_URL: preserve(), // Vercel web app URL, e.g. https://your-app.vercel.app
-      WEBHOOK_URL: "https://bot-production-154a4.up.railway.app", // bot public domain
+      WEB_PUBLIC_URL: "https://www.nimiqearn.com", // Vercel web app
+      WEBHOOK_URL: "https://bot.nimiqearn.com", // custom domain — Telegram webhook target
       WEBHOOK_SECRET: preserve(), // must match prod-bot.env WEBHOOK_SECRET
       SENTRY_DSN: preserve(),
     },
   });
 
   // Next.js web app is hosted on Vercel, not Railway. Set the API's public URL
-  // as API_INTERNAL_URL on Vercel: https://<your-api>.up.railway.app
+  // as API_INTERNAL_URL on Vercel: https://api.nimiqearn.com (custom domain).
+  // Also add the custom domains (api./bot.nimiqearn.com) to their services:
+  //   railway domain -s api  /  railway domain -s bot
   // Note: if the Vercel deployment pulls from this repo, remove the `web` service
   // here so Railway doesn't try to deploy it.
 
