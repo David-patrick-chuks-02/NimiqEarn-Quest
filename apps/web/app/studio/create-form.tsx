@@ -399,13 +399,50 @@ export function CreateQuestForm({
               )}
 
               {(form.proofType === "SCREENSHOT" || form.proofType === "UPLOADED_MEDIA") && (
-                <Field label="Live post URL" hint="Optional">
-                  <input
-                    className={inputClass}
-                    value={form.livePostUrl}
-                    onChange={(e) => patch({ livePostUrl: e.target.value })}
-                    placeholder="https://x.com/…/status/…"
-                  />
+                <Field label="Live post URLs" hint={`Optional · ${form.livePostUrls.length}/3`}>
+                  <div className="space-y-2">
+                    {form.livePostUrls.map((url, i) => (
+                      <div key={i} className="relative">
+                        <input
+                          className={`${inputClass} ${
+                            form.livePostUrls.length > 1 ? "pr-10" : ""
+                          }`}
+                          value={url}
+                          onChange={(e) =>
+                            patch({
+                              livePostUrls: form.livePostUrls.map((u, j) =>
+                                j === i ? e.target.value : u,
+                              ),
+                            })
+                          }
+                          placeholder="https://x.com/…/status/…"
+                        />
+                        {form.livePostUrls.length > 1 ? (
+                          <button
+                            type="button"
+                            aria-label={`Remove link ${i + 1}`}
+                            onClick={() =>
+                              patch({
+                                livePostUrls: form.livePostUrls.filter((_, j) => j !== i),
+                              })
+                            }
+                            className="absolute bottom-2 right-2.5 rounded-lg px-2 py-1 text-xs text-[var(--brand-muted)] transition hover:text-white"
+                          >
+                            ✕
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                    {form.livePostUrls.length < 3 ? (
+                      <button
+                        type="button"
+                        onClick={() => patch({ livePostUrls: [...form.livePostUrls, ""] })}
+                        className="text-xs font-medium text-[var(--brand-gold)] transition hover:opacity-80"
+                      >
+                        + Add another link
+                      </button>
+                    ) : null}
+                  </div>
                 </Field>
               )}
 

@@ -396,18 +396,18 @@ export default function StudioPage() {
       if (proof === "WALLET_INTERACTION" && form.expectedMessage.trim()) {
         verificationConfig.expectedMessage = form.expectedMessage.trim();
       }
-      if (
-        (proof === "SCREENSHOT" || proof === "UPLOADED_MEDIA") &&
-        form.livePostUrl.trim()
-      ) {
-        try {
-          // eslint-disable-next-line no-new
-          new URL(form.livePostUrl.trim());
-          verificationConfig.livePostUrl = form.livePostUrl.trim();
-        } catch {
-          setError("Live post URL: enter a valid http(s) URL, or leave blank.");
-          return;
+      if (proof === "SCREENSHOT" || proof === "UPLOADED_MEDIA") {
+        const livePostUrls = form.livePostUrls.map((u) => u.trim()).filter(Boolean);
+        for (const url of livePostUrls) {
+          try {
+            // eslint-disable-next-line no-new
+            new URL(url);
+          } catch {
+            setError("Live post URLs: enter a valid http(s) URL for each, or leave blank.");
+            return;
+          }
         }
+        if (livePostUrls.length) verificationConfig.livePostUrls = livePostUrls;
       }
       if (proof === "REFERRAL_EVENT" && form.requireFirstQuest) {
         verificationConfig.requireFirstQuest = true;

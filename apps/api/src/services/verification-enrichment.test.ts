@@ -57,6 +57,35 @@ describe("verification enrichment", () => {
     expect(cfg?.requireFirstQuest).toBe(true);
   });
 
+  it("parses up to 3 live post URLs", () => {
+    const cfg = parseVerificationConfig({
+      livePostUrls: [
+        "https://x.com/a/status/1",
+        "https://x.com/b/status/2",
+        "https://x.com/c/status/3",
+        "https://x.com/d/status/4",
+      ],
+    });
+    expect(cfg?.livePostUrls).toEqual([
+      "https://x.com/a/status/1",
+      "https://x.com/b/status/2",
+      "https://x.com/c/status/3",
+    ]);
+  });
+
+  it("folds the legacy single livePostUrl into the array", () => {
+    const cfg = parseVerificationConfig({ livePostUrl: "https://x.com/legacy/status/9" });
+    expect(cfg?.livePostUrls).toEqual(["https://x.com/legacy/status/9"]);
+  });
+
+  it("prefers livePostUrls over a legacy livePostUrl", () => {
+    const cfg = parseVerificationConfig({
+      livePostUrls: ["https://x.com/new/status/1"],
+      livePostUrl: "https://x.com/legacy/status/9",
+    });
+    expect(cfg?.livePostUrls).toEqual(["https://x.com/new/status/1"]);
+  });
+
   it("flags self-referral", () => {
     const checks = enrichReferralChecks({
       workerTelegramId: "123",

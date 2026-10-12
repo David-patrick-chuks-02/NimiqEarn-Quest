@@ -129,7 +129,7 @@ export const emptyProofRules = {
   requiredHashtags: "",
   requiredMentions: "",
   expectedMessage: "",
-  livePostUrl: "",
+  livePostUrls: [""],
   requireFirstQuest: false,
 };
 

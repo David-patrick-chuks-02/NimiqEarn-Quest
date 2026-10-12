@@ -28,7 +28,14 @@ export function parseVerificationConfig(raw: unknown): VerificationConfig | unde
   if (typeof o.senderMustMatchWorker === "boolean") {
     cfg.senderMustMatchWorker = o.senderMustMatchWorker;
   }
-  if (typeof o.livePostUrl === "string") cfg.livePostUrl = o.livePostUrl;
+  if (Array.isArray(o.livePostUrls)) {
+    cfg.livePostUrls = o.livePostUrls
+      .filter((u): u is string => typeof u === "string" && u.length > 0)
+      .slice(0, 3);
+  } else if (typeof o.livePostUrl === "string" && o.livePostUrl.length > 0) {
+    // Legacy single-URL field — kept so quests created before multi-link support still verify.
+    cfg.livePostUrls = [o.livePostUrl];
+  }
   if (typeof o.requireFirstQuest === "boolean") cfg.requireFirstQuest = o.requireFirstQuest;
   if (o.deadlineAt) {
     const d = new Date(o.deadlineAt as string | number | Date);

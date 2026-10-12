@@ -234,20 +234,27 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
           }
         }
 
-        // Screenshot ↔ live post consistency when livePostUrl configured.
+        // Screenshot ↔ live post consistency when live post URLs are configured.
+        const livePostUrls = vcfg?.livePostUrls ?? [];
         if (
           (input.proofType === "SCREENSHOT" || input.proofType === "UPLOADED_MEDIA") &&
-          vcfg?.livePostUrl
+          livePostUrls.length > 0
         ) {
-          const snap = await fetchSocialPost(vcfg.livePostUrl);
-          livePostText = snap.text;
+          const snaps = await Promise.all(livePostUrls.map((url) => fetchSocialPost(url)));
+          livePostText = snaps
+            .map((s) => s.text)
+            .filter(Boolean)
+            .join("\n\n");
+          const anyAvailable = snaps.some((s) => s.exists && !s.deleted);
           ruleResult = appendRuleChecks(ruleResult, [
             softCheck(
               "live_post_available",
-              snap.exists && !snap.deleted,
-              snap.exists
-                ? "Live post fetched for screenshot match."
-                : "Could not fetch live post for screenshot match.",
+              anyAvailable,
+              anyAvailable
+                ? `Live post fetched for screenshot match (${livePostUrls.length} link${
+                    livePostUrls.length > 1 ? "s" : ""
+                  }).`
+                : "Could not fetch any live post for screenshot match.",
             ),
           ]);
         }

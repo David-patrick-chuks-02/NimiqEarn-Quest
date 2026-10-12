@@ -59,7 +59,7 @@ export type ProofRules = {
   requiredHashtags: string;
   requiredMentions: string;
   expectedMessage: string;
-  livePostUrl: string;
+  livePostUrls: string[];
   requireFirstQuest: boolean;
 };
 

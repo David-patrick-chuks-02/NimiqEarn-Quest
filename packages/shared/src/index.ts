@@ -110,8 +110,10 @@ export const verificationConfigSchema = z
     expectedMessage: z.string().min(1).max(2000).optional(),
     /** Require signed address to match the worker's linked Nimiq wallet. */
     senderMustMatchWorker: z.boolean().optional(),
-    /** Live post URL to compare against screenshot OCR (social + screenshot campaigns). */
+    /** Legacy single live post URL. Kept for backward compatibility; folded into `livePostUrls`. */
     livePostUrl: z.string().url().max(2000).optional(),
+    /** Up to 3 live post URLs to compare against screenshot OCR (social + screenshot campaigns). */
+    livePostUrls: z.array(z.string().url().max(2000)).max(3).optional(),
     /** Referral: referred user must have completed at least one ACCEPTED quest. */
     requireFirstQuest: z.boolean().optional(),
   })
