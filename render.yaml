@@ -71,6 +71,8 @@ services:
         sync: false # Nimiq address that receives platform + promotion fees (unset = no fees)
       - key: PROMOTION_FEE_NIM
         value: "100" # flat NIM fee to promote ("premium ad") a quest
+      - key: TASKER_FEE_PERCENT
+        value: "0" # percent deducted from each worker payout (floored; 0 = worker keeps all)
       - key: BOT_TOKEN
         sync: false # from @BotFather — required to verify Mini App initData on studio/worker routes
       - key: ADMIN_API_KEY

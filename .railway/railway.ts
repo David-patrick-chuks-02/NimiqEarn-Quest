@@ -73,6 +73,8 @@ export default defineRailway(() => {
       PLATFORM_FEE_PERCENT: "6",
       PLATFORM_FEE_ADDRESS: preserve(),
       PROMOTION_FEE_NIM: "1000",
+      // Deducted from each worker payout; floored so the worker keeps the exact remainder.
+      TASKER_FEE_PERCENT: "7.5",
       PAYOUT_QUEUE_ENABLED: "1",
       ADMIN_EMAIL: preserve(), // ops console login on /admin
       ADMIN_PASSWORD: preserve(), // 8+ chars; also the HMAC secret for admin session tokens

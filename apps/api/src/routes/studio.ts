@@ -429,6 +429,7 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
     );
     return {
       feePercent: opts.fees?.percent ?? 0,
+      taskerFeePercent: opts.fees?.taskerPercent ?? 0,
       promotionAvailable,
       promotionFeeNim: opts.fees?.promotionNim ?? 0,
     };

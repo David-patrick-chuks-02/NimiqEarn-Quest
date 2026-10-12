@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createQuestService } from "./quest.service.js";
+import { createQuestService, splitRewardLuna } from "./quest.service.js";
 
 describe("createQuestService", () => {
   it("creates a draft quest for a creator", async () => {
@@ -314,6 +314,71 @@ describe("createQuestService", () => {
       where: { id: "sub-1" },
       data: expect.objectContaining({ payoutTxHash: "0xdeadbeef" }),
     });
+  });
+
+  it("pays the worker the reduced reward and forwards the 7.5% tasker fee", async () => {
+    const creator = { id: "user-1", telegramId: "123", role: "CREATOR" };
+    const worker = {
+      id: "worker-9",
+      telegramId: "999",
+      walletProfiles: [{ nimiqAddress: "NQ_WORKER", keyCiphertext: "enc" }],
+    };
+    const submission = {
+      id: "sub-1",
+      userId: "worker-9",
+      status: "PENDING",
+      payoutTxHash: null,
+      quest: {
+        id: "quest-1",
+        creatorId: "user-1",
+        title: "Quest",
+        rewardAmount: "10",
+        escrowKeyCiphertext: "escrow-enc",
+      },
+      user: worker,
+    };
+    const transfer = vi.fn().mockResolvedValue({ hash: "0xdeadbeef" });
+
+    const service = createQuestService(
+      {
+        user: { findUnique: vi.fn().mockResolvedValue(creator), update: vi.fn() },
+        questSubmission: {
+          findUnique: vi.fn().mockResolvedValue(submission),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        questEvent: { create: vi.fn().mockResolvedValue({}) },
+        reputationEvent: { create: vi.fn().mockResolvedValue({}) },
+        $transaction: vi.fn(async (ops: unknown) => {
+          if (Array.isArray(ops)) return Promise.all(ops);
+          if (typeof ops === "function") return (ops as (tx: unknown) => unknown)({});
+          return ops;
+        }),
+      } as never,
+      {
+        enabled: true,
+        requiredLuna: (nim: number, slots: number) => BigInt(nim * slots * 100_000),
+        transfer,
+        explorerTxUrl: (h: string) => `https://nimiq.watch/#${h}`,
+      } as never,
+      { percent: 6, address: "NQ_FEE", promotionNim: 100, taskerPercent: 7.5 },
+    );
+
+    await service.acceptSubmission("123", "sub-1");
+
+    // 10 NIM reward = 1_000_000 luna; 7.5% = 75_000 luna to the platform.
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "escrow-enc",
+      toAddress: "NQ_WORKER",
+      valueLuna: 925_000n,
+    });
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "escrow-enc",
+      toAddress: "NQ_FEE",
+      valueLuna: 75_000n,
+    });
+    // Exactly two transfers — the escrow is fully drained, leaving no dust.
+    expect(transfer).toHaveBeenCalledTimes(2);
   });
 
   it("rejects an empty proof", async () => {
@@ -751,5 +816,39 @@ describe("createQuestService", () => {
     await expect(service.getWorkerSubmissions("nope")).rejects.toMatchObject({
       code: "USER_NOT_FOUND",
     });
+  });
+});
+
+describe("splitRewardLuna", () => {
+  it("deducts 7.5% from the worker and sends it to the platform", () => {
+    const { workerLuna, feeLuna } = splitRewardLuna(1_000_000n, 7.5);
+    expect(feeLuna).toBe(75_000n);
+    expect(workerLuna).toBe(925_000n);
+  });
+
+  it("floors the fee so the parts always sum to the exact reward (no dust)", () => {
+    // 1 luna reward → 7.5% floors to 0, so nothing is lost or created.
+    expect(splitRewardLuna(1n, 7.5)).toEqual({ workerLuna: 1n, feeLuna: 0n });
+    // 13 luna → floor(13 * 750 / 10000) = 0 (0.975 floors to 0).
+    expect(splitRewardLuna(13n, 7.5)).toEqual({ workerLuna: 13n, feeLuna: 0n });
+    // 15 luna → floor(1.125) = 1.
+    expect(splitRewardLuna(15n, 7.5)).toEqual({ workerLuna: 14n, feeLuna: 1n });
+  });
+
+  it("conserves the reward across a range of amounts", () => {
+    for (const reward of [1n, 7n, 99n, 100_000n, 1_234_567n, 999_999_999n]) {
+      const { workerLuna, feeLuna } = splitRewardLuna(reward, 7.5);
+      expect(workerLuna + feeLuna).toBe(reward);
+      expect(feeLuna).toBe((reward * 750n) / 10_000n);
+    }
+  });
+
+  it("returns the full reward when no tasker fee is configured", () => {
+    expect(splitRewardLuna(1_000_000n, 0)).toEqual({ workerLuna: 1_000_000n, feeLuna: 0n });
+    expect(splitRewardLuna(1_000_000n)).toEqual({ workerLuna: 1_000_000n, feeLuna: 0n });
+  });
+
+  it("does not produce a negative fee for a zero reward", () => {
+    expect(splitRewardLuna(0n, 7.5)).toEqual({ workerLuna: 0n, feeLuna: 0n });
   });
 });

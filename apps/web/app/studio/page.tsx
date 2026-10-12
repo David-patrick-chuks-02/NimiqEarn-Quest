@@ -56,9 +56,10 @@ export default function StudioPage() {
   const analyticsReqRef = useRef<string | null>(null);
   const [config, setConfig] = useState<{
     feePercent: number;
+    taskerFeePercent: number;
     promotionAvailable: boolean;
     promotionFeeNim: number;
-  }>({ feePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
+  }>({ feePercent: 0, taskerFeePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [reviewQuest, setReviewQuest] = useState<Quest | null>(null);
   const [faucetOpen, setFaucetOpen] = useState(false);
@@ -200,11 +201,13 @@ export default function StudioPage() {
     try {
       const c = (await api("/api/studio/config")) as {
         feePercent?: number;
+        taskerFeePercent?: number;
         promotionAvailable?: boolean;
         promotionFeeNim?: number;
       };
       setConfig({
         feePercent: c.feePercent ?? 0,
+        taskerFeePercent: c.taskerFeePercent ?? 0,
         promotionAvailable: Boolean(c.promotionAvailable),
         promotionFeeNim: c.promotionFeeNim ?? 0,
       });
@@ -268,7 +271,7 @@ export default function StudioPage() {
         reachable: true,
         address: "NQ73 9RKC HLH1 MF99 3DNF 4NC3 RU33 K3UN 4JLG",
       });
-      setConfig({ feePercent: 5, promotionAvailable: true, promotionFeeNim: 250 });
+      setConfig({ feePercent: 6, taskerFeePercent: 7.5, promotionAvailable: true, promotionFeeNim: 1000 });
       setTab("create");
       setCreateStage("pick");
       setPhase("ready");
@@ -597,6 +600,7 @@ export default function StudioPage() {
         <CreateConfirmModal
           payload={createConfirm.payload}
           feePercent={config.feePercent}
+          taskerFeePercent={config.taskerFeePercent}
           balance={balance}
           onCancel={() => setCreateConfirm(null)}
           onDraft={() => void finalizeCreate(false)}

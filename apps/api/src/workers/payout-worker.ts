@@ -33,6 +33,23 @@ async function main() {
         where: { id: job.submissionId },
         data: { payoutTxHash: result.hash, paidAt: new Date() },
       });
+      // Fee is collected only after the worker is paid, and a failure here must not fail the
+      // job — retrying would double-pay the worker. Leftover NIM stays in the quest escrow.
+      const feeLuna = BigInt(job.feeLuna ?? "0");
+      if (feeLuna > 0n && job.feeAddress) {
+        const feeResult = await escrow.transfer({
+          fromKeyCiphertext: job.fromKeyCiphertext,
+          toAddress: job.feeAddress,
+          valueLuna: feeLuna,
+        });
+        if (!feeResult.hash) {
+          console.error("Tasker fee transfer failed — NIM remains in quest escrow", {
+            submissionId: job.submissionId,
+            error: feeResult.error,
+            feeLuna: feeLuna.toString(),
+          });
+        }
+      }
     }
     return { hash: result.hash ?? null, error: result.error };
   });

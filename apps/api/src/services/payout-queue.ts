@@ -13,6 +13,10 @@ export interface PayoutJobData {
   questId: string;
   toAddress: string;
   valueLuna: string;
+  /** Tasker fee withheld from the reward, paid to `feeAddress`. "0" when no fee applies. */
+  feeLuna?: string;
+  /** Platform address that receives `feeLuna`. Omitted when there is no fee. */
+  feeAddress?: string;
   fromKeyCiphertext: string;
 }
 

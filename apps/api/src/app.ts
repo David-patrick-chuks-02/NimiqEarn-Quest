@@ -119,6 +119,7 @@ export async function buildServer() {
     percent: env.PLATFORM_FEE_PERCENT,
     address: env.PLATFORM_FEE_ADDRESS,
     promotionNim: env.PROMOTION_FEE_NIM,
+    taskerPercent: env.TASKER_FEE_PERCENT,
   };
   const notifier = createTelegramNotifier(env.BOT_TOKEN);
 

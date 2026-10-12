@@ -11,7 +11,7 @@ import {
   QUEST_TEMPLATES,
 } from "./constants";
 import { inputClass, labelClass, primaryBtn } from "./styles";
-import { compressImage } from "./utils";
+import { compressImage, formatNim, splitRewardNim } from "./utils";
 
 function CreateSection({
   title,
@@ -81,7 +81,7 @@ export type CreateQuestFormProps = {
   reward: number;
   slots: number;
   minStart: string;
-  config: { feePercent: number };
+  config: { feePercent: number; taskerFeePercent: number };
   balance: Pick<StudioBalance, "nim" | "reachable">;
   evidenceBusy: boolean;
   setEvidenceBusy: Dispatch<SetStateAction<boolean>>;
@@ -510,6 +510,14 @@ export function CreateQuestForm({
                     {platformFee != null ? `${platformFee.toLocaleString()} NIM` : "—"}
                   </span>
                 </div>
+                {config.taskerFeePercent > 0 && reward > 0 ? (
+                  <div className="mt-1.5 flex items-center justify-between text-[0.8rem] text-[var(--brand-muted)]">
+                    <span>Workers receive each ({config.taskerFeePercent}% tasker fee)</span>
+                    <span className="tabular-nums text-white">
+                      {formatNim(splitRewardNim(reward, config.taskerFeePercent).workerNim)} NIM
+                    </span>
+                  </div>
+                ) : null}
                 <div className="mt-2.5 flex items-center justify-between border-t border-white/10 pt-2.5">
                   <span className="text-xs text-[var(--brand-muted)]">Total to publish</span>
                   <span className="text-base font-semibold tabular-nums text-[var(--brand-gold)]">

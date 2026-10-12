@@ -33,6 +33,9 @@ const envSchema = z.object({
   // Nimiq address that receives the platform fee + promotion fees. When unset, no fee is
   // charged (dev) and promoting a quest is unavailable.
   PLATFORM_FEE_ADDRESS: z.string().optional(),
+  // Tasker fee deducted from each worker payout (percent), paid to PLATFORM_FEE_ADDRESS.
+  // Defaults to 0 so a missing value never silently reduces someone's reward.
+  TASKER_FEE_PERCENT: z.coerce.number().min(0).max(100).default(0),
   // Flat fee (in NIM) to promote a quest ("premium ad" boost).
   PROMOTION_FEE_NIM: z.coerce.number().min(0).default(100),
   // Python AI verifier (M3). When unset, rules still run and AI is skipped → MANUAL_REVIEW.

@@ -2,6 +2,7 @@
 
 import type { Quest } from "./types";
 import { primaryBtn } from "./styles";
+import { splitRewardNim } from "./utils";
 
 /**
  * Publish confirmation. Pre-checks the creator's on-chain balance against the quest's reward
@@ -12,6 +13,7 @@ import { primaryBtn } from "./styles";
 export function CreateConfirmModal({
   payload,
   feePercent,
+  taskerFeePercent,
   balance,
   onCancel,
   onDraft,
@@ -19,6 +21,7 @@ export function CreateConfirmModal({
 }: {
   payload: Record<string, unknown>;
   feePercent: number;
+  taskerFeePercent: number;
   balance: { nim: number | null; reachable: boolean };
   onCancel: () => void;
   onDraft: () => void;
@@ -29,6 +32,7 @@ export function CreateConfirmModal({
   const pool = reward * slots;
   const fee = Math.round(pool * (feePercent / 100));
   const total = pool + fee;
+  const { workerNim } = splitRewardNim(reward, taskerFeePercent);
   const known = balance.reachable && balance.nim !== null;
   const insufficient = known && (balance.nim ?? 0) < total;
 
@@ -52,6 +56,14 @@ export function CreateConfirmModal({
             <dt className="text-[var(--brand-muted)]">Platform fee ({feePercent}%)</dt>
             <dd className="text-white">{fee.toLocaleString()} NIM</dd>
           </div>
+          {taskerFeePercent > 0 && (
+            <div className="flex items-center justify-between">
+              <dt className="text-[var(--brand-muted)]">
+                Workers receive each ({taskerFeePercent}% tasker fee)
+              </dt>
+              <dd className="text-white">{workerNim.toLocaleString()} NIM</dd>
+            </div>
+          )}
           <div className="flex items-center justify-between border-t border-white/10 pt-1.5">
             <dt className="text-[var(--brand-muted)]">Charged to publish</dt>
             <dd className="font-bold text-[var(--brand-gold)]">{total.toLocaleString()} NIM</dd>

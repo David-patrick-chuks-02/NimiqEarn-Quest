@@ -37,3 +37,22 @@ export function formatNim(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
+const LUNA_PER_NIM = 100_000;
+
+/**
+ * Display mirror of the API's tasker-fee split (`splitRewardLuna`): the fee is floored at
+ * luna precision so the worker's share is the exact remainder. Display only — the API is
+ * authoritative for what actually moves on-chain.
+ */
+export function splitRewardNim(
+  rewardNim: number,
+  taskerFeePercent: number,
+): { workerNim: number; feeNim: number } {
+  if (!Number.isFinite(rewardNim) || rewardNim <= 0) return { workerNim: 0, feeNim: 0 };
+  const rewardLuna = Math.round(rewardNim * LUNA_PER_NIM);
+  if (!(taskerFeePercent > 0)) return { workerNim: rewardLuna / LUNA_PER_NIM, feeNim: 0 };
+  const basisPoints = Math.round(taskerFeePercent * 100); // 7.5% -> 750
+  const feeLuna = Math.floor((rewardLuna * basisPoints) / 10_000);
+  return { workerNim: (rewardLuna - feeLuna) / LUNA_PER_NIM, feeNim: feeLuna / LUNA_PER_NIM };
+}
+

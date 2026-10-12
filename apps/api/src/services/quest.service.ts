@@ -144,9 +144,30 @@ export interface PlatformFees {
   address?: string;
   /** Flat fee in NIM to promote a quest. */
   promotionNim: number;
+  /** Percent deducted from each worker payout (e.g. 7.5). Requires `address`. */
+  taskerPercent?: number;
 }
 
 const DEFAULT_FEES: PlatformFees = { percent: 0, promotionNim: 0 };
+
+/**
+ * Split a per-slot reward into the worker's share and the platform's tasker fee.
+ *
+ * The fee is floored to whole luna (1 NIM = 100,000 luna), so the worker's share is the
+ * exact remainder: `workerLuna + feeLuna === rewardLuna`, leaving no dust in the escrow.
+ * Percent is converted to basis points first to keep 7.5% exact (750 bp) without floats.
+ */
+export function splitRewardLuna(
+  rewardLuna: bigint,
+  taskerPercent = 0,
+): { workerLuna: bigint; feeLuna: bigint } {
+  if (!(taskerPercent > 0) || rewardLuna <= 0n) {
+    return { workerLuna: rewardLuna, feeLuna: 0n };
+  }
+  const basisPoints = BigInt(Math.round(taskerPercent * 100)); // 7.5% -> 750
+  const feeLuna = (rewardLuna * basisPoints) / 10_000n; // integer division floors
+  return { workerLuna: rewardLuna - feeLuna, feeLuna };
+}
 
 export function createQuestService(
   db: PrismaClient,
@@ -158,6 +179,32 @@ export function createQuestService(
   const profiles = createProfileService(db);
   const verification = createVerificationService(db, verifierConfig ?? {});
   const reputation = createReputationService(db);
+  const taskerPercent = fees.taskerPercent ?? 0;
+
+  /**
+   * Move the platform's tasker fee for one payout out of the quest escrow.
+   *
+   * Called *after* the worker has been paid, and it never throws: if the worker transfer
+   * already broadcast, failing the payout would double-pay the worker on retry. A failed
+   * fee transfer leaves the NIM in the escrow (recoverable) and is logged to reconcile.
+   */
+  async function collectTaskerFee(params: {
+    fromKeyCiphertext: string;
+    feeLuna: bigint;
+  }): Promise<void> {
+    if (params.feeLuna <= 0n || !fees.address || !escrow) return;
+    const result = await escrow.transfer({
+      fromKeyCiphertext: params.fromKeyCiphertext,
+      toAddress: fees.address,
+      valueLuna: params.feeLuna,
+    });
+    if (!result.hash) {
+      console.error("Tasker fee transfer failed — NIM remains in quest escrow", {
+        error: result.error,
+        feeLuna: params.feeLuna.toString(),
+      });
+    }
+  }
 
   return {
     async createDraftQuest(telegramId: string, input: CreateQuestInput): Promise<Quest> {
@@ -837,12 +884,15 @@ export function createQuestService(
         let txUrl: string | null = null;
         if (willPay && workerWallet) {
           const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+          const { workerLuna, feeLuna } = splitRewardLuna(rewardLuna, taskerPercent);
           if (isPayoutQueueEnabled()) {
             const queued = await enqueuePayout({
               submissionId,
               questId,
               toAddress: workerWallet.nimiqAddress,
-              valueLuna: rewardLuna.toString(),
+              valueLuna: workerLuna.toString(),
+              feeLuna: feeLuna.toString(),
+              feeAddress: feeLuna > 0n ? fees.address : undefined,
               fromKeyCiphertext: quest.escrowKeyCiphertext!,
             });
             if (!queued) {
@@ -850,13 +900,13 @@ export function createQuestService(
             }
             void notifier?.notify(
               user.telegramId,
-              `Verified — your ${Number(quest.rewardAmount).toLocaleString()} NIM reward for "${quest.title}" is being paid out.`,
+              `Verified — your ${(Number(workerLuna) / 100_000).toLocaleString()} NIM reward for "${quest.title}" is being paid out.`,
             );
           } else {
             const result = await escrow!.transfer({
               fromKeyCiphertext: quest.escrowKeyCiphertext!,
               toAddress: workerWallet.nimiqAddress,
-              valueLuna: rewardLuna,
+              valueLuna: workerLuna,
             });
             if (!result.hash) {
               console.error("Auto-approve payout failed", {
@@ -876,7 +926,11 @@ export function createQuestService(
               where: { id: submissionId },
               data: { payoutTxHash: txHash, paidAt: new Date() },
             });
-            const rewardNim = Number(quest.rewardAmount).toLocaleString();
+            await collectTaskerFee({
+              fromKeyCiphertext: quest.escrowKeyCiphertext!,
+              feeLuna,
+            });
+            const rewardNim = (Number(workerLuna) / 100_000).toLocaleString();
             void notifier?.notify(
               user.telegramId,
               `Verified — you earned ${rewardNim} NIM for "${quest.title}".\n\nView the payout: ${txUrl}`,
@@ -1024,10 +1078,11 @@ export function createQuestService(
           throw new QuestServiceError("Worker has no wallet for payout.", "NO_WALLET");
         }
         const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+        const { workerLuna, feeLuna } = splitRewardLuna(rewardLuna, taskerPercent);
         const result = await escrow!.transfer({
           fromKeyCiphertext: quest.escrowKeyCiphertext!,
           toAddress: workerWallet.nimiqAddress,
-          valueLuna: rewardLuna,
+          valueLuna: workerLuna,
         });
         if (!result.hash) {
           // Clear failure only — leave ACCEPTED unpaid so accept can be retried without
@@ -1049,7 +1104,11 @@ export function createQuestService(
           where: { id: submissionId },
           data: { payoutTxHash: txHash, paidAt: new Date() },
         });
-        const rewardNim = Number(quest.rewardAmount).toLocaleString();
+        await collectTaskerFee({
+          fromKeyCiphertext: quest.escrowKeyCiphertext!,
+          feeLuna,
+        });
+        const rewardNim = (Number(workerLuna) / 100_000).toLocaleString();
         void notifier?.notify(
           submission.user.telegramId,
           `Your submission for "${quest.title}" was accepted — you earned ${rewardNim} NIM.\n\nView the payout: ${txUrl}`,
@@ -1165,19 +1224,22 @@ export function createQuestService(
           throw new QuestServiceError("Worker has no wallet for payout.", "NO_WALLET");
         }
         const rewardLuna = escrow!.requiredLuna(Number(quest.rewardAmount), 1);
+        const { workerLuna, feeLuna } = splitRewardLuna(rewardLuna, taskerPercent);
         if (isPayoutQueueEnabled()) {
           await enqueuePayout({
             submissionId,
             questId: quest.id,
             toAddress: workerWallet.nimiqAddress,
-            valueLuna: rewardLuna.toString(),
+            valueLuna: workerLuna.toString(),
+            feeLuna: feeLuna.toString(),
+            feeAddress: feeLuna > 0n ? fees.address : undefined,
             fromKeyCiphertext: quest.escrowKeyCiphertext!,
           });
         } else {
           const result = await escrow!.transfer({
             fromKeyCiphertext: quest.escrowKeyCiphertext!,
             toAddress: workerWallet.nimiqAddress,
-            valueLuna: rewardLuna,
+            valueLuna: workerLuna,
           });
           if (!result.hash) {
             throw new QuestServiceError(
@@ -1190,6 +1252,10 @@ export function createQuestService(
           await db.questSubmission.update({
             where: { id: submissionId },
             data: { payoutTxHash: txHash, paidAt: new Date() },
+          });
+          await collectTaskerFee({
+            fromKeyCiphertext: quest.escrowKeyCiphertext!,
+            feeLuna,
           });
         }
       }
