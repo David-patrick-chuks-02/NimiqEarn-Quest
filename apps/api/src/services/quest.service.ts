@@ -1,6 +1,14 @@
 import type { PrismaClient, Quest } from "@nimiqearn/database";
 import type { CreateQuestInput, UpdateQuestInput } from "@nimiqearn/shared";
-import { createQuestSchema, questStatusSchema, updateQuestSchema } from "@nimiqearn/shared";
+import {
+  createQuestSchema,
+  MAX_PROOF_IMAGE_CHARS,
+  MAX_PROOF_TOTAL_CHARS,
+  MAX_PROOF_UPLOADS,
+  MAX_PROOF_VIDEO_CHARS,
+  questStatusSchema,
+  updateQuestSchema,
+} from "@nimiqearn/shared";
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
 import type { EscrowService, QuestFunding } from "./escrow.service.js";
 import type { TelegramNotifier } from "./telegram-notify.js";
@@ -51,37 +59,85 @@ function isCreatorRole(role: string) {
   return role === "CREATOR" || role === "ADMIN";
 }
 
+const IMAGE_DATA_URL = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+const VIDEO_DATA_URL = /^data:video\/(mp4|webm|quicktime);base64,/i;
+
+/** Validate a single uploaded proof item against its per-item cap. */
+function isAcceptableProofItem(item: string): "image" | "video" | null {
+  if (IMAGE_DATA_URL.test(item) && item.length <= MAX_PROOF_IMAGE_CHARS) return "image";
+  if (VIDEO_DATA_URL.test(item) && item.length <= MAX_PROOF_VIDEO_CHARS) return "video";
+  return null;
+}
+
+/** Coerce and validate the optional extra uploads (images 2..MAX_PROOF_UPLOADS). */
+function normalizeProofExtras(raw: unknown): string[] {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) {
+    throw new QuestServiceError("Extra uploads must be a list.", "INVALID_PROOF");
+  }
+  return raw.map((item) => {
+    if (typeof item !== "string") {
+      throw new QuestServiceError("Extra uploads must be strings.", "INVALID_PROOF");
+    }
+    return item.trim();
+  });
+}
+
 /** Validate proof against the quest's declared proofType. */
-function normalizeSubmissionProof(proof: string, proofType: string): string {
+function normalizeSubmissionProof(
+  proof: string,
+  rawExtras: unknown,
+  proofType: string,
+): { proof: string; proofExtras: string[] } {
   const trimmed = proof.trim();
   if (trimmed.length === 0) {
     throw new QuestServiceError("Your submission can't be empty.", "INVALID_PROOF");
   }
+  const extras = normalizeProofExtras(rawExtras);
 
-  const isImage =
-    /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(trimmed) && trimmed.length <= 700_000;
+  // Media quests accept up to MAX_PROOF_UPLOADS images, or a single video on its own (a video
+  // can't be compressed client-side, so it gets the whole request budget instead of a third).
+  if (proofType === "SCREENSHOT" || proofType === "UPLOADED_MEDIA") {
+    const items = [trimmed, ...extras];
+    if (items.length > MAX_PROOF_UPLOADS) {
+      throw new QuestServiceError(
+        `You can upload up to ${MAX_PROOF_UPLOADS} files.`,
+        "INVALID_PROOF",
+      );
+    }
+    const kinds = items.map(isAcceptableProofItem);
+    if (kinds.some((k) => k === null)) {
+      throw new QuestServiceError(
+        proofType === "SCREENSHOT"
+          ? `Each screenshot must be a JPEG, PNG, or WebP under 330 KB.`
+          : `Upload image or video files (JPEG/PNG/WebP/MP4/WebM). Videos must be uploaded alone.`,
+        "INVALID_PROOF",
+      );
+    }
+    if (kinds.includes("video") && items.length > 1) {
+      throw new QuestServiceError(
+        `Upload a video on its own, or up to ${MAX_PROOF_UPLOADS} images together.`,
+        "INVALID_PROOF",
+      );
+    }
+    const total = items.reduce((sum, item) => sum + item.length, 0);
+    // Backstop on the real transport invariant: the API keeps Fastify's 1 MiB body limit, so the
+    // whole JSON body must stay under it. The per-item caps already imply this today (3 x 330,000
+    // = 990,000); this guard keeps it true if those caps are retuned.
+    if (total > MAX_PROOF_TOTAL_CHARS) {
+      throw new QuestServiceError(
+        "Your uploads are too large together. Try a smaller screenshot.",
+        "INVALID_PROOF",
+      );
+    }
+    return { proof: trimmed, proofExtras: extras };
+  }
+
+  if (extras.length > 0) {
+    throw new QuestServiceError("This quest only accepts a single proof.", "INVALID_PROOF");
+  }
 
   switch (proofType) {
-    case "SCREENSHOT":
-      if (!isImage) {
-        throw new QuestServiceError(
-          "This quest needs a screenshot upload (JPEG, PNG, or WebP).",
-          "INVALID_PROOF",
-        );
-      }
-      return trimmed;
-    case "UPLOADED_MEDIA": {
-      const mediaOk =
-        /^data:(image\/(jpeg|jpg|png|webp)|video\/(mp4|webm|quicktime));base64,/i.test(trimmed) &&
-        trimmed.length <= 2_500_000;
-      if (!mediaOk) {
-        throw new QuestServiceError(
-          "This quest needs an image or video upload (JPEG/PNG/WebP/MP4/WebM).",
-          "INVALID_PROOF",
-        );
-      }
-      return trimmed;
-    }
     case "LINK":
       if (trimmed.startsWith("data:")) {
         throw new QuestServiceError("This quest needs a link, not an image.", "INVALID_PROOF");
@@ -95,12 +151,12 @@ function normalizeSubmissionProof(proof: string, proofType: string): string {
       if (trimmed.length > 2000) {
         throw new QuestServiceError("That link is too long.", "INVALID_PROOF");
       }
-      return trimmed;
+      return { proof: trimmed, proofExtras: [] };
     case "TRANSACTION_HASH":
       if (trimmed.startsWith("data:") || trimmed.length > 200 || !/^[a-fA-F0-9]+$/.test(trimmed)) {
         throw new QuestServiceError("Enter a valid transaction hash.", "INVALID_PROOF");
       }
-      return trimmed;
+      return { proof: trimmed, proofExtras: [] };
     case "WALLET_INTERACTION":
       try {
         const parsed = JSON.parse(trimmed) as Record<string, unknown>;
@@ -120,7 +176,7 @@ function normalizeSubmissionProof(proof: string, proofType: string): string {
       if (trimmed.length > 8_000) {
         throw new QuestServiceError("Wallet proof is too large.", "INVALID_PROOF");
       }
-      return trimmed;
+      return { proof: trimmed, proofExtras: [] };
     case "TEXT":
     case "REFERRAL_EVENT":
     default:
@@ -133,7 +189,7 @@ function normalizeSubmissionProof(proof: string, proofType: string): string {
           "INVALID_PROOF",
         );
       }
-      return trimmed;
+      return { proof: trimmed, proofExtras: [] };
   }
 }
 
@@ -724,7 +780,7 @@ export function createQuestService(
       telegramId: string,
       questId: string,
       proof: string,
-      opts: { clientFingerprint?: string; clientIp?: string } = {},
+      opts: { clientFingerprint?: string; clientIp?: string; proofExtras?: unknown } = {},
     ): Promise<{
       status: "PENDING" | "ACCEPTED" | "REJECTED";
       outcome: string | null;
@@ -768,7 +824,7 @@ export function createQuestService(
       }
 
       // Fast format check before reserving a slot (full rule engine runs in verification).
-      const trimmed = normalizeSubmissionProof(proof, quest.proofType);
+      const normalized = normalizeSubmissionProof(proof, opts.proofExtras, quest.proofType);
 
       const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
       const workerWallet = user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
@@ -783,7 +839,8 @@ export function createQuestService(
             data: {
               questId,
               userId: user.id,
-              proof: trimmed,
+              proof: normalized.proof,
+              proofExtras: normalized.proofExtras,
               status: "PENDING",
               clientFingerprint: opts.clientFingerprint?.slice(0, 128) ?? null,
               ipHash: opts.clientIp ? hashIp(opts.clientIp) : null,
@@ -813,7 +870,7 @@ export function createQuestService(
         workerTelegramId: user.telegramId,
         workerAddress: workerWallet?.nimiqAddress ?? null,
         proofType: quest.proofType,
-        proof: trimmed,
+        proof: normalized.proof,
         proofInstructions: quest.proofInstructions,
         title: quest.title,
         sampleEvidence: quest.sampleEvidence,
@@ -991,6 +1048,7 @@ export function createQuestService(
           id: s.id,
           status: s.status,
           proof: s.proof,
+          proofExtras: s.proofExtras,
           verificationOutcome: s.verificationOutcome,
           confidenceScore: s.confidenceScore,
           verificationSignals: s.verificationSignals,

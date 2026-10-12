@@ -25,6 +25,8 @@ type SubmissionDetail = {
   verificationSignals: unknown;
   moderationQueue: string | null;
   proof: string;
+  /** Count of additional worker uploads (images 2..3). */
+  proofExtrasCount?: number;
   contentHash: string | null;
   clientFingerprint: string | null;
   ipHash: string | null;
@@ -197,6 +199,17 @@ export default function AdminSubmissionDetailPage() {
               </pre>
             </Field>
           </div>
+          {row.proofExtrasCount ? (
+            <div className="mt-4">
+              <Field label="Extra uploads">
+                <span className="text-sm text-[var(--brand-muted)]">
+                  {row.proofExtrasCount} more upload
+                  {row.proofExtrasCount === 1 ? "" : "s"} attached (visible in the worker&apos;s
+                  submission and creator review).
+                </span>
+              </Field>
+            </div>
+          ) : null}
           {row.verificationSignals != null && (
             <div className="mt-4">
               <Field label="Verification signals">

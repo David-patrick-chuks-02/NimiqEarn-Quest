@@ -5,6 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  MAX_PROOF_IMAGE_CHARS,
+  MAX_PROOF_UPLOADS,
+  MAX_PROOF_VIDEO_CHARS,
+} from "@nimiqearn/shared/limits";
 
 type Phase = "loading" | "no-telegram" | "ready" | "error" | "done";
 
@@ -56,7 +61,7 @@ const PROOF_META: Record<string, { label: string; placeholder: string; multiline
   TEXT: { label: "Your response", placeholder: "Write your response here…", multiline: true },
   LINK: { label: "Your link", placeholder: "https://…", multiline: false },
   SCREENSHOT: {
-    label: "Upload screenshot",
+    label: "Upload screenshots",
     placeholder: "",
     multiline: false,
     upload: true,
@@ -96,29 +101,51 @@ function deviceFingerprint(): string {
   }
 }
 
-/** Compress an uploaded image to a JPEG data URL (max ~1000px) for inline storage. */
-async function compressImage(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
+/** Read a File into a data URL. */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(new Error("Couldn't read that file."));
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Compress an uploaded image to a JPEG data URL that fits `maxChars`.
+ *
+ * The API keeps Fastify's default 1 MiB body limit, so up to MAX_PROOF_UPLOADS images share one
+ * request — we shrink the longest edge and drop JPEG quality until the image fits its share.
+ */
+async function compressImage(
+  file: File,
+  maxChars: number = MAX_PROOF_IMAGE_CHARS,
+): Promise<string> {
+  const dataUrl = await readAsDataUrl(file);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = document.createElement("img");
     el.onload = () => resolve(el);
     el.onerror = () => reject(new Error("That doesn't look like an image."));
     el.src = dataUrl;
   });
-  const max = 1000;
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Couldn't process that image.");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.7);
+
+  let longest = 1000;
+  let quality = 0.7;
+  let out = "";
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const scale = Math.min(1, longest / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Couldn't process that image.");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    out = canvas.toDataURL("image/jpeg", quality);
+    if (out.length <= maxChars) return out;
+    longest = Math.round(longest * 0.8);
+    quality = Math.max(0.35, quality - 0.1);
+  }
+  return out;
 }
 
 const BLOCKED_COPY: Record<NonNullable<WorkerView["reason"]>, string> = {
@@ -138,7 +165,7 @@ export default function DoQuestPage() {
   const [error, setError] = useState("");
   const [view, setView] = useState<WorkerView | null>(null);
   const [proof, setProof] = useState("");
-  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [proofImages, setProofImages] = useState<string[]>([]);
   const [proofBusy, setProofBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [txUrl, setTxUrl] = useState<string | null>(null);
@@ -219,9 +246,13 @@ export default function DoQuestPage() {
   const submit = useCallback(async () => {
     const isUpload =
       view?.quest.proofType === "SCREENSHOT" || view?.quest.proofType === "UPLOADED_MEDIA";
-    const payload = isUpload ? proofImage : proof.trim();
-    if (!payload) {
-      setError(isUpload ? "Upload proof before submitting." : "Please enter your proof before submitting.");
+    if (isUpload) {
+      if (proofImages.length === 0) {
+        setError("Upload proof before submitting.");
+        return;
+      }
+    } else if (!proof.trim()) {
+      setError("Please enter your proof before submitting.");
       return;
     }
     setSubmitting(true);
@@ -230,7 +261,14 @@ export default function DoQuestPage() {
       const res = (await api(`/api/quests/${questId}/submit`, {
         method: "POST",
         headers: { "x-device-fingerprint": deviceFingerprint() },
-        body: JSON.stringify({ proof: payload }),
+        body: JSON.stringify(
+          isUpload
+            ? {
+                proof: proofImages[0],
+                ...(proofImages.length > 1 ? { proofExtras: proofImages.slice(1) } : {}),
+              }
+            : { proof: proof.trim() },
+        ),
       })) as { txUrl?: string | null; status?: string; outcome?: string | null };
       setTxUrl(res.txUrl ?? null);
       setDoneStatus(
@@ -246,33 +284,34 @@ export default function DoQuestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [api, load, proof, proofImage, questId, view?.quest.proofType]);
+  }, [api, load, proof, proofImages, questId, view?.quest.proofType]);
 
-  const onProofImage = useCallback(async (file: File | null) => {
-    if (!file) return;
+  const onProofFiles = useCallback(async (files: File[] | null) => {
+    if (!files || files.length === 0) return;
     setProofBusy(true);
     setError("");
     try {
-      if (file.type.startsWith("video/")) {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error("Couldn't read that file."));
-          reader.readAsDataURL(file);
-        });
-        if (dataUrl.length > 2_500_000) {
-          setError("That video is too large. Try a shorter clip or a screenshot.");
-          return;
+      const picked: string[] = [];
+      for (const file of files) {
+        if (file.type.startsWith("video/")) {
+          const dataUrl = await readAsDataUrl(file);
+          if (dataUrl.length > MAX_PROOF_VIDEO_CHARS) {
+            setError("That video is too large. Try a shorter clip or a screenshot.");
+            return;
+          }
+          picked.push(dataUrl);
+          // A video can't be compressed, so it has to be the only upload.
+          break;
         }
-        setProofImage(dataUrl);
-        return;
+        picked.push(await compressImage(file, MAX_PROOF_IMAGE_CHARS));
       }
-      const compressed = await compressImage(file);
-      if (compressed.length > 700_000) {
-        setError("That image is too large even after compression. Try a smaller screenshot.");
-        return;
-      }
-      setProofImage(compressed);
+      const isVideo = (value: string) => value.startsWith("data:video/");
+      setProofImages((current) => {
+        const video = picked.find(isVideo);
+        if (video) return [video];
+        if (current.some(isVideo)) return picked.slice(0, MAX_PROOF_UPLOADS);
+        return [...current, ...picked].slice(0, MAX_PROOF_UPLOADS);
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -281,6 +320,9 @@ export default function DoQuestPage() {
   }, []);
 
   const proofMeta = view ? (PROOF_META[view.quest.proofType] ?? PROOF_META.TEXT) : PROOF_META.TEXT;
+  const proofIsVideo = proofImages.some((value) => value.startsWith("data:video/"));
+  const canAddMore =
+    proofImages.length > 0 && proofImages.length < MAX_PROOF_UPLOADS && !proofIsVideo;
 
   return (
     <>
@@ -425,41 +467,72 @@ export default function DoQuestPage() {
                   {proofMeta.label}
                 </label>
                 {proofMeta.upload ? (
-                  <div className="mt-2">
-                    {proofImage ? (
-                      <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={proofImage}
-                          alt="Your screenshot"
-                          className="w-full rounded-xl border border-white/10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setProofImage(null)}
-                          className="absolute right-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white"
-                        >
-                          Remove
-                        </button>
+                  <div className="mt-2 space-y-2">
+                    {proofImages.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {proofImages.map((upload, index) => (
+                          <div key={index} className="relative">
+                            {upload.startsWith("data:video/") ? (
+                              <video
+                                src={upload}
+                                controls
+                                className="w-full rounded-xl border border-white/10"
+                              />
+                            ) : (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={upload}
+                                alt={`Your proof ${index + 1}`}
+                                className="w-full rounded-xl border border-white/10"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              aria-label={`Remove upload ${index + 1}`}
+                              onClick={() =>
+                                setProofImages((prev) => prev.filter((_, i) => i !== index))
+                              }
+                              className="absolute right-1 top-1 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
+                    )}
+                    {proofImages.length === 0 || canAddMore ? (
                       <label className="mt-1 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-black/20 px-4 py-8 transition hover:border-[var(--brand-gold)]/50 hover:bg-black/30">
                         <input
                           type="file"
                           accept={proofMeta.accept ?? "image/*"}
+                          multiple
                           className="hidden"
                           disabled={proofBusy || submitting}
-                          onChange={(e) => void onProofImage(e.target.files?.[0] ?? null)}
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            e.target.value = "";
+                            void onProofFiles(files);
+                          }}
                         />
                         <span className="text-sm font-semibold text-white">
-                          {proofBusy ? "Processing…" : "Tap to upload proof"}
+                          {proofBusy
+                            ? "Processing…"
+                            : proofImages.length > 0
+                              ? `Add another (${proofImages.length}/${MAX_PROOF_UPLOADS})`
+                              : "Tap to upload proof"}
                         </span>
                         <span className="mt-1 text-xs text-[var(--brand-muted)]">
                           {proofMeta.accept?.includes("video")
-                            ? "Image or short video from your gallery"
-                            : "PNG or JPG from your gallery"}
+                            ? `Up to ${MAX_PROOF_UPLOADS} images, or a single short video`
+                            : `PNG or JPG from your gallery — up to ${MAX_PROOF_UPLOADS}`}
                         </span>
                       </label>
+                    ) : (
+                      <p className="text-xs text-[var(--brand-muted)]">
+                        {proofIsVideo
+                          ? "A video is submitted on its own. Remove it to add screenshots."
+                          : `${MAX_PROOF_UPLOADS} uploads max. Remove one to swap it out.`}
+                      </p>
                     )}
                   </div>
                 ) : proofMeta.multiline ? (
@@ -482,7 +555,7 @@ export default function DoQuestPage() {
                 {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
                 <button
                   onClick={() => void submit()}
-                  disabled={submitting || proofBusy || (proofMeta.upload ? !proofImage : !proof.trim())}
+                  disabled={submitting || proofBusy || (proofMeta.upload ? proofImages.length === 0 : !proof.trim())}
                   className={`${primaryBtn} mt-3 w-full`}
                 >
                   {submitting ? "Submitting…" : "Submit for review"}

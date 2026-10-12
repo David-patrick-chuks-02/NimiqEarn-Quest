@@ -239,7 +239,10 @@ model QuestSubmission {
   id        String           @id @default(uuid()) @db.Uuid
   questId   String           @map("quest_id") @db.Uuid
   userId    String           @map("user_id") @db.Uuid
+  /** Primary proof (image #1 for media quests, or the text/link/hash payload). */
   proof     String           @db.Text
+  // Additional worker uploads for media quests — images 2..3 (data URLs). Empty for other types.
+  proofExtras String[]       @default([]) @map("proof_extras")
   status    SubmissionStatus @default(PENDING)
   // Hybrid verification pipeline (M3) — set after rule + AI decision.
   verificationOutcome VerificationOutcome? @map("verification_outcome")

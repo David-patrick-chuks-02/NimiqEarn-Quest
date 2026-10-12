@@ -135,7 +135,7 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
   });
 
   // Worker Mini App: submit proof for a quest (pending creator review; pays on accept).
-  app.post<{ Params: { id: string }; Body: { proof?: string } }>(
+  app.post<{ Params: { id: string }; Body: { proof?: string; proofExtras?: unknown } }>(
     "/api/quests/:id/submit",
     async (request, reply) => {
       const telegramId = workerTelegramId(request, opts.botToken);
@@ -154,6 +154,7 @@ export const questRoutes: FastifyPluginAsync<QuestRouteOptions> = async (app, op
         const result = await quests.submitQuest(telegramId, request.params.id, proof, {
           clientFingerprint: fingerprint,
           clientIp: request.ip,
+          proofExtras: request.body?.proofExtras,
         });
         return {
           ok: true,

@@ -61,6 +61,17 @@ export type VerificationOutcome = z.infer<typeof verificationOutcomeSchema>;
 export type AiVerifyRequest = z.infer<typeof aiVerifyRequestSchema>;
 export type AiVerifyResponse = z.infer<typeof aiVerifyResponseSchema>;
 
+/**
+ * Worker proof-upload limits. Client-safe, so the web app imports this subpath directly:
+ * `@nimiqearn/shared/limits` (the barrel below re-exports `load-env`, which needs Node).
+ */
+export {
+  MAX_PROOF_IMAGE_CHARS,
+  MAX_PROOF_TOTAL_CHARS,
+  MAX_PROOF_UPLOADS,
+  MAX_PROOF_VIDEO_CHARS,
+} from "./limits.js";
+
 const ALLOWED_SAMPLE_MIME = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
 
 // NOTE: `role` is intentionally NOT accepted from clients — it is assigned

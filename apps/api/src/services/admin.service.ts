@@ -440,6 +440,8 @@ export function createAdminService(db: PrismaClient) {
         proof: s.proof.startsWith("data:")
           ? `[${s.proof.slice(5, s.proof.indexOf(";")) || "media"} length=${s.proof.length}]`
           : s.proof,
+        /** Count of additional worker uploads (images 2..3) — full data URLs are not returned. */
+        proofExtrasCount: s.proofExtras.length,
         contentHash: s.contentHash,
         clientFingerprint: s.clientFingerprint,
         ipHash: s.ipHash,

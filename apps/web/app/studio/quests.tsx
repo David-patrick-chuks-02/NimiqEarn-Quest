@@ -456,9 +456,27 @@ export function SubmissionsReviewModal({
                   <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
                     {new Date(s.createdAt).toLocaleString()}
                   </p>
-                  {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.proof} alt="Proof" className="mt-2 max-h-48 w-full rounded-lg object-contain" />
+                  {isImage || s.proof.startsWith("data:video/") ? (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {[s.proof, ...(s.proofExtras ?? [])].map((upload, index) =>
+                        upload.startsWith("data:video/") ? (
+                          <video
+                            key={index}
+                            src={upload}
+                            controls
+                            className="col-span-3 max-h-48 w-full rounded-lg border border-white/10"
+                          />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={index}
+                            src={upload}
+                            alt={`Proof ${index + 1}`}
+                            className="max-h-48 w-full rounded-lg border border-white/10 object-contain"
+                          />
+                        ),
+                      )}
+                    </div>
                   ) : (
                     <p className="mt-2 break-all text-sm text-white/90">{s.proof}</p>
                   )}

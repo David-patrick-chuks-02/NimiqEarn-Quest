@@ -107,6 +107,8 @@ export type StudioSubmission = {
   id: string;
   status: string;
   proof: string;
+  /** Additional worker uploads (images 2..3) for media quests. */
+  proofExtras?: string[] | null;
   verificationOutcome?: string | null;
   confidenceScore?: number | null;
   verificationSignals?: Record<string, unknown> | null;

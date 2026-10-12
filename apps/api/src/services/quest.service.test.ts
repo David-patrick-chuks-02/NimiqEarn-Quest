@@ -1,5 +1,58 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_PROOF_IMAGE_CHARS, MAX_PROOF_TOTAL_CHARS } from "@nimiqearn/shared";
 import { createQuestService, splitRewardLuna } from "./quest.service.js";
+
+/** Minimal quest-service double for proof-validation tests. */
+function makeSubmitService(proofType: string) {
+  const submissionCreate = vi.fn().mockResolvedValue({ id: "sub-1" });
+  const service = createQuestService({
+    user: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "worker-9",
+        telegramId: "999",
+        status: "ACTIVE",
+        reputationScore: 0,
+        walletProfiles: [],
+      }),
+      update: vi.fn(),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        reputationScore: 0,
+        createdAt: new Date(),
+        reputationDecayedAt: new Date(),
+      }),
+    },
+    quest: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "quest-1",
+        creatorId: "creator-x",
+        status: "PUBLISHED",
+        totalSlots: 5,
+        filledSlots: 0,
+        startAt: null,
+        proofType,
+        proofInstructions: "Upload proof.",
+        title: "Quest",
+        rewardAmount: "10",
+        escrowKeyCiphertext: null,
+      }),
+    },
+    questSubmission: {
+      update: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+      findFirst: vi.fn().mockResolvedValue({ createdAt: new Date() }),
+    },
+    reputationEvent: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
+    moderationEvent: { create: vi.fn().mockResolvedValue({}) },
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        questSubmission: { create: submissionCreate },
+        quest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      }),
+    ),
+  } as never);
+  return { service, submissionCreate };
+}
 
 describe("createQuestService", () => {
   it("creates a draft quest for a creator", async () => {
@@ -210,6 +263,7 @@ describe("createQuestService", () => {
         questId: "quest-1",
         userId: "worker-9",
         proof: "here is my proof",
+        proofExtras: [],
         status: "PENDING",
         clientFingerprint: null,
         ipHash: null,
@@ -463,6 +517,88 @@ describe("createQuestService", () => {
     expect(submissionCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ proof: screenshot, status: "PENDING" }),
     });
+  });
+
+  it("accepts up to 3 uploads and stores the extras", async () => {
+    const { service, submissionCreate } = makeSubmitService("SCREENSHOT");
+    const a = "data:image/jpeg;base64,/9j/4AAQ1";
+    const b = "data:image/png;base64,/9j/4AAQ2";
+    const c = "data:image/webp;base64,/9j/4AAQ3";
+
+    const result = await service.submitQuest("999", "quest-1", a, { proofExtras: [b, c] });
+
+    expect(result.status).toBe("PENDING");
+    expect(submissionCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ proof: a, proofExtras: [b, c] }),
+    });
+  });
+
+  it("accepts three images at the per-image cap (still fits the request budget)", async () => {
+    const { service, submissionCreate } = makeSubmitService("SCREENSHOT");
+    const maxImage = () => `data:image/jpeg;base64,${"A".repeat(MAX_PROOF_IMAGE_CHARS - 23)}`;
+    const [a, b, c] = [maxImage(), maxImage(), maxImage()];
+
+    expect(a.length).toBe(MAX_PROOF_IMAGE_CHARS);
+    expect(a.length + b.length + c.length).toBeLessThanOrEqual(MAX_PROOF_TOTAL_CHARS);
+
+    const result = await service.submitQuest("999", "quest-1", a, { proofExtras: [b, c] });
+
+    expect(result.status).toBe("PENDING");
+    expect(submissionCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ proofExtras: [b, c] }),
+    });
+  });
+
+  it("rejects a fourth upload", async () => {
+    const { service } = makeSubmitService("SCREENSHOT");
+    const img = (n: number) => `data:image/jpeg;base64,/9j/4AAQ${n}`;
+
+    await expect(
+      service.submitQuest("999", "quest-1", img(1), { proofExtras: [img(2), img(3), img(4)] }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("rejects an oversized extra image", async () => {
+    const { service } = makeSubmitService("SCREENSHOT");
+    const big = `data:image/jpeg;base64,${"A".repeat(MAX_PROOF_IMAGE_CHARS + 1)}`;
+
+    await expect(
+      service.submitQuest("999", "quest-1", "data:image/jpeg;base64,/9j/4AAQ", {
+        proofExtras: [big],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("accepts a single video for UPLOADED_MEDIA", async () => {
+    const { service, submissionCreate } = makeSubmitService("UPLOADED_MEDIA");
+    const video = "data:video/mp4;base64,AAAA";
+
+    const result = await service.submitQuest("999", "quest-1", video);
+
+    expect(result.status).toBe("PENDING");
+    expect(submissionCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ proof: video, proofExtras: [] }),
+    });
+  });
+
+  it("rejects a video mixed with images for UPLOADED_MEDIA", async () => {
+    const { service } = makeSubmitService("UPLOADED_MEDIA");
+
+    await expect(
+      service.submitQuest("999", "quest-1", "data:video/mp4;base64,AAAA", {
+        proofExtras: ["data:image/jpeg;base64,/9j/4AAQ"],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("rejects extra uploads for quests that only take a single proof", async () => {
+    const { service } = makeSubmitService("TEXT");
+
+    await expect(
+      service.submitQuest("999", "quest-1", "my proof", {
+        proofExtras: ["data:image/jpeg;base64,/9j/4AAQ"],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
   });
 
   it("rejects a text proof for SCREENSHOT quests", async () => {

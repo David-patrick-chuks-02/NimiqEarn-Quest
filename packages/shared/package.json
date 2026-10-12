@@ -9,6 +9,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./limits": {
+      "types": "./src/limits.ts",
+      "import": "./dist/limits.js"
     }
   },
   "scripts": {
