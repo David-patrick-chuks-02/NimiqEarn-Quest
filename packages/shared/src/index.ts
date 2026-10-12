@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  MAX_SAMPLE_EVIDENCE_IMAGE_CHARS,
+  MAX_SAMPLE_EVIDENCE_UPLOADS,
+} from "./limits.js";
 
 export const userRoleSchema = z.enum(["WORKER", "CREATOR", "ADMIN"]);
 export const userStatusSchema = z.enum(["PENDING", "ACTIVE", "SUSPENDED"]);
@@ -45,7 +49,12 @@ export const aiVerifyRequestSchema = z.object({
   /** Sybil / farming risk hint from the API (0–1). */
   behavioralRisk: z.number().min(0).max(1).optional(),
   /** Creator sample evidence data URL for UI template matching. */
-  sampleEvidence: z.string().max(700_000).optional(),
+  sampleEvidence: z.string().max(MAX_SAMPLE_EVIDENCE_IMAGE_CHARS).optional(),
+  /** Additional creator sample-evidence images (2..3) for best-match template scoring. */
+  sampleEvidenceExtras: z
+    .array(z.string().max(MAX_SAMPLE_EVIDENCE_IMAGE_CHARS))
+    .max(MAX_SAMPLE_EVIDENCE_UPLOADS - 1)
+    .optional(),
   /** Live social post text (from platform API / fetch) for screenshot↔post match. */
   livePostText: z.string().max(10_000).optional(),
 });
@@ -70,6 +79,8 @@ export {
   MAX_PROOF_TOTAL_CHARS,
   MAX_PROOF_UPLOADS,
   MAX_PROOF_VIDEO_CHARS,
+  MAX_SAMPLE_EVIDENCE_IMAGE_CHARS,
+  MAX_SAMPLE_EVIDENCE_UPLOADS,
 } from "./limits.js";
 
 const ALLOWED_SAMPLE_MIME = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
@@ -145,8 +156,18 @@ export const createQuestObjectSchema = z.object({
   // Optional sample-evidence image as a compressed JPEG/PNG/WebP data URL.
   sampleEvidence: z
     .string()
-    .max(700_000)
+    .max(MAX_SAMPLE_EVIDENCE_IMAGE_CHARS)
     .refine((v) => ALLOWED_SAMPLE_MIME.test(v), "Must be a JPEG, PNG, or WebP image data URL")
+    .optional(),
+  // Additional sample-evidence images (up to 3 total) so creators can show several examples.
+  sampleEvidenceExtras: z
+    .array(
+      z
+        .string()
+        .max(MAX_SAMPLE_EVIDENCE_IMAGE_CHARS)
+        .refine((v) => ALLOWED_SAMPLE_MIME.test(v), "Must be a JPEG, PNG, or WebP image data URL"),
+    )
+    .max(MAX_SAMPLE_EVIDENCE_UPLOADS - 1)
     .optional(),
   verificationConfig: verificationConfigSchema.optional(),
 });

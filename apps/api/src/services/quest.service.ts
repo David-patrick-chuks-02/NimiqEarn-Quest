@@ -311,6 +311,7 @@ export function createQuestService(
           proofType: parsed.data.proofType,
           proofInstructions: parsed.data.proofInstructions,
           sampleEvidence: parsed.data.sampleEvidence ?? null,
+          sampleEvidenceExtras: parsed.data.sampleEvidenceExtras ?? [],
           verificationConfig: parsed.data.verificationConfig
             ? JSON.parse(JSON.stringify(parsed.data.verificationConfig))
             : undefined,
@@ -874,6 +875,7 @@ export function createQuestService(
         proofInstructions: quest.proofInstructions,
         title: quest.title,
         sampleEvidence: quest.sampleEvidence,
+        sampleEvidenceExtras: quest.sampleEvidenceExtras,
         questCategory: quest.category,
         reputationScore: repProfile.score,
         acceptanceRate: repProfile.acceptanceRate,
@@ -1609,6 +1611,7 @@ export function toPublicQuestResponse(quest: Quest & { creator?: { displayName: 
     proofType: quest.proofType,
     proofInstructions: quest.proofInstructions,
     sampleEvidence: quest.sampleEvidence ?? null,
+    sampleEvidenceExtras: quest.sampleEvidenceExtras ?? [],
     viewCount: quest.viewCount,
     publishedAt: quest.publishedAt?.toISOString() ?? null,
     creatorName: quest.creator?.displayName ?? null,

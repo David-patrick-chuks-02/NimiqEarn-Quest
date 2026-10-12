@@ -12,6 +12,7 @@ import {
 } from "./constants";
 import { inputClass, labelClass, primaryBtn } from "./styles";
 import { compressImage, formatNim, splitRewardNim } from "./utils";
+import { MAX_SAMPLE_EVIDENCE_UPLOADS } from "@nimiqearn/shared/limits";
 
 function CreateSection({
   title,
@@ -595,51 +596,70 @@ export function CreateQuestForm({
 
                 <Field label="Sample evidence" hint="Optional">
                   <p className="mt-1 text-[0.7rem] text-[var(--brand-muted)]">
-                    Show an example of acceptable proof.
+                    Show up to {MAX_SAMPLE_EVIDENCE_UPLOADS} examples of acceptable proof.
                   </p>
-                  {form.sampleEvidence ? (
-                    <div className="mt-2 flex items-center gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={form.sampleEvidence}
-                        alt="Sample evidence"
-                        className="h-14 w-14 rounded-lg border border-white/10 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => patch({ sampleEvidence: "" })}
-                        className="text-sm font-medium text-[var(--brand-muted)] transition hover:text-white"
-                      >
-                        Remove
-                      </button>
+                  {form.sampleEvidence.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {form.sampleEvidence.map((sample, index) => (
+                        <div key={index} className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={sample}
+                            alt={`Sample evidence ${index + 1}`}
+                            className="h-14 w-14 rounded-lg border border-white/10 object-cover"
+                          />
+                          <button
+                            type="button"
+                            aria-label={`Remove sample ${index + 1}`}
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                sampleEvidence: f.sampleEvidence.filter((_, i) => i !== index),
+                              }))
+                            }
+                            className="absolute -right-1.5 -top-1.5 rounded-full bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
+                  )}
+                  {form.sampleEvidence.length < MAX_SAMPLE_EVIDENCE_UPLOADS && (
                     <label
                       className={`${inputClass} mt-1.5 flex cursor-pointer items-center justify-center border-dashed text-[var(--brand-muted)] ${
                         evidenceBusy ? "opacity-60" : "hover:border-[var(--brand-gold)]/50"
                       }`}
                     >
-                      {evidenceBusy ? "Processing…" : "Upload image"}
+                      {evidenceBusy
+                        ? "Processing…"
+                        : form.sampleEvidence.length > 0
+                          ? `Add another (${form.sampleEvidence.length}/${MAX_SAMPLE_EVIDENCE_UPLOADS})`
+                          : "Upload image"}
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         disabled={evidenceBusy}
                         onChange={async (e) => {
-                          const file = e.target.files?.[0];
+                          const files = Array.from(e.target.files ?? []);
                           e.target.value = "";
-                          if (!file) return;
+                          if (files.length === 0) return;
                           setEvidenceBusy(true);
                           setError("");
                           try {
-                            const compressed = await compressImage(file);
-                            if (compressed.length > 700_000) {
-                              setError(
-                                "That image is too large even after compression. Try a smaller one.",
-                              );
-                            } else {
-                              setForm((f) => ({ ...f, sampleEvidence: compressed }));
+                            const compressed: string[] = [];
+                            for (const file of files) {
+                              compressed.push(await compressImage(file));
                             }
+                            setForm((f) => ({
+                              ...f,
+                              sampleEvidence: [...f.sampleEvidence, ...compressed].slice(
+                                0,
+                                MAX_SAMPLE_EVIDENCE_UPLOADS,
+                              ),
+                            }));
                           } catch (err) {
                             setError((err as Error).message);
                           } finally {

@@ -72,7 +72,7 @@ export type QuestForm = ProofRules & {
   startAt: string;
   proofType: string;
   proofInstructions: string;
-  sampleEvidence: string;
+  sampleEvidence: string[];
   minReputation: string;
   deadlineAt: string;
 };

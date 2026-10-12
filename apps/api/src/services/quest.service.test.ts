@@ -668,12 +668,14 @@ describe("createQuestService", () => {
       proofType: "TEXT",
       proofInstructions: "Send a short summary.",
       sampleEvidence: "data:image/jpeg;base64,AAAA",
+      sampleEvidenceExtras: ["data:image/png;base64,BBBB"],
     });
 
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         startAt,
         sampleEvidence: "data:image/jpeg;base64,AAAA",
+        sampleEvidenceExtras: ["data:image/png;base64,BBBB"],
       }),
     });
   });

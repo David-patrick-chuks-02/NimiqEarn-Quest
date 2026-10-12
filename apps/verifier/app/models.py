@@ -15,6 +15,9 @@ class VerifyRequest(BaseModel):
     recentTextProofs: list[str] = Field(default_factory=list)
     behavioralRisk: float | None = None
     sampleEvidence: str | None = None
+    # Extra creator sample images (up to 2 more). The screenshot check scores all of them and
+    # keeps the best match, so several accepted examples are supported.
+    sampleEvidenceExtras: list[str] = Field(default_factory=list)
     livePostText: str | None = None
 
 

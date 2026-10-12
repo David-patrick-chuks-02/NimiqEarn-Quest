@@ -443,7 +443,10 @@ export default function StudioPage() {
           ...(startAt ? { startAt } : {}),
           proofType: form.proofType,
           proofInstructions: form.proofInstructions.trim(),
-          ...(form.sampleEvidence ? { sampleEvidence: form.sampleEvidence } : {}),
+          ...(form.sampleEvidence.length > 0 ? { sampleEvidence: form.sampleEvidence[0] } : {}),
+          ...(form.sampleEvidence.length > 1
+            ? { sampleEvidenceExtras: form.sampleEvidence.slice(1) }
+            : {}),
           ...(Object.keys(verificationConfig).length
             ? { verificationConfig }
             : {}),

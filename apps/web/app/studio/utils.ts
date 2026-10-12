@@ -1,8 +1,15 @@
+import { MAX_SAMPLE_EVIDENCE_IMAGE_CHARS } from "@nimiqearn/shared/limits";
+
 /**
- * Read an image File and return a compressed JPEG data URL (max ~1000px, quality 0.7),
- * so sample-evidence uploads stay small enough to store inline. Rejects non-images.
+ * Read an image File and return a compressed JPEG data URL that fits `maxChars`.
+ *
+ * Up to MAX_SAMPLE_EVIDENCE_UPLOADS sample images share one 1 MiB request body, so we shrink
+ * the longest edge and drop JPEG quality until the image fits its share. Rejects non-images.
  */
-export async function compressImage(file: File): Promise<string> {
+export async function compressImage(
+  file: File,
+  maxChars: number = MAX_SAMPLE_EVIDENCE_IMAGE_CHARS,
+): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -16,15 +23,24 @@ export async function compressImage(file: File): Promise<string> {
     el.onerror = () => reject(new Error("That doesn't look like an image."));
     el.src = dataUrl;
   });
-  const max = 1000;
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Couldn't process that image.");
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.7  );
+
+  let longest = 1000;
+  let quality = 0.7;
+  let out = "";
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const scale = Math.min(1, longest / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Couldn't process that image.");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    out = canvas.toDataURL("image/jpeg", quality);
+    if (out.length <= maxChars) return out;
+    longest = Math.round(longest * 0.8);
+    quality = Math.max(0.35, quality - 0.1);
+  }
+  return out;
 }
 
 export function isStudioPreview(): boolean {

@@ -47,7 +47,9 @@ function loadSampleEvidence() {
   const buf = readFileSync(SAMPLE_IMAGE);
   const mime = SAMPLE_IMAGE.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
   const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-  if (dataUrl.length > 700_000) {
+  // Matches MAX_SAMPLE_EVIDENCE_IMAGE_CHARS in packages/shared/src/limits.ts (3 samples must
+  // share the API's 1 MiB request budget).
+  if (dataUrl.length > 330_000) {
     throw new Error(
       `Sample image too large after base64 (${dataUrl.length} chars). Compress it first.`,
     );

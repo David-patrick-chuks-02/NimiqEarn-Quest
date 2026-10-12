@@ -43,11 +43,21 @@ def verify_screenshot(req: VerifyRequest) -> VerifyResponse:
     signals["uiTitleOverlap"] = title_overlap
 
     sample_score = 0.0
-    if req.sampleEvidence:
-        sample_raw = decode_data_url(req.sampleEvidence)
-        if sample_raw:
-            sample_score = template_match_score(raw, sample_raw)
-            signals["sampleTemplateMatch"] = sample_score
+    best_index: int | None = None
+    samples = [s for s in [req.sampleEvidence, *req.sampleEvidenceExtras] if s]
+    for index, sample in enumerate(samples):
+        sample_raw = decode_data_url(sample)
+        if not sample_raw:
+            continue
+        score = template_match_score(raw, sample_raw)
+        if best_index is None or score > sample_score:
+            sample_score = score
+            best_index = index
+    if best_index is not None:
+        signals["sampleTemplateMatch"] = sample_score
+        signals["sampleTemplateMatchIndex"] = best_index
+    if samples:
+        signals["sampleCount"] = len(samples)
 
     live_overlap = 0.0
     if req.livePostText:

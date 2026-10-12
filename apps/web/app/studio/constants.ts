@@ -142,7 +142,7 @@ export const emptyForm = {
   startAt: "",
   proofType: "LINK",
   proofInstructions: "",
-  sampleEvidence: "", // compressed image data URL, optional
+  sampleEvidence: [] as string[], // compressed image data URLs, optional (up to 3)
   // Optional verificationConfig (campaign rules)
   ...emptyProofRules,
   // Gates that apply to any proof type

@@ -27,6 +27,7 @@ interface PublicQuest {
   proofType: string;
   proofInstructions: string;
   sampleEvidence: string | null;
+  sampleEvidenceExtras?: string[] | null;
   creatorName: string | null;
 }
 
@@ -449,14 +450,23 @@ export default function DoQuestPage() {
               {view.quest.sampleEvidence && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
-                    Example of accepted proof
+                    {view.quest.sampleEvidenceExtras?.length
+                      ? "Examples of accepted proof"
+                      : "Example of accepted proof"}
                   </p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={view.quest.sampleEvidence}
-                    alt="Sample evidence"
-                    className="mt-2 w-full rounded-xl border border-white/10"
-                  />
+                  <div className="mt-2 space-y-2">
+                    {[view.quest.sampleEvidence, ...(view.quest.sampleEvidenceExtras ?? [])].map(
+                      (sample, index) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={index}
+                          src={sample}
+                          alt={`Sample evidence ${index + 1}`}
+                          className="w-full rounded-xl border border-white/10"
+                        />
+                      ),
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -42,6 +42,8 @@ export interface VerifySubmissionInput {
   proofInstructions: string;
   title: string;
   sampleEvidence?: string | null;
+  /** Additional creator sample images (2..3); the verifier scores all of them. */
+  sampleEvidenceExtras?: string[] | null;
   questCategory?: string;
   reputationScore: number;
   acceptanceRate?: number;
@@ -386,6 +388,10 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
             recentTextProofs,
             behavioralRisk,
             sampleEvidence: input.sampleEvidence ?? undefined,
+            sampleEvidenceExtras:
+              input.sampleEvidenceExtras && input.sampleEvidenceExtras.length > 0
+                ? input.sampleEvidenceExtras
+                : undefined,
             livePostText: livePostText || undefined,
           })
         : null;
