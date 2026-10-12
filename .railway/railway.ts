@@ -5,8 +5,8 @@
 //   railway config apply   # create/update services, databases, redis
 //
 // Before applying, make sure:
-//   - the Railway GitHub app has access to GITHUB_REPO below
 //   - you're linked to the Railway project you want to manage (railway link)
+//   - the GitHub app is authorized if you want `source: github(...)` auto-deploy
 //
 // After the first deploy, fill in the `preserve()` secrets per service in the
 // Railway dashboard (same values as api.env / bot.env / web.env). `preserve()`
@@ -25,7 +25,10 @@ import {
   service,
 } from "railway/iac";
 
-// Deploy source: the repo the Railway GitHub app is authorized for.
+// TODO(auto-deploy): when the Railway GitHub app is authorized for this repo,
+// restore `source: github(GITHUB_REPO)` (and `{ rootDirectory: "apps/verifier" }`
+// for the verifier) on each service and re-apply. Until then the services are
+// deployed with `railway up -s <service>`.
 const GITHUB_REPO = "David-patrick-chuks-02/NimiqEarn-Quest";
 
 export default defineRailway(() => {
@@ -36,7 +39,6 @@ export default defineRailway(() => {
   // Python AI verifier — self-contained Dockerfile app (apps/verifier).
   // Listens on Railway's injected PORT; the API reaches it over the private network.
   const verifier = service("verifier", {
-    source: github(GITHUB_REPO, { rootDirectory: "apps/verifier" }),
     healthcheck: "/health",
     healthcheckTimeout: 30,
     env: {
@@ -51,7 +53,6 @@ export default defineRailway(() => {
   // cannot reach the IPv4-only Supabase pooler, and the schema is already pushed.
   // Push schema changes manually (`pnpm db:push`) or via a one-off job instead.
   const api = service("api", {
-    source: github(GITHUB_REPO),
     build:
       "pnpm --filter @nimiqearn/database generate && pnpm --filter @nimiqearn/api... build",
     start: "pnpm --filter @nimiqearn/api start",
@@ -85,7 +86,6 @@ export default defineRailway(() => {
   // target Telegram delivers to. Re-run setWebhook after that domain changes.
   // Builds from the repo root (no rootDirectory) so pnpm workspaces resolve.
   const bot = service("bot", {
-    source: github(GITHUB_REPO),
     build:
       "pnpm --filter @nimiqearn/database generate && pnpm --filter @nimiqearn/bot... build",
     start: "pnpm --filter @nimiqearn/bot start",
@@ -113,7 +113,6 @@ export default defineRailway(() => {
   // BullMQ payout worker — same build output as the API, different entrypoint.
   // Builds from the repo root (no rootDirectory) so pnpm workspaces resolve.
   const payoutWorker = service("payout-worker", {
-    source: github(GITHUB_REPO),
     build:
       "pnpm --filter @nimiqearn/database generate && pnpm --filter @nimiqearn/api... build",
     start: "pnpm --filter @nimiqearn/api payout-worker",
