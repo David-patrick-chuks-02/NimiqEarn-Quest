@@ -42,7 +42,7 @@ export interface Quest {
   startAt: string | null;
   scheduled: boolean;
   promoted: boolean;
-  status: "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
+  status: "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED" | "CANCELLED";
   escrowAddress: string | null;
   viewCount: number;
   publishedAt: string | null;
@@ -50,7 +50,13 @@ export interface Quest {
 
 export interface Dashboard {
   user: { displayName: string | null; role: string; status: string };
-  quests: { total: number; DRAFT: number; PUBLISHED: number; CLOSED: number };
+  quests: {
+    total: number;
+    DRAFT: number;
+    PUBLISHED: number;
+    CLOSED: number;
+    CANCELLED: number;
+  };
 }
 
 export type ProofRules = {
@@ -98,8 +104,42 @@ export interface FaucetQuote {
   reachable: boolean;
 }
 
+/** Campaign rules a creator can set, as stored in `verificationConfig`. */
+export type EditableVerificationConfig = {
+  livePostUrls?: string[];
+  requiredHashtags?: string[];
+  requiredMentions?: string[];
+  targetAddress?: string;
+  minAmountNim?: number;
+  expectedMessage?: string;
+  requireFirstQuest?: boolean;
+  minReputation?: number;
+  deadlineAt?: string;
+};
+
+/**
+ * GET /api/studio/quests/:id/edit — a published quest's content for the Studio edit form.
+ * `rewardAmount`/`totalSlots` are present for display only; the API rejects changing them.
+ */
+export interface EditableQuest {
+  id: string;
+  status: string;
+  title: string;
+  category: string;
+  description: string;
+  proofType: string;
+  proofInstructions: string;
+  sampleEvidence: string | null;
+  sampleEvidenceExtras: string[];
+  verificationConfig: EditableVerificationConfig | null;
+  rewardAmount: string;
+  totalSlots: number;
+  filledSlots: number;
+  startAt: string | null;
+}
+
 export type QuestFilter = {
-  status: "all" | "PUBLISHED" | "DRAFT" | "CLOSED";
+  status: "all" | "PUBLISHED" | "DRAFT" | "CLOSED" | "CANCELLED";
   promotedOnly: boolean;
 };
 

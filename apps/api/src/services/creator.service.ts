@@ -109,6 +109,7 @@ function countQuestsByStatus(statuses: QuestStatus[]) {
       PUBLISHED: 0,
       CLOSED: 0,
       ARCHIVED: 0,
+      CANCELLED: 0,
     },
   );
 }

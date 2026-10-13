@@ -29,10 +29,13 @@ export interface Analytics {
 export function AnalyticsDetail({
   analytics,
   onBack,
+  onEdit,
   backLabel = "← Back to quests",
 }: {
   analytics: Analytics;
   onBack: () => void;
+  /** Present when the creator may edit this quest — opens the content edit form. */
+  onEdit?: () => void;
   backLabel?: string;
 }) {
   const conv = `${(analytics.conversionRate * 100).toFixed(1)}%`;
@@ -49,7 +52,18 @@ export function AnalyticsDetail({
       </button>
 
       <div>
-        <h1 className="text-lg font-bold text-white">{analytics.title}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-lg font-bold text-white">{analytics.title}</h1>
+          {onEdit && analytics.status === "PUBLISHED" && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/5"
+            >
+              Edit details
+            </button>
+          )}
+        </div>
         <p className="mt-0.5 text-xs uppercase tracking-wide text-[var(--brand-gold)]">
           {analytics.promoted && "promoted · "}
           {analytics.scheduled && analytics.startAt

@@ -1114,3 +1114,244 @@ describe("splitRewardLuna", () => {
     expect(splitRewardLuna(0n, 7.5)).toEqual({ workerLuna: 0n, feeLuna: 0n });
   });
 });
+
+/** Shared doubles for the creator-side edit and admin cancel flows. */
+function makeQuestDecisionService(overrides: {
+  quest?: Record<string, unknown>;
+  escrow?: Record<string, unknown>;
+  counts?: { unpaidApproved?: number };
+} = {}) {
+  const creator = {
+    id: "user-1",
+    telegramId: "123",
+    role: "CREATOR",
+    status: "ACTIVE",
+    walletProfiles: [
+      { nimiqAddress: "NQ_CREATOR", keyCiphertext: "creator-key", status: "VERIFIED" },
+    ],
+  };
+  const quest = {
+    id: "quest-1",
+    creatorId: "user-1",
+    status: "PUBLISHED",
+    rewardAmount: "10",
+    totalSlots: 5,
+    filledSlots: 1,
+    escrowAddress: "NQ_ESCROW",
+    escrowKeyCiphertext: "escrow-key",
+    ...overrides.quest,
+  };
+
+  const questUpdate = vi.fn().mockResolvedValue({ ...quest });
+  const questUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+  const questFindFirst = vi.fn().mockResolvedValue(quest === null ? null : quest);
+  const submissionUpdateMany = vi.fn().mockResolvedValue({ count: 2 });
+  const submissionCount = vi.fn().mockResolvedValue(overrides.counts?.unpaidApproved ?? 0);
+  const transfer = vi.fn().mockResolvedValue({ hash: "0xrefund" });
+  const getFunding = vi.fn().mockResolvedValue({
+    reachable: true,
+    balanceLuna: 3_000_000,
+    balanceNim: 30,
+  });
+
+  const db = {
+    user: { findUnique: vi.fn().mockResolvedValue(creator) },
+    quest: {
+      findFirst: questFindFirst,
+      findUnique: vi.fn().mockResolvedValue({ ...quest, creator }),
+      update: questUpdate,
+      updateMany: questUpdateMany,
+    },
+    questSubmission: { count: submissionCount, updateMany: submissionUpdateMany },
+  };
+
+  const escrow = {
+    enabled: true,
+    getFunding,
+    transfer,
+    explorerTxUrl: (hash: string) => `https://explorer/#${hash}`,
+    ...overrides.escrow,
+  };
+
+  const service = createQuestService(db as never, escrow as never);
+  return {
+    service,
+    questUpdate,
+    questUpdateMany,
+    questFindFirst,
+    submissionUpdateMany,
+    submissionCount,
+    transfer,
+    getFunding,
+  };
+}
+
+describe("updatePublishedQuest", () => {
+  it("updates content on a published quest", async () => {
+    const { service, questUpdate } = makeQuestDecisionService();
+
+    await service.updatePublishedQuest("123", "quest-1", { title: "Fixed title" });
+
+    expect(questUpdate).toHaveBeenCalledWith({
+      where: { id: "quest-1" },
+      data: expect.objectContaining({ title: "Fixed title" }),
+    });
+  });
+
+  it("refuses to change the reward", async () => {
+    const { service, questUpdate } = makeQuestDecisionService();
+
+    await expect(
+      service.updatePublishedQuest("123", "quest-1", { rewardAmount: 5000 }),
+    ).rejects.toMatchObject({ code: "INVALID_QUEST" });
+    expect(questUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses to change the slot count", async () => {
+    const { service, questUpdate } = makeQuestDecisionService();
+
+    await expect(
+      service.updatePublishedQuest("123", "quest-1", { totalSlots: 999 }),
+    ).rejects.toMatchObject({ code: "INVALID_QUEST" });
+    expect(questUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses to change the proof format", async () => {
+    const { service, questUpdate } = makeQuestDecisionService();
+
+    await expect(
+      service.updatePublishedQuest("123", "quest-1", { proofType: "TEXT" }),
+    ).rejects.toMatchObject({ code: "INVALID_QUEST" });
+    expect(questUpdate).not.toHaveBeenCalled();
+  });
+
+  it("can clear the campaign links by sending an empty verificationConfig", async () => {
+    const { service, questUpdate } = makeQuestDecisionService();
+
+    await service.updatePublishedQuest("123", "quest-1", { verificationConfig: {} });
+
+    expect(questUpdate).toHaveBeenCalledWith({
+      where: { id: "quest-1" },
+      data: expect.objectContaining({ verificationConfig: {} }),
+    });
+  });
+
+  it("rejects editing a quest that isn't published", async () => {
+    const { service } = makeQuestDecisionService({ quest: { status: "DRAFT" } });
+
+    await expect(
+      service.updatePublishedQuest("123", "quest-1", { title: "Nope" }),
+    ).rejects.toMatchObject({ code: "INVALID_STATUS" });
+  });
+
+  it("scopes the lookup to the calling creator, so another creator's quest is unreachable", async () => {
+    const { service, questFindFirst, questUpdate } = makeQuestDecisionService();
+
+    await service.updatePublishedQuest("123", "quest-1", { title: "Nope" });
+
+    // Ownership is enforced in the query itself — a quest owned by someone else is never loaded.
+    expect(questFindFirst).toHaveBeenCalledWith({
+      where: { id: "quest-1", creatorId: "user-1" },
+    });
+    expect(questUpdate).toHaveBeenCalled();
+  });
+
+  it("reports a missing quest when the owner-scoped lookup finds nothing", async () => {
+    const { service, questFindFirst } = makeQuestDecisionService();
+    questFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updatePublishedQuest("123", "quest-1", { title: "Nope" }),
+    ).rejects.toMatchObject({ code: "QUEST_NOT_FOUND" });
+  });
+});
+
+describe("cancelQuest", () => {
+  it("refunds the remaining escrow and marks the quest cancelled", async () => {
+    const { service, transfer, questUpdateMany } = makeQuestDecisionService();
+
+    const result = await service.cancelQuest("quest-1", { reason: "scam link" });
+
+    expect(transfer).toHaveBeenCalledWith({
+      fromKeyCiphertext: "escrow-key",
+      toAddress: "NQ_CREATOR",
+      valueLuna: 3_000_000n,
+    });
+    expect(result).toMatchObject({
+      refunded: true,
+      refundTxHash: "0xrefund",
+      refundNim: 30,
+    });
+    expect(questUpdateMany).toHaveBeenCalledWith({
+      where: { id: "quest-1", status: "PUBLISHED" },
+      data: expect.objectContaining({ status: "CANCELLED" }),
+    });
+  });
+
+  it("rejects the open submissions that die with the quest", async () => {
+    const { service, submissionUpdateMany } = makeQuestDecisionService();
+
+    const result = await service.cancelQuest("quest-1");
+
+    expect(submissionUpdateMany).toHaveBeenCalledWith({
+      where: { questId: "quest-1", status: "PENDING" },
+      data: { status: "REJECTED" },
+    });
+    expect(result.rejectedSubmissions).toBe(2);
+  });
+
+  it("leaves the quest live when the refund transfer fails", async () => {
+    const { service, questUpdateMany } = makeQuestDecisionService({
+      escrow: { transfer: vi.fn().mockResolvedValue({ error: "network unreachable" }) },
+    });
+
+    await expect(service.cancelQuest("quest-1")).rejects.toMatchObject({
+      code: "PAYOUT_FAILED",
+    });
+    // The money is still in escrow, so the status must NOT flip — otherwise it's stranded.
+    expect(questUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves the quest live when the escrow balance can't be read", async () => {
+    const { service, questUpdateMany } = makeQuestDecisionService({
+      escrow: { getFunding: vi.fn().mockResolvedValue({ reachable: false, balanceLuna: null }) },
+    });
+
+    await expect(service.cancelQuest("quest-1")).rejects.toMatchObject({
+      code: "RPC_UNAVAILABLE",
+    });
+    expect(questUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses while an approved submission is still unpaid", async () => {
+    const { service, questUpdateMany } = makeQuestDecisionService({
+      counts: { unpaidApproved: 1 },
+    });
+
+    await expect(service.cancelQuest("quest-1")).rejects.toMatchObject({
+      code: "NOT_PENDING",
+    });
+    expect(questUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("cancels an empty escrow without a refund transfer", async () => {
+    const { service, transfer } = makeQuestDecisionService({
+      escrow: {
+        getFunding: vi.fn().mockResolvedValue({ reachable: true, balanceLuna: 0, balanceNim: 0 }),
+      },
+    });
+
+    const result = await service.cancelQuest("quest-1");
+
+    expect(transfer).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ refunded: false, refundTxHash: null, refundNim: 0 });
+  });
+
+  it("rejects cancelling a quest that isn't live", async () => {
+    const { service } = makeQuestDecisionService({ quest: { status: "DRAFT" } });
+
+    await expect(service.cancelQuest("quest-1")).rejects.toMatchObject({
+      code: "INVALID_STATUS",
+    });
+  });
+});

@@ -144,6 +144,7 @@ function FilterModal({
     { value: "PUBLISHED", label: "Published" },
     { value: "DRAFT", label: "Draft" },
     { value: "CLOSED", label: "Closed" },
+    { value: "CANCELLED", label: "Cancelled" },
   ];
   return (
     <div
@@ -336,6 +337,7 @@ function StatusBadge({ status }: { status: Quest["status"] }) {
     PUBLISHED: "bg-[var(--brand-gold)]/15 text-[var(--brand-gold)]",
     CLOSED: "bg-white/10 text-[var(--brand-muted)]",
     ARCHIVED: "bg-white/10 text-[var(--brand-muted)]",
+    CANCELLED: "bg-red-500/15 text-red-300",
   };
   return (
     <span

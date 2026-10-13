@@ -151,7 +151,7 @@ export const emptyForm = {
 };
 export const PREVIEW_DASHBOARD: Dashboard = {
   user: { displayName: "Local preview", role: "CREATOR", status: "ACTIVE" },
-  quests: { total: 0, DRAFT: 0, PUBLISHED: 0, CLOSED: 0 },
+  quests: { total: 0, DRAFT: 0, PUBLISHED: 0, CLOSED: 0, CANCELLED: 0 },
 };
 export const TABS: { key: TabKey; label: string }[] = [
   { key: "home", label: "Home" },

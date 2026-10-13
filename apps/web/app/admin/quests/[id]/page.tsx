@@ -72,6 +72,12 @@ export default function AdminQuestDetailPage() {
   const [quest, setQuest] = useState<QuestDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Cancel + refund flow: two-step (confirm) because it moves money on-chain.
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelResult, setCancelResult] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!unlocked || !params.id) return;
@@ -91,7 +97,45 @@ export default function AdminQuestDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [unlocked, adminFetch, params.id]);
+  }, [unlocked, adminFetch, params.id, reloadKey]);
+
+  async function cancelQuest() {
+    if (!quest) return;
+    setCancelling(true);
+    setError(null);
+    setCancelResult(null);
+    try {
+      const result = (await adminFetch(`/api/admin/quests/${quest.id}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason: cancelReason.trim() || undefined }),
+      })) as {
+        refunded?: boolean;
+        refundNim?: number;
+        refundTxUrl?: string | null;
+        rejectedSubmissions?: number;
+      };
+      setCancelResult(
+        result.refunded
+          ? `Cancelled. Refunded ${result.refundNim?.toLocaleString() ?? "?"} NIM to the creator${
+              result.rejectedSubmissions
+                ? `, and rejected ${result.rejectedSubmissions} open submission(s)`
+                : ""
+            }.`
+          : `Cancelled. Nothing was left in escrow to refund.${
+              result.rejectedSubmissions
+                ? ` Rejected ${result.rejectedSubmissions} open submission(s).`
+                : ""
+            }`,
+      );
+      setCancelArmed(false);
+      setCancelReason("");
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to cancel quest");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   if (loading) {
     return <p className="text-sm text-[var(--brand-muted)]">Loading quest…</p>;
@@ -215,6 +259,55 @@ export default function AdminQuestDetailPage() {
               <Field label="Pending">{quest.counts.pending}</Field>
             </div>
           </div>
+
+          {quest.status === "PUBLISHED" && (
+            <div className="rounded-xl border border-red-400/25 bg-red-500/[0.06] p-4">
+              <h2 className="text-sm font-semibold text-red-200">Cancel &amp; refund</h2>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--brand-muted)]">
+                Pulls this quest off the board and returns the unspent escrow to the creator. Open
+                submissions are rejected; approved-but-unpaid ones must be settled first.
+              </p>
+              {cancelArmed ? (
+                <div className="mt-3 space-y-3">
+                  <input
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Reason (optional, for the audit log)"
+                    className="w-full rounded-lg border border-white/12 bg-black/25 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-400/30"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void cancelQuest()}
+                      disabled={cancelling}
+                      className="rounded-lg bg-red-500/80 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+                    >
+                      {cancelling ? "Refunding…" : "Yes, cancel and refund"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCancelArmed(false)}
+                      disabled={cancelling}
+                      className={ghostBtn}
+                    >
+                      Keep it live
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCancelArmed(true)}
+                  className={`${ghostBtn} mt-3 border-red-400/30 text-red-200`}
+                >
+                  Cancel quest…
+                </button>
+              )}
+              {cancelResult && (
+                <p className="mt-3 break-words text-xs text-[var(--brand-gold)]">{cancelResult}</p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 

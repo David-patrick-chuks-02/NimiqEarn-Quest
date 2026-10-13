@@ -8,7 +8,7 @@ export function StatusPill({ value }: { value: string }) {
   const tone =
     value === "ACTIVE" || value === "ACCEPTED" || value === "PUBLISHED" || value === "VERIFIED"
       ? "bg-[var(--brand-gold)]/10 text-[var(--brand-gold)]"
-      : value === "SUSPENDED" || value === "REJECTED" || value === "CLOSED"
+      : value === "SUSPENDED" || value === "REJECTED" || value === "CLOSED" || value === "CANCELLED"
         ? "bg-red-500/10 text-red-200"
         : "bg-white/5 text-[var(--brand-muted)]";
   return (

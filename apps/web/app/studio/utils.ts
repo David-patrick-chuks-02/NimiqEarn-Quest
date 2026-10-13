@@ -1,4 +1,5 @@
 import { MAX_SAMPLE_EVIDENCE_IMAGE_CHARS } from "@nimiqearn/shared/limits";
+import type { EditableQuest, QuestForm } from "./types";
 
 /**
  * Read an image File and return a compressed JPEG data URL that fits `maxChars`.
@@ -43,9 +44,145 @@ export async function compressImage(
   return out;
 }
 
+/** ISO timestamp -> the `datetime-local` value the form inputs expect (local time, no seconds). */
+export function toLocalInputValue(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes(),
+  )}`;
+}
+
+/** Map a quest loaded from the API into the Studio form shape used by the create and edit forms. */
+export function questToForm(quest: EditableQuest): QuestForm {
+  const vc = quest.verificationConfig ?? {};
+  return {
+    title: quest.title,
+    category: quest.category,
+    description: quest.description,
+    // Not editable when editing, but kept in the form so the payload stays well-formed.
+    rewardAmount: String(Number(quest.rewardAmount)),
+    totalSlots: String(quest.totalSlots),
+    startAt: "",
+    proofType: quest.proofType,
+    proofInstructions: quest.proofInstructions,
+    sampleEvidence: [quest.sampleEvidence, ...(quest.sampleEvidenceExtras ?? [])].filter(
+      (v): v is string => Boolean(v),
+    ),
+    targetAddress: vc.targetAddress ?? "",
+    minAmountNim: vc.minAmountNim != null ? String(vc.minAmountNim) : "",
+    requiredHashtags: (vc.requiredHashtags ?? []).join(", "),
+    requiredMentions: (vc.requiredMentions ?? []).join(", "),
+    expectedMessage: vc.expectedMessage ?? "",
+    // The picker always shows one row, so an empty config becomes one blank input.
+    livePostUrls: vc.livePostUrls?.length ? vc.livePostUrls : [""],
+    requireFirstQuest: Boolean(vc.requireFirstQuest),
+    minReputation: vc.minReputation != null ? String(vc.minReputation) : "",
+    deadlineAt: toLocalInputValue(vc.deadlineAt),
+  };
+}
+
 export function isStudioPreview(): boolean {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("preview") === "1";
+}
+
+/**
+ * Build the content half of a quest payload from the form: everything that describes the task
+ * for workers, plus the proof-type-specific verification rules. Deliberately excludes the money
+ * (`rewardAmount`, `totalSlots`) and the schedule, which creation and editing treat differently —
+ * the caller adds those.
+ *
+ * Shared by the create and edit flows so the verification rules can't drift between them.
+ */
+export function buildQuestContentPayload(
+  form: QuestForm,
+):
+  | { ok: true; payload: Record<string, unknown>; verificationConfig: Record<string, unknown> }
+  | { ok: false; error: string } {
+  const verificationConfig: Record<string, unknown> = {};
+  const proof = form.proofType;
+
+  if (proof === "TRANSACTION_HASH") {
+    if (form.targetAddress.trim()) verificationConfig.targetAddress = form.targetAddress.trim();
+    if (form.minAmountNim.trim()) {
+      const n = Number(form.minAmountNim);
+      if (!Number.isFinite(n) || n <= 0) {
+        return { ok: false, error: "Min amount: enter a positive NIM amount, or leave blank." };
+      }
+      verificationConfig.minAmountNim = n;
+    }
+  }
+  if (proof === "LINK") {
+    if (form.requiredHashtags.trim()) {
+      verificationConfig.requiredHashtags = form.requiredHashtags
+        .split(/[,\s]+/)
+        .map((h) => h.replace(/^#/, "").trim())
+        .filter(Boolean);
+    }
+    if (form.requiredMentions.trim()) {
+      verificationConfig.requiredMentions = form.requiredMentions
+        .split(/[,\s]+/)
+        .map((h) => h.replace(/^@/, "").trim())
+        .filter(Boolean);
+    }
+  }
+  if (proof === "WALLET_INTERACTION" && form.expectedMessage.trim()) {
+    verificationConfig.expectedMessage = form.expectedMessage.trim();
+  }
+  if (proof === "SCREENSHOT" || proof === "UPLOADED_MEDIA") {
+    const livePostUrls = form.livePostUrls.map((u) => u.trim()).filter(Boolean);
+    for (const url of livePostUrls) {
+      try {
+        // eslint-disable-next-line no-new
+        new URL(url);
+      } catch {
+        return {
+          ok: false,
+          error: "Live post URLs: enter a valid http(s) URL for each, or leave blank.",
+        };
+      }
+    }
+    if (livePostUrls.length) verificationConfig.livePostUrls = livePostUrls;
+  }
+  if (proof === "REFERRAL_EVENT" && form.requireFirstQuest) {
+    verificationConfig.requireFirstQuest = true;
+  }
+
+  if (form.minReputation.trim()) {
+    const n = Number(form.minReputation);
+    if (!Number.isInteger(n) || n < 0) {
+      return { ok: false, error: "Min reputation: enter a whole number ≥ 0, or leave blank." };
+    }
+    verificationConfig.minReputation = n;
+  }
+  if (form.deadlineAt) {
+    const when = new Date(form.deadlineAt);
+    if (Number.isNaN(when.getTime())) {
+      return { ok: false, error: "Deadline: pick a valid date/time, or leave blank." };
+    }
+    verificationConfig.deadlineAt = when.toISOString();
+  }
+
+  return {
+    ok: true,
+    payload: {
+      title: form.title.trim(),
+      category: form.category,
+      description: form.description.trim(),
+      proofType: form.proofType,
+      proofInstructions: form.proofInstructions.trim(),
+      ...(form.sampleEvidence.length > 0 ? { sampleEvidence: form.sampleEvidence[0] } : {}),
+      ...(form.sampleEvidence.length > 1
+        ? { sampleEvidenceExtras: form.sampleEvidence.slice(1) }
+        : {}),
+    },
+    // Returned separately so callers can choose: creation omits an empty config (nothing to
+    // store), while an edit must send it even when empty so clearing the last rule clears it.
+    verificationConfig,
+  };
 }
 
 export function formatNim(n: number | null | undefined): string {

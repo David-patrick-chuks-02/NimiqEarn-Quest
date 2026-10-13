@@ -14,7 +14,7 @@ import { inputClass, labelClass, primaryBtn } from "./styles";
 import { compressImage, formatNim, splitRewardNim } from "./utils";
 import { MAX_SAMPLE_EVIDENCE_UPLOADS } from "@nimiqearn/shared/limits";
 
-function CreateSection({
+export function CreateSection({
   title,
   hint,
   children,
@@ -36,7 +36,7 @@ function CreateSection({
   );
 }
 
-function Field({
+export function Field({
   label,
   hint,
   children,

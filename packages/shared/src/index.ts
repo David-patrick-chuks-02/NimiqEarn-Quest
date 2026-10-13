@@ -26,7 +26,13 @@ export const questProofTypeSchema = z.enum([
   "WALLET_INTERACTION",
   "UPLOADED_MEDIA",
 ]);
-export const questStatusSchema = z.enum(["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"]);
+export const questStatusSchema = z.enum([
+  "DRAFT",
+  "PUBLISHED",
+  "CLOSED",
+  "ARCHIVED",
+  "CANCELLED",
+]);
 
 /** Architecture decision outcomes from the hybrid verification pipeline. */
 export const verificationOutcomeSchema = z.enum([
@@ -183,9 +189,24 @@ export const createQuestSchema = createQuestObjectSchema.refine(
 // Editing a draft: every field is optional, but the same per-field rules apply.
 export const updateQuestSchema = createQuestObjectSchema.partial();
 
+/**
+ * Editing a PUBLISHED quest: content only. Deliberately absent, and rejected by the strict
+ * schema rather than silently dropped:
+ * - `rewardAmount` / `totalSlots` — the pool is already escrowed on-chain, so a change to the
+ *   money could not be honoured (payouts come from the escrow balance, not the row).
+ * - `startAt` — a publish-time concern; changing it would silently pause live acceptance.
+ * - `proofType` — changes the verification contract mid-flight. Submissions already in the queue
+ *   were verified against the old rules, and a retry would re-run them under the new ones.
+ */
+export const updatePublishedQuestSchema = createQuestObjectSchema
+  .omit({ rewardAmount: true, totalSlots: true, startAt: true, proofType: true })
+  .partial()
+  .strict();
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type CreateQuestInput = z.infer<typeof createQuestSchema>;
 export type UpdateQuestInput = z.infer<typeof updateQuestSchema>;
+export type UpdatePublishedQuestInput = z.infer<typeof updatePublishedQuestSchema>;
 
 export { loadRootEnv } from "./load-env.js";
 

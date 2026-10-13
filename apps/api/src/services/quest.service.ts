@@ -7,6 +7,7 @@ import {
   MAX_PROOF_UPLOADS,
   MAX_PROOF_VIDEO_CHARS,
   questStatusSchema,
+  updatePublishedQuestSchema,
   updateQuestSchema,
 } from "@nimiqearn/shared";
 import { createProfileService, ProfileServiceError } from "./profile.service.js";
@@ -294,6 +295,45 @@ export function createQuestService(
     }
   }
 
+  /**
+   * Resolve the calling creator and prove they own `questId`. Shared by every creator-side quest
+   * mutation so the authorization rules can't drift between them: the quest must belong to the
+   * verified creator identified by `telegramId`.
+   */
+  async function requireOwnedQuest(telegramId: string, questId: string) {
+    const user = await db.user.findUnique({
+      where: { telegramId },
+      include: { walletProfiles: true },
+    });
+    if (!user) {
+      throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
+    }
+    if (!isCreatorRole(user.role)) {
+      throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
+    }
+
+    try {
+      profiles.assertVerifiedProfile(user);
+    } catch (error) {
+      if (error instanceof ProfileServiceError) {
+        throw new QuestServiceError(error.message, error.code);
+      }
+      throw error;
+    }
+
+    const quest = await db.quest.findFirst({ where: { id: questId, creatorId: user.id } });
+    if (!quest) {
+      throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+    }
+
+    return { user, quest };
+  }
+
+  /** Prisma JSON column write — clone so the driver can't alias the caller's object. */
+  function verificationConfigWrite(value: unknown) {
+    return value ? JSON.parse(JSON.stringify(value)) : null;
+  }
+
   return {
     async createDraftQuest(telegramId: string, input: CreateQuestInput): Promise<Quest> {
       const parsed = createQuestSchema.safeParse(input);
@@ -368,32 +408,7 @@ export function createQuestService(
         parsed.data.startAt = undefined;
       }
 
-      const user = await db.user.findUnique({
-        where: { telegramId },
-        include: { walletProfiles: true },
-      });
-      if (!user) {
-        throw new QuestServiceError("User not found.", "USER_NOT_FOUND");
-      }
-      if (!isCreatorRole(user.role)) {
-        throw new QuestServiceError("Creator access required.", "NOT_CREATOR");
-      }
-
-      try {
-        profiles.assertVerifiedProfile(user);
-      } catch (error) {
-        if (error instanceof ProfileServiceError) {
-          throw new QuestServiceError(error.message, error.code);
-        }
-        throw error;
-      }
-
-      const quest = await db.quest.findFirst({
-        where: { id: questId, creatorId: user.id },
-      });
-      if (!quest) {
-        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
-      }
+      const { quest } = await requireOwnedQuest(telegramId, questId);
       if (quest.status !== "DRAFT") {
         throw new QuestServiceError("Only draft quests can be edited.", "INVALID_STATUS");
       }
@@ -403,11 +418,51 @@ export function createQuestService(
         data: {
           ...parsed.data,
           ...(parsed.data.verificationConfig !== undefined
-            ? {
-                verificationConfig: parsed.data.verificationConfig
-                  ? JSON.parse(JSON.stringify(parsed.data.verificationConfig))
-                  : null,
-              }
+            ? { verificationConfig: verificationConfigWrite(parsed.data.verificationConfig) }
+            : {}),
+        },
+      });
+    },
+
+    /**
+     * Full content of one quest the creator owns, for the Studio edit form. Unlike the list
+     * response this includes the heavy fields (sample evidence, verification rules) — hence a
+     * dedicated read rather than widening `listCreatorQuests`.
+     */
+    async getEditableQuest(telegramId: string, questId: string): Promise<Quest> {
+      const { quest } = await requireOwnedQuest(telegramId, questId);
+      return quest;
+    },
+
+    /**
+     * Edit a PUBLISHED quest's content.
+     *
+     * The money is deliberately out of reach: the reward pool is escrowed on-chain against
+     * `rewardAmount × totalSlots`, so changing either after funding could not be honoured — the
+     * payout comes from the escrow balance, not from the row. `updatePublishedQuestSchema` omits
+     * them and is strict, so an attempt is a 400 rather than a silent no-op.
+     */
+    async updatePublishedQuest(
+      telegramId: string,
+      questId: string,
+      input: unknown,
+    ): Promise<Quest> {
+      const parsed = updatePublishedQuestSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new QuestServiceError("Invalid quest data.", "INVALID_QUEST");
+      }
+
+      const { quest } = await requireOwnedQuest(telegramId, questId);
+      if (quest.status !== "PUBLISHED") {
+        throw new QuestServiceError("Only published quests can be edited here.", "INVALID_STATUS");
+      }
+
+      return db.quest.update({
+        where: { id: quest.id },
+        data: {
+          ...parsed.data,
+          ...(parsed.data.verificationConfig !== undefined
+            ? { verificationConfig: verificationConfigWrite(parsed.data.verificationConfig) }
             : {}),
         },
       });
@@ -1504,6 +1559,123 @@ export function createQuestService(
     },
 
     /**
+     * Admin-only: pull a live quest and refund its unspent escrow to the creator.
+     *
+     * Order is deliberate — money first, status last. If the refund can't be completed we leave
+     * the quest PUBLISHED so the operator can retry; marking it CANCELLED while the NIM still sat
+     * in escrow would strand the creator's funds on an address only we can spend.
+     *
+     * Approved-but-unpaid submissions block the cancellation rather than being refunded away:
+     * those workers were already accepted, so their payout must be settled first.
+     */
+    async cancelQuest(
+      questId: string,
+      opts: { reason?: string } = {},
+    ): Promise<{
+      refunded: boolean;
+      refundTxHash: string | null;
+      refundTxUrl: string | null;
+      refundNim: number;
+      rejectedSubmissions: number;
+    }> {
+      const quest = await db.quest.findUnique({
+        where: { id: questId },
+        include: { creator: { include: { walletProfiles: true } } },
+      });
+      if (!quest) {
+        throw new QuestServiceError("Quest not found.", "QUEST_NOT_FOUND");
+      }
+      if (quest.status !== "PUBLISHED") {
+        throw new QuestServiceError("Only a live quest can be cancelled.", "INVALID_STATUS");
+      }
+
+      const unpaidApproved = await db.questSubmission.count({
+        where: { questId, status: "ACCEPTED", payoutTxHash: null },
+      });
+      if (unpaidApproved > 0) {
+        throw new QuestServiceError(
+          `${unpaidApproved} approved submission(s) haven't been paid yet. Settle them before cancelling.`,
+          "NOT_PENDING",
+        );
+      }
+
+      // Everything still open dies with the quest; workers get their slot back elsewhere.
+      const rejected = await db.questSubmission.updateMany({
+        where: { questId, status: "PENDING" },
+        data: { status: "REJECTED" },
+      });
+
+      let refundedLuna = 0n;
+      let refundTxHash: string | null = null;
+
+      const escrowAddress = quest.escrowAddress;
+      const canRefund = Boolean(escrow?.enabled && escrowAddress && quest.escrowKeyCiphertext);
+      if (canRefund) {
+        const funding = await escrow!.getFunding(escrowAddress!, 0);
+        if (!funding.reachable || funding.balanceLuna === null) {
+          throw new QuestServiceError(
+            "Couldn't read the escrow balance. The quest is untouched — try again shortly.",
+            "RPC_UNAVAILABLE",
+          );
+        }
+        refundedLuna = BigInt(funding.balanceLuna);
+
+        if (refundedLuna > 0n) {
+          const creatorWallet =
+            quest.creator.walletProfiles.find((w) => w.nimiqAddress) ?? null;
+          if (!creatorWallet?.nimiqAddress) {
+            throw new QuestServiceError(
+              "The creator has no wallet to refund to. The quest is untouched.",
+              "NO_WALLET",
+            );
+          }
+          const result = await escrow!.transfer({
+            fromKeyCiphertext: quest.escrowKeyCiphertext!,
+            toAddress: creatorWallet.nimiqAddress,
+            valueLuna: refundedLuna,
+          });
+          if (!result.hash) {
+            // Leave the quest live: the money is still in escrow and can be retried.
+            throw new QuestServiceError(
+              result.error ?? "The refund transfer failed. The quest is untouched — try again.",
+              "PAYOUT_FAILED",
+            );
+          }
+          refundTxHash = result.hash;
+        }
+      }
+
+      // Claim the status change so two concurrent cancels can't both refund.
+      const claim = await db.quest.updateMany({
+        where: { id: questId, status: "PUBLISHED" },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: new Date(),
+          ...(refundTxHash ? { refundTxHash, refundedLuna } : {}),
+        },
+      });
+      if (claim.count === 0) {
+        throw new QuestServiceError("This quest is no longer live.", "INVALID_STATUS");
+      }
+
+      console.log("Quest cancelled by admin", {
+        questId,
+        reason: opts.reason ?? null,
+        refundedLuna: refundedLuna.toString(),
+        refundTxHash,
+        rejectedSubmissions: rejected.count,
+      });
+
+      return {
+        refunded: Boolean(refundTxHash),
+        refundTxHash,
+        refundTxUrl: refundTxHash && escrow ? escrow.explorerTxUrl(refundTxHash) : null,
+        refundNim: Number(refundedLuna) / 100_000,
+        rejectedSubmissions: rejected.count,
+      };
+    },
+
+    /**
      * A worker's own submission history + total NIM earned — for the earnings view.
      * Newest first; each item carries the quest title, reward, status, and payout tx hash.
      */
@@ -1592,6 +1764,30 @@ export interface QuestAnalytics {
 }
 
 export type QuestService = ReturnType<typeof createQuestService>;
+
+/**
+ * Shape for the creator's edit form: the content fields a published quest allows, plus the money
+ * and schedule fields so the form can display them as read-only context. Carries no escrow secret.
+ */
+export function toEditableQuestResponse(quest: Quest) {
+  return {
+    id: quest.id,
+    status: quest.status,
+    title: quest.title,
+    category: quest.category,
+    description: quest.description,
+    proofType: quest.proofType,
+    proofInstructions: quest.proofInstructions,
+    sampleEvidence: quest.sampleEvidence ?? null,
+    sampleEvidenceExtras: quest.sampleEvidenceExtras ?? [],
+    verificationConfig: quest.verificationConfig ?? null,
+    // Read-only in the edit form — the pool is already escrowed on-chain.
+    rewardAmount: quest.rewardAmount.toString(),
+    totalSlots: quest.totalSlots,
+    filledSlots: quest.filledSlots,
+    startAt: quest.startAt?.toISOString() ?? null,
+  };
+}
 
 export function toQuestResponse(quest: Quest) {
   return {

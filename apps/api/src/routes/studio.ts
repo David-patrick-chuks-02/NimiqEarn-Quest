@@ -27,6 +27,7 @@ import { verifyInitData, type TelegramInitDataUser } from "../telegram-auth.js";
 import {
   createQuestService,
   QuestServiceError,
+  toEditableQuestResponse,
   toQuestResponse,
   type PlatformFees,
 } from "../services/quest.service.js";
@@ -415,6 +416,37 @@ export const studioRoutes: FastifyPluginAsync<StudioRouteOptions> = async (app, 
       try {
         const analytics = await quests.getQuestAnalytics(telegramId(request), request.params.questId);
         return { analytics };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  // Content of one quest for the creator's edit form (heavy fields included). Owner-only.
+  app.get<{ Params: { questId: string } }>(
+    "/api/studio/quests/:questId/edit",
+    async (request, reply) => {
+      try {
+        const quest = await quests.getEditableQuest(telegramId(request), request.params.questId);
+        return { quest: toEditableQuestResponse(quest) };
+      } catch (error) {
+        return sendStudioError(reply, error);
+      }
+    },
+  );
+
+  // Edit a PUBLISHED quest's content. The reward and slot count are rejected by the schema —
+  // the pool is already escrowed on-chain, so only the details workers see can change.
+  app.patch<{ Params: { questId: string }; Body: unknown }>(
+    "/api/studio/quests/:questId",
+    async (request, reply) => {
+      try {
+        const quest = await quests.updatePublishedQuest(
+          telegramId(request),
+          request.params.questId,
+          request.body,
+        );
+        return { quest: toQuestResponse(quest) };
       } catch (error) {
         return sendStudioError(reply, error);
       }

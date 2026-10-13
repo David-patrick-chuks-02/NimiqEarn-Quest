@@ -86,6 +86,8 @@ function formatQuestStatus(status: string) {
       return "Closed";
     case "ARCHIVED":
       return "Archived";
+    case "CANCELLED":
+      return "Cancelled";
     default:
       return status;
   }

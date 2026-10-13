@@ -17,11 +17,11 @@ import {
   createAdminService,
 } from "../services/admin.service.js";
 import { createQuestService, QuestServiceError } from "../services/quest.service.js";
+import { questErrorStatus } from "./quests.js";
 import type { EscrowService } from "../services/escrow.service.js";
 import type { TelegramNotifier } from "../services/telegram-notify.js";
 import type { VerifierConfig } from "../services/verification.service.js";
 import type { PlatformFees } from "../services/quest.service.js";
-
 interface AdminRouteOptions {
   adminEmail?: string;
   adminPassword?: string;
@@ -183,9 +183,29 @@ export const adminRoutes: FastifyPluginAsync<AdminRouteOptions> = async (app, op
     }
   });
 
-  app.post<{ Params: { id: string } }>(
-    "/api/admin/submissions/:id/accept",
+  // Pull a live quest and refund its unspent escrow to the creator. Money moves first, so a
+  // failed refund leaves the quest live and retryable rather than stranded.
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>(
+    "/api/admin/quests/:id/cancel",
     async (request, reply) => {
+      try {
+        const result = await quests.cancelQuest(request.params.id, {
+          reason: request.body?.reason,
+        });
+        return { ok: true, ...result };
+      } catch (error) {
+        if (error instanceof QuestServiceError) {
+          return reply
+            .code(questErrorStatus(error.code))
+            .send({ error: error.message, code: error.code });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/admin/submissions/:id/accept",    async (request, reply) => {
       try {
         const result = await quests.platformAcceptSubmission(request.params.id);
         return { ok: true, ...result };

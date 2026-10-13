@@ -3,14 +3,15 @@
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnalyticsDetail, AnalyticsSkeleton, type Analytics } from "./_analytics";
-import type { Dashboard, Phase, Quest, TabKey } from "./types";
+import { EditQuestForm, type LockedBudget } from "./edit-form";
+import type { Dashboard, EditableQuest, Phase, Quest, TabKey } from "./types";
 import {
   emptyForm,
   PREVIEW_DASHBOARD,
   TAB_META,
 } from "./constants";
 import { primaryBtn } from "./styles";
-import { isStudioPreview } from "./utils";
+import { isStudioPreview, buildQuestContentPayload, questToForm } from "./utils";
 import { CreateQuestForm } from "./create-form";
 import { TabBar } from "./tab-bar";
 import {
@@ -62,6 +63,13 @@ export default function StudioPage() {
   }>({ feePercent: 0, taskerFeePercent: 0, promotionAvailable: false, promotionFeeNim: 0 });
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [reviewQuest, setReviewQuest] = useState<Quest | null>(null);
+  // Quest currently being edited: the loaded form plus the money shown read-only beside it.
+  const [editTarget, setEditTarget] = useState<{
+    id: string;
+    locked: LockedBudget;
+  } | null>(null);
+  const [editForm, setEditForm] = useState(emptyForm);
+  const [editBusy, setEditBusy] = useState(false);
   const [faucetOpen, setFaucetOpen] = useState(false);
   const [balanceAnim, setBalanceAnim] = useState<{ from: number; to: number } | null>(null);
   const [walletTxOpen, setWalletTxOpen] = useState(false);
@@ -154,6 +162,80 @@ export default function StudioPage() {
     const body = (await api("/api/studio/quests")) as { quests?: Quest[] };
     setQuests(body.quests ?? []);
   }, [api]);
+
+  // Load a published quest's content into the edit form. Money is captured for read-only display
+  // only — the API refuses to change it.
+  const openEdit = useCallback(
+    async (quest: Quest) => {
+      setError("");
+      setNotice("");
+      setEditBusy(true);
+      try {
+        const body = (await api(`/api/studio/quests/${quest.id}/edit`)) as {
+          quest?: EditableQuest;
+        };
+        if (!body.quest) {
+          setError("Couldn't load that quest.");
+          return;
+        }
+        setEditForm(questToForm(body.quest));
+        setEditTarget({
+          id: body.quest.id,
+          locked: {
+            rewardAmount: body.quest.rewardAmount,
+            totalSlots: body.quest.totalSlots,
+            filledSlots: body.quest.filledSlots,
+          },
+        });
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setEditBusy(false);
+      }
+    },
+    [api],
+  );
+
+  const closeEdit = useCallback(() => {
+    setEditTarget(null);
+    setEditForm(emptyForm);
+  }, []);
+
+  // Save the editable content of a published quest. The money fields are not sent at all — the
+  // API's schema is strict and would reject them.
+  const saveEdit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editTarget) return;
+      setError("");
+      setNotice("");
+
+      const built = buildQuestContentPayload(editForm);
+      if (!built.ok) {
+        setError(built.error);
+        return;
+      }
+
+      setEditBusy(true);
+      try {
+        await api(`/api/studio/quests/${editTarget.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...built.payload,
+            verificationConfig: built.verificationConfig,
+          }),
+        });
+        await loadQuests();
+        closeEdit();
+        setNotice("Quest updated. Workers see the new details immediately.");
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setEditBusy(false);
+      }
+    },
+    [api, closeEdit, editForm, editTarget, loadQuests],
+  );
 
   // Shareable public quest link (a web page that deep-links into the bot).
   const shareQuest = useCallback(async (id: string) => {
@@ -367,88 +449,20 @@ export default function StudioPage() {
       }
 
       // Don't create anything yet — ask the creator whether to publish now or save a draft.
-      // Only include verification fields that apply to the selected proof type.
-      const verificationConfig: Record<string, unknown> = {};
-      const proof = form.proofType;
-
-      if (proof === "TRANSACTION_HASH") {
-        if (form.targetAddress.trim()) verificationConfig.targetAddress = form.targetAddress.trim();
-        if (form.minAmountNim.trim()) {
-          const n = Number(form.minAmountNim);
-          if (!Number.isFinite(n) || n <= 0) {
-            setError("Min amount: enter a positive NIM amount, or leave blank.");
-            return;
-          }
-          verificationConfig.minAmountNim = n;
-        }
-      }
-      if (proof === "LINK") {
-        if (form.requiredHashtags.trim()) {
-          verificationConfig.requiredHashtags = form.requiredHashtags
-            .split(/[,\s]+/)
-            .map((h) => h.replace(/^#/, "").trim())
-            .filter(Boolean);
-        }
-        if (form.requiredMentions.trim()) {
-          verificationConfig.requiredMentions = form.requiredMentions
-            .split(/[,\s]+/)
-            .map((h) => h.replace(/^@/, "").trim())
-            .filter(Boolean);
-        }
-      }
-      if (proof === "WALLET_INTERACTION" && form.expectedMessage.trim()) {
-        verificationConfig.expectedMessage = form.expectedMessage.trim();
-      }
-      if (proof === "SCREENSHOT" || proof === "UPLOADED_MEDIA") {
-        const livePostUrls = form.livePostUrls.map((u) => u.trim()).filter(Boolean);
-        for (const url of livePostUrls) {
-          try {
-            // eslint-disable-next-line no-new
-            new URL(url);
-          } catch {
-            setError("Live post URLs: enter a valid http(s) URL for each, or leave blank.");
-            return;
-          }
-        }
-        if (livePostUrls.length) verificationConfig.livePostUrls = livePostUrls;
-      }
-      if (proof === "REFERRAL_EVENT" && form.requireFirstQuest) {
-        verificationConfig.requireFirstQuest = true;
-      }
-
-      if (form.minReputation.trim()) {
-        const n = Number(form.minReputation);
-        if (!Number.isInteger(n) || n < 0) {
-          setError("Min reputation: enter a whole number ≥ 0, or leave blank.");
-          return;
-        }
-        verificationConfig.minReputation = n;
-      }
-      if (form.deadlineAt) {
-        const when = new Date(form.deadlineAt);
-        if (Number.isNaN(when.getTime())) {
-          setError("Deadline: pick a valid date/time, or leave blank.");
-          return;
-        }
-        verificationConfig.deadlineAt = when.toISOString();
+      const built = buildQuestContentPayload(form);
+      if (!built.ok) {
+        setError(built.error);
+        return;
       }
 
       setCreateConfirm({
         payload: {
-          title: form.title.trim(),
-          category: form.category,
-          description: form.description.trim(),
+          ...built.payload,
           rewardAmount: rewardNum,
           totalSlots: slotsNum,
           ...(startAt ? { startAt } : {}),
-          proofType: form.proofType,
-          proofInstructions: form.proofInstructions.trim(),
-          ...(form.sampleEvidence.length > 0 ? { sampleEvidence: form.sampleEvidence[0] } : {}),
-          ...(form.sampleEvidence.length > 1
-            ? { sampleEvidenceExtras: form.sampleEvidence.slice(1) }
-            : {}),
-          ...(Object.keys(verificationConfig).length
-            ? { verificationConfig }
+          ...(Object.keys(built.verificationConfig).length
+            ? { verificationConfig: built.verificationConfig }
             : {}),
         },
       });
@@ -655,7 +669,7 @@ export default function StudioPage() {
                   <p className="mt-1 text-sm text-[var(--brand-muted)]">On-chain history for your wallet.</p>
                 </div>
               )}
-              {!analyticsFor && TAB_META[tab] && !(tab === "wallet" && walletTxOpen) && (
+              {!analyticsFor && !editTarget && TAB_META[tab] && !(tab === "wallet" && walletTxOpen) && (
                 <div>
                   <h1 className="text-2xl font-bold tracking-tight text-white">
                     {tab === "create"
@@ -670,6 +684,15 @@ export default function StudioPage() {
                         ? "Start from a template, or build from scratch."
                         : "Edit the details workers will see, then review."
                       : TAB_META[tab]!.subtitle}
+                  </p>
+                </div>
+              )}
+
+              {editTarget && (
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight text-white">Edit quest</h1>
+                  <p className="mt-1 text-sm text-[var(--brand-muted)]">
+                    Fix the details workers see. The prize and slot count stay locked.
                   </p>
                 </div>
               )}
@@ -737,9 +760,25 @@ export default function StudioPage() {
               )}
 
               {tab === "quests" &&
-                (analyticsFor ? (
+                (editTarget ? (
+                  <EditQuestForm
+                    form={editForm}
+                    setForm={setEditForm}
+                    locked={editTarget.locked}
+                    submitting={editBusy}
+                    onCancel={closeEdit}
+                    onSubmit={saveEdit}
+                  />
+                ) : analyticsFor ? (
                   analyticsData ? (
-                    <AnalyticsDetail analytics={analyticsData} onBack={closeAnalytics} />
+                    <AnalyticsDetail
+                      analytics={analyticsData}
+                      onBack={closeAnalytics}
+                      onEdit={() => {
+                        const quest = quests.find((q) => q.id === analyticsData.id);
+                        if (quest) void openEdit(quest);
+                      }}
+                    />
                   ) : (
                     <AnalyticsSkeleton title={analyticsFor.title} onBack={closeAnalytics} />
                   )
@@ -776,6 +815,7 @@ export default function StudioPage() {
               active={tab}
               onChange={(next) => {
                 closeAnalytics();
+                closeEdit();
                 setTab(next);
               }}
             />

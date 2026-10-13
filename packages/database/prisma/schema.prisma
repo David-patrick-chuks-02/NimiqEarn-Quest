@@ -51,6 +51,8 @@ enum QuestStatus {
   PUBLISHED
   CLOSED
   ARCHIVED
+  // Pulled by an admin after going live. Set only once the unspent escrow has been refunded.
+  CANCELLED
 }
 
 // Time-series event log powering the creator "Manage Quests" analytics view.
@@ -211,6 +213,11 @@ model Quest {
   escrowAddress       String?  @map("escrow_address")
   escrowKeyCiphertext String?  @map("escrow_key_ciphertext") @db.Text
   fundedAt            DateTime? @map("funded_at")
+  // Admin cancellation of a live quest. Set together with status = CANCELLED, after the unspent
+  // escrow has been refunded to the creator — the hash is the durable proof that it moved.
+  cancelledAt         DateTime? @map("cancelled_at")
+  refundTxHash        String?   @map("refund_tx_hash") @db.VarChar(128)
+  refundedLuna        BigInt?   @map("refunded_luna")
 
   creator     User              @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   events      QuestEvent[]
