@@ -1,6 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MAX_PROOF_IMAGE_CHARS, MAX_PROOF_TOTAL_CHARS } from "@nimiqearn/shared";
 import { createQuestService, splitRewardLuna } from "./quest.service.js";
+
+// The worker-link path runs the social checks, which would hit the network. Stub the fetcher so
+// these stay offline unit tests.
+const fetchSocialPost = vi.fn();
+vi.mock("./social-fetch.js", () => ({
+  fetchSocialPost: (...args: unknown[]) => fetchSocialPost(...args),
+}));
+
+beforeEach(() => {
+  fetchSocialPost.mockReset();
+  fetchSocialPost.mockResolvedValue({
+    source: "x",
+    exists: true,
+    deleted: false,
+    isPublic: true,
+    text: "campaign post",
+    hashtags: [],
+  });
+});
 
 /** Minimal quest-service double for proof-validation tests. */
 function makeSubmitService(proofType: string) {
@@ -46,7 +65,11 @@ function makeSubmitService(proofType: string) {
     moderationEvent: { create: vi.fn().mockResolvedValue({}) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        questSubmission: { create: submissionCreate },
+        questSubmission: {
+          create: submissionCreate,
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          update: vi.fn().mockResolvedValue({}),
+        },
         quest: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       }),
     ),
@@ -264,6 +287,7 @@ describe("createQuestService", () => {
         userId: "worker-9",
         proof: "here is my proof",
         proofExtras: [],
+        proofLink: null,
         status: "PENDING",
         clientFingerprint: null,
         ipHash: null,
@@ -599,6 +623,106 @@ describe("createQuestService", () => {
         proofExtras: ["data:image/jpeg;base64,/9j/4AAQ"],
       }),
     ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("accepts an optional worker link alongside a screenshot proof", async () => {
+    const { service, submissionCreate } = makeSubmitService("SCREENSHOT");
+    const shot = "data:image/jpeg;base64,/9j/4AAQ";
+
+    const result = await service.submitQuest("999", "quest-1", shot, {
+      proofLink: "  https://x.com/worker/status/123  ",
+    });
+
+    expect(result.status).toBe("PENDING");
+    expect(submissionCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ proofLink: "https://x.com/worker/status/123" }),
+    });
+  });
+
+  it("stores a null worker link when none is supplied", async () => {
+    const { service, submissionCreate } = makeSubmitService("SCREENSHOT");
+
+    await service.submitQuest("999", "quest-1", "data:image/jpeg;base64,/9j/4AAQ");
+
+    expect(submissionCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ proofLink: null }),
+    });
+  });
+
+  it("rejects a non-http worker link", async () => {
+    const { service } = makeSubmitService("SCREENSHOT");
+
+    await expect(
+      service.submitQuest("999", "quest-1", "data:image/jpeg;base64,/9j/4AAQ", {
+        proofLink: "javascript:alert(1)",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("rejects a worker link on a quest that only takes text", async () => {
+    const { service } = makeSubmitService("TEXT");
+
+    await expect(
+      service.submitQuest("999", "quest-1", "my proof", {
+        proofLink: "https://x.com/worker/status/123",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROOF" });
+  });
+
+  it("exposes only http(s) creator links on the public quest response", async () => {
+    const { toPublicQuestResponse } = await import("./quest.service.js");
+    const quest = {
+      id: "q1",
+      title: "Quest",
+      description: "Desc",
+      category: "SOCIAL_CAMPAIGN",
+      rewardAmount: 1,
+      totalSlots: 5,
+      filledSlots: 1,
+      startAt: null,
+      promoted: false,
+      proofType: "SCREENSHOT",
+      proofInstructions: "Shot",
+      sampleEvidence: null,
+      sampleEvidenceExtras: [],
+      viewCount: 0,
+      publishedAt: null,
+      verificationConfig: {
+        livePostUrls: [
+          "https://x.com/NimiqEarn",
+          "javascript:alert(1)",
+          "https://t.me/+invite",
+        ],
+      },
+    };
+
+    const view = toPublicQuestResponse(quest as never);
+
+    expect(view.livePostUrls).toEqual(["https://x.com/NimiqEarn", "https://t.me/+invite"]);
+  });
+
+  it("returns no creator links when none are configured", async () => {
+    const { toPublicQuestResponse } = await import("./quest.service.js");
+    const view = toPublicQuestResponse({
+      id: "q1",
+      title: "Quest",
+      description: "Desc",
+      category: "FEEDBACK",
+      rewardAmount: 1,
+      totalSlots: 5,
+      filledSlots: 0,
+      startAt: null,
+      promoted: false,
+      proofType: "TEXT",
+      proofInstructions: "Text",
+      sampleEvidence: null,
+      sampleEvidenceExtras: [],
+      viewCount: 0,
+      publishedAt: null,
+      verificationConfig: null,
+    } as never);
+
+    expect(view.livePostUrls).toEqual([]);
   });
 
   it("rejects a text proof for SCREENSHOT quests", async () => {

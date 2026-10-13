@@ -28,6 +28,8 @@ interface PublicQuest {
   proofInstructions: string;
   sampleEvidence: string | null;
   sampleEvidenceExtras?: string[] | null;
+  /** Campaign post links the creator supplied — workers open these to do the task. */
+  livePostUrls?: string[] | null;
   creatorName: string | null;
 }
 
@@ -167,6 +169,7 @@ export default function DoQuestPage() {
   const [view, setView] = useState<WorkerView | null>(null);
   const [proof, setProof] = useState("");
   const [proofImages, setProofImages] = useState<string[]>([]);
+  const [proofLink, setProofLink] = useState("");
   const [proofBusy, setProofBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [txUrl, setTxUrl] = useState<string | null>(null);
@@ -267,6 +270,7 @@ export default function DoQuestPage() {
             ? {
                 proof: proofImages[0],
                 ...(proofImages.length > 1 ? { proofExtras: proofImages.slice(1) } : {}),
+                ...(proofLink.trim() ? { proofLink: proofLink.trim() } : {}),
               }
             : { proof: proof.trim() },
         ),
@@ -285,7 +289,7 @@ export default function DoQuestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [api, load, proof, proofImages, questId, view?.quest.proofType]);
+  }, [api, load, proof, proofImages, proofLink, questId, view?.quest.proofType]);
 
   const onProofFiles = useCallback(async (files: File[] | null) => {
     if (!files || files.length === 0) return;
@@ -447,6 +451,28 @@ export default function DoQuestPage() {
                 <p className="mt-1 text-sm text-white">{view.quest.proofInstructions}</p>
               </div>
 
+              {(view.quest.livePostUrls?.length ?? 0) > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+                    {view.quest.livePostUrls!.length > 1 ? "Links to open" : "Link to open"}
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {view.quest.livePostUrls!.map((url, index) => (
+                      <li key={index}>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="block truncate rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm font-medium text-[var(--brand-gold)] underline"
+                        >
+                          {url}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {view.quest.sampleEvidence && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
@@ -544,6 +570,25 @@ export default function DoQuestPage() {
                           : `${MAX_PROOF_UPLOADS} uploads max. Remove one to swap it out.`}
                       </p>
                     )}
+
+                    <div className="pt-1">
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+                        Your post link
+                      </label>
+                      <p className="mt-0.5 text-[0.7rem] text-[var(--brand-muted)]">
+                        Optional — paste the link to your own post or comment so it can be checked.
+                      </p>
+                      <input
+                        type="url"
+                        inputMode="url"
+                        className={`${inputClass} mt-1.5`}
+                        value={proofLink}
+                        onChange={(e) => setProofLink(e.target.value)}
+                        placeholder="https://x.com/you/status/…"
+                        maxLength={2000}
+                        disabled={submitting}
+                      />
+                    </div>
                   </div>
                 ) : proofMeta.multiline ? (
                   <textarea

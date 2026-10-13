@@ -480,6 +480,16 @@ export function SubmissionsReviewModal({
                   ) : (
                     <p className="mt-2 break-all text-sm text-white/90">{s.proof}</p>
                   )}
+                  {s.proofLink && (
+                    <a
+                      href={s.proofLink}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="mt-2 inline-block max-w-full truncate text-xs font-semibold text-[var(--brand-gold)] underline"
+                    >
+                      Worker&apos;s link: {s.proofLink}
+                    </a>
+                  )}
                   {s.payoutTxUrl && (
                     <a
                       href={s.payoutTxUrl}

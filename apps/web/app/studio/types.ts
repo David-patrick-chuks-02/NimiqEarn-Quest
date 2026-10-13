@@ -109,6 +109,8 @@ export type StudioSubmission = {
   proof: string;
   /** Additional worker uploads (images 2..3) for media quests. */
   proofExtras?: string[] | null;
+  /** Optional link the worker submitted alongside a media proof. */
+  proofLink?: string | null;
   verificationOutcome?: string | null;
   confidenceScore?: number | null;
   verificationSignals?: Record<string, unknown> | null;

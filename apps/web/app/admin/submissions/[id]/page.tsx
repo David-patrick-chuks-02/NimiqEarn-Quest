@@ -27,6 +27,8 @@ type SubmissionDetail = {
   proof: string;
   /** Count of additional worker uploads (images 2..3). */
   proofExtrasCount?: number;
+  /** The worker's own post/comment link, if supplied. */
+  proofLink?: string | null;
   contentHash: string | null;
   clientFingerprint: string | null;
   ipHash: string | null;
@@ -207,6 +209,20 @@ export default function AdminSubmissionDetailPage() {
                   {row.proofExtrasCount === 1 ? "" : "s"} attached (visible in the worker&apos;s
                   submission and creator review).
                 </span>
+              </Field>
+            </div>
+          ) : null}
+          {row.proofLink ? (
+            <div className="mt-4">
+              <Field label="Worker's link">
+                <a
+                  href={row.proofLink}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="break-all font-mono text-xs text-[var(--brand-gold)] underline"
+                >
+                  {row.proofLink}
+                </a>
               </Field>
             </div>
           ) : null}

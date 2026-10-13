@@ -442,6 +442,8 @@ export function createAdminService(db: PrismaClient) {
           : s.proof,
         /** Count of additional worker uploads (images 2..3) — full data URLs are not returned. */
         proofExtrasCount: s.proofExtras.length,
+        /** The worker's own post/comment link, if they supplied one. */
+        proofLink: s.proofLink,
         contentHash: s.contentHash,
         clientFingerprint: s.clientFingerprint,
         ipHash: s.ipHash,

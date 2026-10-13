@@ -245,14 +245,23 @@ export async function enrichSocialChecks(input: {
   proof: string;
   proofInstructions: string;
   config?: VerificationConfig;
+  /**
+   * Downgrade every check to soft. Use when the link is supplementary rather than the proof
+   * itself (e.g. an optional link attached to a screenshot) — a bad link should escalate to
+   * review, not auto-reject an otherwise valid submission.
+   */
+  soften?: boolean;
 }): Promise<{ checks: RuleCheck[]; livePostText: string }> {
+  const soften = (checks: RuleCheck[]): RuleCheck[] =>
+    input.soften ? checks.map((c) => ({ ...c, soft: true })) : checks;
+
   const checks: RuleCheck[] = [];
 
   const snap = await fetchSocialPost(input.proof);
 
   if (snap.deleted || (!snap.exists && snap.source !== "error")) {
     checks.push(hardCheck("link_reachable", false, "Post appears deleted or not found."));
-    return { checks, livePostText: "" };
+    return { checks: soften(checks), livePostText: "" };
   }
 
   if (snap.source === "error") {
@@ -263,7 +272,7 @@ export async function enrichSocialChecks(input: {
         "Could not fetch the link (timeout or blocked) — escalated to review.",
       ),
     );
-    return { checks, livePostText: "" };
+    return { checks: soften(checks), livePostText: "" };
   }
 
   checks.push(
@@ -320,7 +329,7 @@ export async function enrichSocialChecks(input: {
     );
   }
 
-  return { checks, livePostText: snap.text };
+  return { checks: soften(checks), livePostText: snap.text };
 }
 
 export function enrichReferralChecks(input: {

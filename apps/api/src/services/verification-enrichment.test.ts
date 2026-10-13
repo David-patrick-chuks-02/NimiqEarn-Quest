@@ -40,6 +40,56 @@ describe("verification enrichment", () => {
     expect(checks.some((c) => c.code === "link_platform_api")).toBe(false);
   });
 
+  it("downgrades reachability to soft when softening an optional attached link", async () => {
+    fetchSocialPost.mockResolvedValue({
+      platform: "x",
+      url: "https://x.com/someone/status/1",
+      exists: false,
+      deleted: true,
+      isPublic: false,
+      text: "",
+      hashtags: [],
+      mentions: [],
+      engagement: null,
+      source: "html",
+    });
+
+    const { checks } = await enrichSocialChecks({
+      proof: "https://x.com/someone/status/1",
+      proofInstructions: "Screenshot your engagement",
+      soften: true,
+    });
+
+    const reachable = checks.find((c) => c.code === "link_reachable");
+    expect(reachable?.passed).toBe(false);
+    // Soft, so the decision engine escalates to review instead of hard-rejecting the screenshot.
+    expect(reachable?.soft).toBe(true);
+  });
+
+  it("keeps reachability hard for a link that IS the proof", async () => {
+    fetchSocialPost.mockResolvedValue({
+      platform: "x",
+      url: "https://x.com/someone/status/1",
+      exists: false,
+      deleted: true,
+      isPublic: false,
+      text: "",
+      hashtags: [],
+      mentions: [],
+      engagement: null,
+      source: "html",
+    });
+
+    const { checks } = await enrichSocialChecks({
+      proof: "https://x.com/someone/status/1",
+      proofInstructions: "Post a public tweet",
+    });
+
+    const reachable = checks.find((c) => c.code === "link_reachable");
+    expect(reachable?.passed).toBe(false);
+    expect(reachable?.soft).toBeFalsy();
+  });
+
   it("parses verificationConfig", () => {
     const cfg = parseVerificationConfig({
       targetAddress: "NQXX TEST",

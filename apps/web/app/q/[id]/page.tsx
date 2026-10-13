@@ -21,6 +21,7 @@ interface PublicQuest {
   promoted: boolean;
   proofType: string;
   proofInstructions: string;
+  livePostUrls?: string[] | null;
   creatorName: string | null;
 }
 
@@ -126,6 +127,28 @@ export default async function QuestPage({ params }: { params: Promise<{ id: stri
             {quest.description}
           </p>
         </div>
+
+        {(quest.livePostUrls?.length ?? 0) > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+              {quest.livePostUrls!.length > 1 ? "Links to open" : "Link to open"}
+            </p>
+            <ul className="mt-2 space-y-2">
+              {quest.livePostUrls!.map((url, index) => (
+                <li key={index}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="block truncate rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm font-medium text-[var(--brand-gold)] underline"
+                  >
+                    {url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">

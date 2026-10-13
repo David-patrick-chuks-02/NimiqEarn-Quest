@@ -69,6 +69,21 @@ function isAcceptableProofItem(item: string): "image" | "video" | null {
   return null;
 }
 
+/** Validate an optional http(s) link (worker proof link). */
+function normalizeHttpUrl(raw: string, label: string): string {
+  const trimmed = raw.trim();
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("bad proto");
+  } catch {
+    throw new QuestServiceError(`Enter a valid http(s) ${label}.`, "INVALID_PROOF");
+  }
+  if (trimmed.length > 2000) {
+    throw new QuestServiceError(`That ${label} is too long.`, "INVALID_PROOF");
+  }
+  return trimmed;
+}
+
 /** Coerce and validate the optional extra uploads (images 2..MAX_PROOF_UPLOADS). */
 function normalizeProofExtras(raw: unknown): string[] {
   if (raw == null) return [];
@@ -83,20 +98,31 @@ function normalizeProofExtras(raw: unknown): string[] {
   });
 }
 
+/** Coerce the optional worker link (their post/comment URL). */
+function normalizeProofLink(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw !== "string") {
+    throw new QuestServiceError("Proof link must be a link.", "INVALID_PROOF");
+  }
+  return normalizeHttpUrl(raw, "link");
+}
+
 /** Validate proof against the quest's declared proofType. */
 function normalizeSubmissionProof(
   proof: string,
-  rawExtras: unknown,
+  rawOptions: { proofExtras?: unknown; proofLink?: unknown },
   proofType: string,
-): { proof: string; proofExtras: string[] } {
+): { proof: string; proofExtras: string[]; proofLink: string | null } {
   const trimmed = proof.trim();
   if (trimmed.length === 0) {
     throw new QuestServiceError("Your submission can't be empty.", "INVALID_PROOF");
   }
-  const extras = normalizeProofExtras(rawExtras);
+  const extras = normalizeProofExtras(rawOptions.proofExtras);
+  const proofLink = normalizeProofLink(rawOptions.proofLink);
 
   // Media quests accept up to MAX_PROOF_UPLOADS images, or a single video on its own (a video
   // can't be compressed client-side, so it gets the whole request budget instead of a third).
+  // They may also carry an optional link to the worker's own post/comment.
   if (proofType === "SCREENSHOT" || proofType === "UPLOADED_MEDIA") {
     const items = [trimmed, ...extras];
     if (items.length > MAX_PROOF_UPLOADS) {
@@ -130,11 +156,17 @@ function normalizeSubmissionProof(
         "INVALID_PROOF",
       );
     }
-    return { proof: trimmed, proofExtras: extras };
+    return { proof: trimmed, proofExtras: extras, proofLink };
   }
 
   if (extras.length > 0) {
     throw new QuestServiceError("This quest only accepts a single proof.", "INVALID_PROOF");
+  }
+  if (proofLink !== null) {
+    throw new QuestServiceError(
+      "This quest doesn't accept a separate link — submit it as your proof.",
+      "INVALID_PROOF",
+    );
   }
 
   switch (proofType) {
@@ -151,12 +183,12 @@ function normalizeSubmissionProof(
       if (trimmed.length > 2000) {
         throw new QuestServiceError("That link is too long.", "INVALID_PROOF");
       }
-      return { proof: trimmed, proofExtras: [] };
+      return { proof: trimmed, proofExtras: [], proofLink: null };
     case "TRANSACTION_HASH":
       if (trimmed.startsWith("data:") || trimmed.length > 200 || !/^[a-fA-F0-9]+$/.test(trimmed)) {
         throw new QuestServiceError("Enter a valid transaction hash.", "INVALID_PROOF");
       }
-      return { proof: trimmed, proofExtras: [] };
+      return { proof: trimmed, proofExtras: [], proofLink: null };
     case "WALLET_INTERACTION":
       try {
         const parsed = JSON.parse(trimmed) as Record<string, unknown>;
@@ -176,7 +208,7 @@ function normalizeSubmissionProof(
       if (trimmed.length > 8_000) {
         throw new QuestServiceError("Wallet proof is too large.", "INVALID_PROOF");
       }
-      return { proof: trimmed, proofExtras: [] };
+      return { proof: trimmed, proofExtras: [], proofLink: null };
     case "TEXT":
     case "REFERRAL_EVENT":
     default:
@@ -189,7 +221,7 @@ function normalizeSubmissionProof(
           "INVALID_PROOF",
         );
       }
-      return { proof: trimmed, proofExtras: [] };
+      return { proof: trimmed, proofExtras: [], proofLink: null };
   }
 }
 
@@ -781,7 +813,12 @@ export function createQuestService(
       telegramId: string,
       questId: string,
       proof: string,
-      opts: { clientFingerprint?: string; clientIp?: string; proofExtras?: unknown } = {},
+      opts: {
+        clientFingerprint?: string;
+        clientIp?: string;
+        proofExtras?: unknown;
+        proofLink?: unknown;
+      } = {},
     ): Promise<{
       status: "PENDING" | "ACCEPTED" | "REJECTED";
       outcome: string | null;
@@ -825,7 +862,11 @@ export function createQuestService(
       }
 
       // Fast format check before reserving a slot (full rule engine runs in verification).
-      const normalized = normalizeSubmissionProof(proof, opts.proofExtras, quest.proofType);
+      const normalized = normalizeSubmissionProof(
+        proof,
+        { proofExtras: opts.proofExtras, proofLink: opts.proofLink },
+        quest.proofType,
+      );
 
       const willPay = Boolean(escrow?.enabled && quest.escrowKeyCiphertext);
       const workerWallet = user.walletProfiles.find((w) => w.nimiqAddress) ?? null;
@@ -842,6 +883,7 @@ export function createQuestService(
               userId: user.id,
               proof: normalized.proof,
               proofExtras: normalized.proofExtras,
+              proofLink: normalized.proofLink,
               status: "PENDING",
               clientFingerprint: opts.clientFingerprint?.slice(0, 128) ?? null,
               ipHash: opts.clientIp ? hashIp(opts.clientIp) : null,
@@ -872,6 +914,7 @@ export function createQuestService(
         workerAddress: workerWallet?.nimiqAddress ?? null,
         proofType: quest.proofType,
         proof: normalized.proof,
+        proofLink: normalized.proofLink,
         proofInstructions: quest.proofInstructions,
         title: quest.title,
         sampleEvidence: quest.sampleEvidence,
@@ -1051,6 +1094,7 @@ export function createQuestService(
           status: s.status,
           proof: s.proof,
           proofExtras: s.proofExtras,
+          proofLink: s.proofLink,
           verificationOutcome: s.verificationOutcome,
           confidenceScore: s.confidenceScore,
           verificationSignals: s.verificationSignals,
@@ -1594,6 +1638,14 @@ export function toDiscoverQuestResponse(
   };
 }
 
+/** Only http(s) links may be rendered as clickable links (guards against `javascript:` values). */
+function safeHttpLinks(urls: unknown): string[] {
+  if (!Array.isArray(urls)) return [];
+  return urls.filter(
+    (u): u is string => typeof u === "string" && /^https?:\/\//i.test(u.trim()),
+  );
+}
+
 /** Public, share-safe quest shape — excludes escrow/ownership internals. */
 export function toPublicQuestResponse(quest: Quest & { creator?: { displayName: string | null } }) {
   return {
@@ -1610,6 +1662,9 @@ export function toPublicQuestResponse(quest: Quest & { creator?: { displayName: 
     promoted: quest.promoted,
     proofType: quest.proofType,
     proofInstructions: quest.proofInstructions,
+    // The campaign post links the creator supplied — workers need these to find the post to
+    // engage with. Filtered to http(s) before leaving the API.
+    livePostUrls: safeHttpLinks((quest.verificationConfig as { livePostUrls?: unknown } | null)?.livePostUrls),
     sampleEvidence: quest.sampleEvidence ?? null,
     sampleEvidenceExtras: quest.sampleEvidenceExtras ?? [],
     viewCount: quest.viewCount,

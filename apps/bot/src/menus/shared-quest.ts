@@ -55,6 +55,17 @@ export function formatSharedQuest(quest: PublicQuest): string {
     `*Proof:* ${escapeMarkdown(proof)} — ${escapeMarkdown(quest.proofInstructions)}`,
     "",
     escapeMarkdown(quest.description),
+  );
+
+  // The campaign links the creator supplied — without these the worker can't find the post.
+  if (quest.livePostUrls && quest.livePostUrls.length > 0) {
+    lines.push("", "*Links to open:*");
+    for (const url of quest.livePostUrls) {
+      lines.push(`• ${escapeMarkdown(url)}`);
+    }
+  }
+
+  lines.push(
     "",
     "_Tap *Do this quest* below to complete it and earn NIM, paid to your wallet._",
   );

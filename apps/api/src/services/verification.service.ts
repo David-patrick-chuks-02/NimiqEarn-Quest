@@ -39,6 +39,8 @@ export interface VerifySubmissionInput {
   workerAddress?: string | null;
   proofType: string;
   proof: string;
+  /** Optional link the worker submitted alongside a media proof (their post/comment URL). */
+  proofLink?: string | null;
   proofInstructions: string;
   title: string;
   sampleEvidence?: string | null;
@@ -114,6 +116,7 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
 
       const vcfg = parseVerificationConfig(input.verificationConfig);
       let livePostText = "";
+      let workerLinkText = "";
 
       if (ruleResult.passed) {
         if (input.proofType === "TRANSACTION_HASH") {
@@ -135,6 +138,22 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               workerAddress: input.workerAddress,
             }),
           );
+        } else if (
+          (input.proofType === "SCREENSHOT" || input.proofType === "UPLOADED_MEDIA") &&
+          input.proofLink
+        ) {
+          // The worker supplied their own post/comment link — check it's reachable and carries any
+          // required hashtags, and feed its text into the screenshot OCR comparison below.
+          const social = await enrichSocialChecks({
+            proof: input.proofLink,
+            proofInstructions: input.proofInstructions,
+            config: vcfg,
+            // Optional attachment — a bad link escalates to review rather than rejecting the
+            // screenshot the worker already provided.
+            soften: true,
+          });
+          ruleResult = appendRuleChecks(ruleResult, social.checks);
+          workerLinkText = social.livePostText;
         } else if (input.proofType === "LINK") {
           const social = await enrichSocialChecks({
             proof: input.proof,
@@ -392,7 +411,7 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
               input.sampleEvidenceExtras && input.sampleEvidenceExtras.length > 0
                 ? input.sampleEvidenceExtras
                 : undefined,
-            livePostText: livePostText || undefined,
+            livePostText: [workerLinkText, livePostText].filter(Boolean).join("\n\n") || undefined,
           })
         : null;
 
@@ -448,7 +467,7 @@ export function createVerificationService(db: PrismaClient, config: VerifierConf
         imageHash: aiResult?.imageHash ?? null,
         behavioralRisk,
         verificationConfig: vcfg ?? null,
-        livePostPreview: livePostText.slice(0, 280) || null,
+        livePostPreview: [workerLinkText, livePostText].filter(Boolean).join("\n\n").slice(0, 280) || null,
         sharedFingerprintUsers,
         sharedIpUsers,
         contentClusterUsers,

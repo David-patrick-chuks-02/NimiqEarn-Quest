@@ -31,6 +31,8 @@ export interface PublicQuest {
   promoted: boolean;
   proofType: string;
   proofInstructions: string;
+  /** Campaign post links the creator supplied — workers open these to do the task. */
+  livePostUrls?: string[] | null;
   viewCount: number;
   publishedAt: string | null;
   creatorName: string | null;

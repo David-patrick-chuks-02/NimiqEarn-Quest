@@ -245,6 +245,9 @@ model QuestSubmission {
   proof     String           @db.Text
   // Additional worker uploads for media quests — images 2..3 (data URLs). Empty for other types.
   proofExtras String[]       @default([]) @map("proof_extras")
+  // Optional link the worker submits alongside a media proof (their post/comment URL). Media
+  // quests only; used for reachability + hashtag checks and OCR comparison.
+  proofLink String?          @map("proof_link") @db.VarChar(2000)
   status    SubmissionStatus @default(PENDING)
   // Hybrid verification pipeline (M3) — set after rule + AI decision.
   verificationOutcome VerificationOutcome? @map("verification_outcome")
