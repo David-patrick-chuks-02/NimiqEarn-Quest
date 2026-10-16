@@ -90,17 +90,27 @@ export function isStudioPreview(): boolean {
 }
 
 /**
- * Build the content half of a quest payload from the form: everything that describes the task
- * for workers, plus the proof-type-specific verification rules. Deliberately excludes the money
- * (`rewardAmount`, `totalSlots`) and the schedule, which creation and editing treat differently —
- * the caller adds those.
+ * Build the quest content from the form: everything that describes the task for workers, plus the
+ * proof-type-specific verification rules.
  *
- * Shared by the create and edit flows so the verification rules can't drift between them.
+ * Returns the fields in two groups, because creation and editing may not send the same ones:
+ * - `content` — safe to send on create AND edit.
+ * - `createOnly` — rejected on edit. A published quest locks these (see
+ *   `updatePublishedQuestSchema`, which omits them and is strict, so sending one is a 400).
+ *
+ * Splitting them here — rather than relying on each caller to remember — is what keeps the two
+ * flows in step with the API: an edit body is built from `content` alone and physically cannot
+ * carry a locked field.
  */
 export function buildQuestContentPayload(
   form: QuestForm,
 ):
-  | { ok: true; payload: Record<string, unknown>; verificationConfig: Record<string, unknown> }
+  | {
+      ok: true;
+      content: Record<string, unknown>;
+      createOnly: Record<string, unknown>;
+      verificationConfig: Record<string, unknown>;
+    }
   | { ok: false; error: string } {
   const verificationConfig: Record<string, unknown> = {};
   const proof = form.proofType;
@@ -168,17 +178,18 @@ export function buildQuestContentPayload(
 
   return {
     ok: true,
-    payload: {
+    content: {
       title: form.title.trim(),
       category: form.category,
       description: form.description.trim(),
-      proofType: form.proofType,
       proofInstructions: form.proofInstructions.trim(),
       ...(form.sampleEvidence.length > 0 ? { sampleEvidence: form.sampleEvidence[0] } : {}),
       ...(form.sampleEvidence.length > 1
         ? { sampleEvidenceExtras: form.sampleEvidence.slice(1) }
         : {}),
     },
+    // Locked once a quest is published. Only the create flow may send this.
+    createOnly: { proofType: form.proofType },
     // Returned separately so callers can choose: creation omits an empty config (nothing to
     // store), while an edit must send it even when empty so clearing the last rule clears it.
     verificationConfig,

@@ -220,8 +220,10 @@ export default function StudioPage() {
       try {
         await api(`/api/studio/quests/${editTarget.id}`, {
           method: "PATCH",
+          // `content` only: `createOnly` fields are rejected on a published quest, and the API
+          // validates strictly, so sending one would fail the whole save.
           body: JSON.stringify({
-            ...built.payload,
+            ...built.content,
             verificationConfig: built.verificationConfig,
           }),
         });
@@ -457,7 +459,8 @@ export default function StudioPage() {
 
       setCreateConfirm({
         payload: {
-          ...built.payload,
+          ...built.content,
+          ...built.createOnly,
           rewardAmount: rewardNum,
           totalSlots: slotsNum,
           ...(startAt ? { startAt } : {}),
