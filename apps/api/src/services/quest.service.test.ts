@@ -1236,6 +1236,47 @@ describe("updatePublishedQuest", () => {
     });
   });
 
+  // A creator's reason for editing at all: the campaign runs out of time but still has slots
+  // unfilled, so they push the deadline back. `deadlineAt` is enforced as a hard check at
+  // verification time (`Date.now() <= deadlineAt`), so writing a future date is what re-opens
+  // the quest — these tests pin that the edit path accepts it, past deadline or not.
+  it("extends the campaign deadline on a live quest", async () => {
+    const { service, questUpdate } = makeQuestDecisionService({
+      quest: { verificationConfig: { deadlineAt: "2026-10-15T17:00:00.000Z" } },
+    });
+
+    const extended = "2026-11-15T17:00:00.000Z";
+    await service.updatePublishedQuest("123", "quest-1", {
+      verificationConfig: { deadlineAt: extended },
+    });
+
+    expect(questUpdate).toHaveBeenCalledWith({
+      where: { id: "quest-1" },
+      data: expect.objectContaining({
+        // Stored through a JSON column, so the date lands as an ISO string.
+        verificationConfig: expect.objectContaining({ deadlineAt: extended }),
+      }),
+    });
+  });
+
+  it("re-opens a campaign whose deadline has already passed", async () => {
+    const expired = "2026-10-15T17:00:00.000Z";
+    expect(new Date(expired).getTime()).toBeLessThan(Date.now());
+
+    const { service, questUpdate } = makeQuestDecisionService({
+      quest: { verificationConfig: { deadlineAt: expired } },
+    });
+
+    const extended = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    await service.updatePublishedQuest("123", "quest-1", {
+      verificationConfig: { deadlineAt: extended },
+    });
+
+    const written = questUpdate.mock.calls[0]?.[0]?.data?.verificationConfig?.deadlineAt;
+    // The whole point: the stored deadline is now in the future, so the hard check passes again.
+    expect(new Date(written).getTime()).toBeGreaterThan(Date.now());
+  });
+
   it("rejects editing a quest that isn't published", async () => {
     const { service } = makeQuestDecisionService({ quest: { status: "DRAFT" } });
 
