@@ -13,7 +13,7 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node init && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "generate": "prisma generate",
     "push": "prisma db push",
